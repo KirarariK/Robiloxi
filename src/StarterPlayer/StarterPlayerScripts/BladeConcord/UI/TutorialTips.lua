@@ -81,7 +81,7 @@ local function showTip(index: number)
 		g.Parent = player:WaitForChild("PlayerGui")
 		gui = g
 	end
-	assert(gui)
+	assert(gui, "TutorialTips gui missing")
 
 	local old = gui:FindFirstChild("TipCard")
 	if old then
