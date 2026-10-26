@@ -20,6 +20,19 @@ DataStores : **mock automatique en Studio** (`DataStoreSafe`) ; en production Ro
 
 ---
 
+## Comment playtester en 2 min
+
+1. `rojo serve default.project.json` → Studio plugin **Rojo** → **Connect** → **Play Solo**
+2. ~2 s → countdown **CONTRE** + bot **ConcordBot** → **ALLEZ !**
+3. Combat : **LMB** / **RMB** / **Q·E** / **Shift** / **F** / **G** → KO → **REVANCHE** auto
+4. Raccourcis :
+   - **P** — Showcase anim (cycle 32 sets, caméra 3/4, combat off) — clip / QA
+   - **M** — Méta (gacha, formes, Fair Kit Ranked, boutique, quêtes)
+   - **F8** — Overlay debug `BC_AnimSet` / `BC_AnimClip` (ou attribut `BC_AnimDebug`)
+5. Quitter Showcase : **P** à nouveau.
+
+---
+
 ## Contrôles
 
 ### PC
@@ -33,6 +46,7 @@ DataStores : **mock automatique en Studio** (`DataStoreSafe`) ; en production Ro
 | F | **Poussée Focus** (knockback, 0 dmg, CD 14 s) |
 | G | **Dash Focus** (12 studs + i-frames 100 ms, CD 11 s) |
 | M | Panneau méta (shop / gacha / quêtes / queue) |
+| P | Showcase animations (32 sets) |
 | F8 | Overlay debug anim (set + clip) — ou attribut `BC_AnimDebug` |
 
 ### Mobile
@@ -96,7 +110,7 @@ src/
     FX/         CombatFx
     Audio/      SoundHooks
     UI/         MetaHud
-  Workspace/Arenas/   mapping Rojo (build runtime ArtPass=4)
+  Workspace/Arenas/   mapping Rojo (build runtime ArtPass=5)
 ```
 
 ---
@@ -162,10 +176,10 @@ Niveau cible : **proto showcase Roblox** jouable — pas un polish live AAA (pas
 | Sabre Constructible + trail dual + Beam | Showcase |
 | **32 sets** KeyframeSequence + CombatAnimator (R15 clamp) | Principal (SaberPose fallback) |
 | Hitstop client + sparks Perfect densifiés | Bon feeling |
-| Countdown 3-2-1 + plaque VS | Soigné |
+| Countdown 3-2-1 + plaque CONTRE + ALLEZ / REVANCHE | Soigné FR |
 | KO orbit cam + restore soft-lock | Stub cinématique |
-| Arènes ArtPass 4 (drift dust/embers + ambient loops) | Photographiable |
+| Arènes ArtPass 5 (duel ring + ambient loops) | Photographiable |
 | HUD Theme + vignette faction optionnelle | Soigné |
-| Audio library IDs + ambiance map | Jouable (placeholders) |
+| Audio mix SFX > ambiance + hooks countdown/feint/focusdash | Jouable (placeholders) |
 
-**Playtest Studio** : `rojo serve` → Play Solo → bot ~2 s → LMB/RMB/F/Shift → KO → **F8** overlay anim → touche **M** méta. Vérifier attributs `BC_AnimSet` / `BC_AnimClip`, trail Active, pas de caméra stuck post-KO.
+**Playtest Studio** : section **Comment playtester en 2 min** (**P** / **M** / **F8**). Vérifier trail Active, Swing sur Active, pas de caméra stuck post-KO.
