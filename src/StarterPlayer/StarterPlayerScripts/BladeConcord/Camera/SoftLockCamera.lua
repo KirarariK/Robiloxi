@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local CameraShake = require(script.Parent:WaitForChild("CameraShake"))
 
 local SoftLockCamera = {}
 
@@ -89,6 +90,7 @@ function SoftLockCamera.start()
 			flat = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z) * -1
 		end
 		local desired = CFrame.new(hrp.Position + flat.Unit * cfg.Offset.Z + Vector3.new(0, cfg.Offset.Y, 0), lookAt)
+		desired = CameraShake.applyTo(camera, desired)
 		camera.CameraType = Enum.CameraType.Scriptable
 		camera.CFrame = camera.CFrame:Lerp(desired, cfg.SoftLockLerp)
 	end)

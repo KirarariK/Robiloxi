@@ -1,6 +1,7 @@
 --!strict
 --[[
-	HUD combat : HP / stamina / score BO3 / CDs Focus / flash feedback.
+	HUD combat soigné — HP / stamina / score BO3 / CDs Focus / flash feedback.
+	Identité Blade Concord (Theme), pas le look default Roblox.
 ]]
 
 local Players = game:GetService("Players")
@@ -9,6 +10,7 @@ local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Theme = require(Shared:WaitForChild("Theme"))
 
 local CombatHud = {}
 
@@ -22,31 +24,62 @@ local scoreLabel: TextLabel
 local arenaLabel: TextLabel
 local cdLabel: TextLabel
 local fairKitLabel: TextLabel
+local vignette: Frame
+
+local function corner(parent: Instance, radius: number)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius)
+	c.Parent = parent
+end
+
+local function stroke(parent: Instance, color: Color3, thickness: number?)
+	local s = Instance.new("UIStroke")
+	s.Color = color
+	s.Thickness = thickness or 1
+	s.Transparency = 0.35
+	s.Parent = parent
+end
 
 local function makeBar(parent: Instance, name: string, y: number, color: Color3): Frame
-	local bg = Instance.new("Frame")
-	bg.Name = name .. "Bg"
-	bg.Size = UDim2.new(0.28, 0, 0, 18)
-	bg.Position = UDim2.new(0.02, 0, 0, y)
-	bg.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-	bg.BorderSizePixel = 0
-	bg.Parent = parent
+	local wrap = Instance.new("Frame")
+	wrap.Name = name .. "Wrap"
+	wrap.Size = UDim2.new(0.3, 0, 0, 22)
+	wrap.Position = UDim2.new(0.02, 0, 0, y)
+	wrap.BackgroundColor3 = Theme.InkSoft
+	wrap.BackgroundTransparency = 0.15
+	wrap.BorderSizePixel = 0
+	wrap.Parent = parent
+	corner(wrap, 6)
+	stroke(wrap, Theme.PanelEdge, 1)
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.Size = UDim2.new(1, 0, 1, 0)
 	fill.BackgroundColor3 = color
 	fill.BorderSizePixel = 0
-	fill.Parent = bg
+	fill.Parent = wrap
+	corner(fill, 6)
+
+	local glow = Instance.new("Frame")
+	glow.Name = "Sheen"
+	glow.Size = UDim2.new(1, 0, 0.35, 0)
+	glow.BackgroundColor3 = Color3.new(1, 1, 1)
+	glow.BackgroundTransparency = 0.75
+	glow.BorderSizePixel = 0
+	glow.Parent = fill
+	corner(glow, 6)
 
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.Font = Enum.Font.GothamBold
+	label.Size = UDim2.new(1, -10, 1, 0)
+	label.Position = UDim2.new(0, 8, 0, 0)
+	label.Font = Theme.FontBody
 	label.TextSize = 12
-	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextColor3 = Theme.Bone
 	label.Text = name
-	label.Parent = bg
+	label.ZIndex = 2
+	label.Parent = wrap
 
 	return fill
 end
@@ -58,6 +91,7 @@ function CombatHud.start()
 	gui.Name = "BladeConcordHud"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 20
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	local root = Instance.new("Frame")
@@ -66,94 +100,125 @@ function CombatHud.start()
 	root.Size = UDim2.fromScale(1, 1)
 	root.Parent = gui
 
-	hpFill = makeBar(root, "HP", 48, Color3.fromRGB(200, 60, 70))
-	staminaFill = makeBar(root, "Stamina", 72, Color3.fromRGB(70, 160, 220))
+	-- Vignette douce
+	vignette = Instance.new("Frame")
+	vignette.Name = "Vignette"
+	vignette.Size = UDim2.fromScale(1, 1)
+	vignette.BackgroundColor3 = Theme.Ink
+	vignette.BackgroundTransparency = 1
+	vignette.BorderSizePixel = 0
+	vignette.ZIndex = 50
+	vignette.Parent = root
+
+	local brand = Instance.new("TextLabel")
+	brand.Name = "Brand"
+	brand.Position = UDim2.new(0.02, 0, 0, 14)
+	brand.Size = UDim2.new(0.4, 0, 0, 26)
+	brand.BackgroundTransparency = 1
+	brand.Font = Theme.FontTitle
+	brand.TextSize = 20
+	brand.TextXAlignment = Enum.TextXAlignment.Left
+	brand.TextColor3 = Theme.Bone
+	brand.Text = Theme.Brand
+	brand.Parent = root
+
+	local brandAccent = Instance.new("Frame")
+	brandAccent.Size = UDim2.new(0, 48, 0, 3)
+	brandAccent.Position = UDim2.new(0.02, 0, 0, 40)
+	brandAccent.BackgroundColor3 = Theme.Accent
+	brandAccent.BorderSizePixel = 0
+	brandAccent.Parent = root
+	corner(brandAccent, 2)
+
+	hpFill = makeBar(root, "VITALITÉ", 52, Theme.Danger)
+	staminaFill = makeBar(root, "ENDURANCE", 80, Theme.Stamina)
 
 	flashLabel = Instance.new("TextLabel")
 	flashLabel.Name = "Flash"
 	flashLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	flashLabel.Position = UDim2.fromScale(0.5, 0.35)
-	flashLabel.Size = UDim2.new(0.5, 0, 0, 40)
+	flashLabel.Position = UDim2.fromScale(0.5, 0.38)
+	flashLabel.Size = UDim2.new(0.6, 0, 0, 48)
 	flashLabel.BackgroundTransparency = 1
-	flashLabel.Font = Enum.Font.GothamBlack
-	flashLabel.TextSize = 28
-	flashLabel.TextColor3 = Color3.fromRGB(255, 230, 120)
+	flashLabel.Font = Theme.FontTitle
+	flashLabel.TextSize = 34
+	flashLabel.TextColor3 = Theme.Perfect
 	flashLabel.TextTransparency = 1
+	flashLabel.TextStrokeTransparency = 0.5
 	flashLabel.Text = ""
 	flashLabel.Parent = root
 
 	statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
-	statusLabel.Position = UDim2.new(0.02, 0, 0, 96)
-	statusLabel.Size = UDim2.new(0.45, 0, 0, 20)
+	statusLabel.Position = UDim2.new(0.02, 0, 0, 110)
+	statusLabel.Size = UDim2.new(0.48, 0, 0, 18)
 	statusLabel.BackgroundTransparency = 1
-	statusLabel.Font = Enum.Font.Gotham
-	statusLabel.TextSize = 14
+	statusLabel.Font = Theme.FontMono
+	statusLabel.TextSize = 13
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-	statusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
-	statusLabel.Text = "Blade Concord"
+	statusLabel.TextColor3 = Theme.Muted
+	statusLabel.Text = Theme.Brand
 	statusLabel.Parent = root
 
 	cdLabel = Instance.new("TextLabel")
 	cdLabel.Name = "Cooldowns"
-	cdLabel.Position = UDim2.new(0.02, 0, 0, 116)
-	cdLabel.Size = UDim2.new(0.5, 0, 0, 18)
+	cdLabel.Position = UDim2.new(0.02, 0, 0, 130)
+	cdLabel.Size = UDim2.new(0.55, 0, 0, 16)
 	cdLabel.BackgroundTransparency = 1
-	cdLabel.Font = Enum.Font.Gotham
-	cdLabel.TextSize = 12
+	cdLabel.Font = Theme.FontMono
+	cdLabel.TextSize = 11
 	cdLabel.TextXAlignment = Enum.TextXAlignment.Left
-	cdLabel.TextColor3 = Color3.fromRGB(180, 200, 220)
+	cdLabel.TextColor3 = Theme.Accent
 	cdLabel.Text = ""
 	cdLabel.Parent = root
 
+	local scorePlate = Instance.new("Frame")
+	scorePlate.Name = "ScorePlate"
+	scorePlate.AnchorPoint = Vector2.new(0.5, 0)
+	scorePlate.Position = UDim2.fromScale(0.5, 0.018)
+	scorePlate.Size = UDim2.new(0, 320, 0, 52)
+	scorePlate.BackgroundColor3 = Theme.Panel
+	scorePlate.BackgroundTransparency = 0.2
+	scorePlate.BorderSizePixel = 0
+	scorePlate.Parent = root
+	corner(scorePlate, 10)
+	stroke(scorePlate, Theme.PanelEdge, 1.2)
+
 	scoreLabel = Instance.new("TextLabel")
 	scoreLabel.Name = "Score"
-	scoreLabel.AnchorPoint = Vector2.new(0.5, 0)
-	scoreLabel.Position = UDim2.fromScale(0.5, 0.02)
-	scoreLabel.Size = UDim2.new(0.4, 0, 0, 28)
+	scoreLabel.Size = UDim2.new(1, 0, 0, 28)
+	scoreLabel.Position = UDim2.new(0, 0, 0, 4)
 	scoreLabel.BackgroundTransparency = 1
-	scoreLabel.Font = Enum.Font.GothamBold
-	scoreLabel.TextSize = 22
-	scoreLabel.TextColor3 = Color3.fromRGB(240, 240, 250)
+	scoreLabel.Font = Theme.FontTitle
+	scoreLabel.TextSize = 20
+	scoreLabel.TextColor3 = Theme.Bone
 	scoreLabel.Text = "BO3 — 0 : 0"
-	scoreLabel.Parent = root
+	scoreLabel.Parent = scorePlate
 
 	arenaLabel = Instance.new("TextLabel")
 	arenaLabel.Name = "Arena"
-	arenaLabel.AnchorPoint = Vector2.new(0.5, 0)
-	arenaLabel.Position = UDim2.fromScale(0.5, 0.055)
-	arenaLabel.Size = UDim2.new(0.5, 0, 0, 18)
+	arenaLabel.Size = UDim2.new(1, 0, 0, 18)
+	arenaLabel.Position = UDim2.new(0, 0, 0, 30)
 	arenaLabel.BackgroundTransparency = 1
-	arenaLabel.Font = Enum.Font.Gotham
-	arenaLabel.TextSize = 13
-	arenaLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
+	arenaLabel.Font = Theme.FontBody
+	arenaLabel.TextSize = 12
+	arenaLabel.TextColor3 = Theme.Muted
 	arenaLabel.Text = ""
-	arenaLabel.Parent = root
+	arenaLabel.Parent = scorePlate
 
 	fairKitLabel = Instance.new("TextLabel")
 	fairKitLabel.Name = "FairKit"
 	fairKitLabel.AnchorPoint = Vector2.new(1, 0)
-	fairKitLabel.Position = UDim2.new(0.98, 0, 0, 20)
-	fairKitLabel.Size = UDim2.new(0.3, 0, 0, 20)
-	fairKitLabel.BackgroundTransparency = 1
-	fairKitLabel.Font = Enum.Font.GothamBold
-	fairKitLabel.TextSize = 12
-	fairKitLabel.TextXAlignment = Enum.TextXAlignment.Right
-	fairKitLabel.TextColor3 = Color3.fromRGB(120, 220, 180)
+	fairKitLabel.Position = UDim2.new(0.98, 0, 0, 18)
+	fairKitLabel.Size = UDim2.new(0.28, 0, 0, 22)
+	fairKitLabel.BackgroundColor3 = Theme.InkSoft
+	fairKitLabel.BackgroundTransparency = 0.25
+	fairKitLabel.BorderSizePixel = 0
+	fairKitLabel.Font = Theme.FontBody
+	fairKitLabel.TextSize = 11
+	fairKitLabel.TextColor3 = Theme.Success
 	fairKitLabel.Text = ""
 	fairKitLabel.Parent = root
-
-	local brand = Instance.new("TextLabel")
-	brand.Name = "Brand"
-	brand.Position = UDim2.new(0.02, 0, 0, 20)
-	brand.Size = UDim2.new(0.4, 0, 0, 24)
-	brand.BackgroundTransparency = 1
-	brand.Font = Enum.Font.GothamBold
-	brand.TextSize = 18
-	brand.TextXAlignment = Enum.TextXAlignment.Left
-	brand.TextColor3 = Color3.fromRGB(230, 230, 240)
-	brand.Text = "Blade Concord"
-	brand.Parent = root
+	corner(fairKitLabel, 6)
 
 	remotes.CombatState.OnClientEvent:Connect(function(payload)
 		if typeof(payload) ~= "table" or typeof(payload.fighters) ~= "table" then
@@ -163,19 +228,19 @@ function CombatHud.start()
 			if snap.userId == player.UserId then
 				local hpFrac = math.clamp(snap.hp / CombatConfig.MaxHp, 0, 1)
 				local staFrac = math.clamp(snap.stamina / CombatConfig.Stamina.Max, 0, 1)
-				hpFill.Size = UDim2.new(hpFrac, 0, 1, 0)
-				staminaFill.Size = UDim2.new(staFrac, 0, 1, 0)
+				TweenService:Create(hpFill, TweenInfo.new(0.12), { Size = UDim2.new(hpFrac, 0, 1, 0) }):Play()
+				TweenService:Create(staminaFill, TweenInfo.new(0.1), { Size = UDim2.new(staFrac, 0, 1, 0) }):Play()
 				if snap.flags and snap.flags.exhausted then
-					staminaFill.BackgroundColor3 = Color3.fromRGB(220, 80, 60)
+					staminaFill.BackgroundColor3 = Theme.Danger
 				else
-					staminaFill.BackgroundColor3 = Color3.fromRGB(70, 160, 220)
+					staminaFill.BackgroundColor3 = Theme.Stamina
 				end
 				local formBit = ""
 				if snap.formId then
 					formBit = string.format(" · %s %s", tostring(snap.formId), tostring(snap.formRarity or ""))
 				end
 				statusLabel.Text = string.format(
-					"HP %d · Stamina %d · %s%s",
+					"%d PV · %d END · %s%s",
 					math.floor(snap.hp + 0.5),
 					math.floor(snap.stamina + 0.5),
 					tostring(snap.actionId),
@@ -208,19 +273,20 @@ function CombatHud.start()
 				end
 			end
 		end
-		local phase = tostring(payload.phase or "")
 		local mode = tostring(payload.mode or "Casual")
-		scoreLabel.Text = string.format("%s · Round %d · %d : %d (FT%d)", mode, payload.roundNumber or 0, myWins, theirWins, payload.firstTo or 2)
+		scoreLabel.Text = string.format("%s · R%d · %d : %d (FT%d)", mode, payload.roundNumber or 0, myWins, theirWins, payload.firstTo or 2)
 		arenaLabel.Text = tostring(payload.arenaName or payload.arenaId or "")
 		if payload.fairKit then
-			fairKitLabel.Text = "Fair Kit · STATS: RARE CAP"
+			fairKitLabel.Text = "  Fair Kit · Rare cap  "
+			fairKitLabel.BackgroundTransparency = 0.15
 		else
 			fairKitLabel.Text = ""
+			fairKitLabel.BackgroundTransparency = 1
 		end
-		if phase == "Countdown" and payload.countdown then
+		if tostring(payload.phase) == "Countdown" and payload.countdown then
 			flashLabel.Text = string.format("%.0f", math.ceil(payload.countdown))
 			flashLabel.TextTransparency = 0
-			flashLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
+			flashLabel.TextColor3 = Theme.Bone
 		end
 	end)
 
@@ -228,9 +294,13 @@ function CombatHud.start()
 		flashLabel.Text = text
 		flashLabel.TextColor3 = color
 		flashLabel.TextTransparency = 0
-		TweenService:Create(flashLabel, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		flashLabel.TextStrokeTransparency = 0.35
+		vignette.BackgroundTransparency = 0.82
+		TweenService:Create(flashLabel, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			TextTransparency = 1,
+			TextStrokeTransparency = 1,
 		}):Play()
+		TweenService:Create(vignette, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
 	end
 
 	remotes.HitResolved.OnClientEvent:Connect(function(payload)
@@ -242,17 +312,17 @@ function CombatHud.start()
 			return
 		end
 		if payload.perfect then
-			flash("PERFECT", Color3.fromRGB(255, 230, 120))
+			flash("PARADE PARFAITE", Theme.Perfect)
 		elseif payload.riposte then
-			flash("RIPOSTE", Color3.fromRGB(255, 180, 80))
+			flash("RIPOSTE", Theme.AccentHot)
 		elseif payload.guardBreak then
-			flash("GUARD BREAK", Color3.fromRGB(255, 100, 60))
+			flash("GARDE BRISÉE", Theme.Danger)
 		elseif payload.clash then
-			flash("CLASH", Color3.fromRGB(200, 220, 255))
+			flash("CLASH", Theme.Clash)
 		elseif payload.dodged then
-			flash("ESQUIVE", Color3.fromRGB(120, 255, 200))
+			flash("ESQUIVE", Theme.Success)
 		elseif payload.critical then
-			flash("CRITICAL", Color3.fromRGB(255, 80, 100))
+			flash("CRITIQUE", Theme.Danger)
 		end
 	end)
 
@@ -262,16 +332,16 @@ function CombatHud.start()
 		end
 		if payload.matchOver then
 			if payload.winnerUserId == player.UserId then
-				flash("MATCH GAGNÉ", Color3.fromRGB(120, 255, 160))
+				flash("CONCORDANCE — VICTOIRE", Theme.Success)
 			else
-				flash("MATCH PERDU", Color3.fromRGB(255, 90, 90))
+				flash("DÉFAITE", Theme.Danger)
 			end
 		elseif payload.winnerUserId == player.UserId then
-			flash("ROUND", Color3.fromRGB(120, 255, 160))
+			flash("ROUND GAGNÉ", Theme.Success)
 		elseif payload.winnerUserId == nil then
-			flash("ÉGALITÉ", Color3.fromRGB(200, 200, 200))
+			flash("ÉGALITÉ", Theme.Muted)
 		else
-			flash("ROUND PERDU", Color3.fromRGB(255, 90, 90))
+			flash("ROUND PERDU", Theme.Danger)
 		end
 	end)
 
@@ -280,11 +350,11 @@ function CombatHud.start()
 			return
 		end
 		if payload.kind == "FocusPushParried" then
-			flash("POUSSÉE RENVOYÉE", Color3.fromRGB(200, 160, 255))
+			flash("POUSSÉE RENVOYÉE", Theme.Focus)
 		elseif payload.kind == "FocusPush" then
-			flash("POUSSÉE FOCUS", Color3.fromRGB(180, 140, 255))
+			flash("POUSSÉE FOCUS", Theme.Focus)
 		elseif payload.kind == "FocusDash" then
-			flash("DASH FOCUS", Color3.fromRGB(140, 255, 220))
+			flash("DASH FOCUS", Theme.BladeFocus)
 		end
 	end)
 end

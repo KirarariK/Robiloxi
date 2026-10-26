@@ -1,12 +1,13 @@
-# ServerStorage stubs
+# ServerStorage — assets
 
-Placeholders pour assets 3D / animations non encore importés.
+Placeholders pour assets importés plus tard. Le polish actuel est **100 % Constructible** (Parts / Beams / Particles / UI).
 
 | Chemin prévu | Usage | Statut |
 |--------------|--------|--------|
-| `SaberMeshes/` | Hilts / cristaux | TODO mesh |
-| `Animations/` | Swing Light/Heavy, Guard, Dodge | TODO Animation Editor |
-| `Finishers/` | Cinématiques finisher | TODO |
+| `SaberMeshes/` | Hilts / cristaux custom | Remplacé par `SaberBuilder` Constructible |
+| `Animations/` | Swing Light/Heavy, Guard, Dodge | Remplacé par `SaberPose` (Motor6D tween) |
+| `Finishers/` | Cinématiques finisher | Stub `KoFinisher` (ring + Billboard CONCORDANCE) |
 | `Emotes/` | Emotes salon | TODO |
+| `Audio/` | SoundIds combat | Hooks `SoundHooks` — coller `rbxassetid://` |
 
-La logique gameplay n’attend pas ces assets : Parts Neon + trails stubs suffisent en Studio.
+La logique gameplay n’attend pas ces assets.

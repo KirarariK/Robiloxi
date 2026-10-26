@@ -178,12 +178,27 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 			matchOver = true,
 			scores = scores,
 		})
+		remotes.FxEvent:FireAllClients({
+			kind = "KoFinisher",
+			payload = {
+				winnerUserId = matchWinnerId,
+				loserUserId = if loser then loser.UserId else nil,
+				matchOver = true,
+			},
+		})
 		broadcast()
 	else
 		remotes.RoundEnded:FireAllClients({
 			winnerUserId = winId,
 			matchOver = false,
 			scores = scores,
+		})
+		remotes.FxEvent:FireAllClients({
+			kind = "KoFinisher",
+			payload = {
+				winnerUserId = winId,
+				matchOver = false,
+			},
 		})
 	end
 end

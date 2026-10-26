@@ -47,21 +47,22 @@ Boutons ContextActionService : **Attaque**, **Parade**, **Esquive**, **Dash**, *
 - Attaques légère / lourde (frame data serveur)
 - Parade hold + perfect ±90 ms, chip, guard break, riposte-lock + buff légère +30 %
 - Stamina 100, regen 18/s après 0,35 s, exhaustion &lt; 15
-- Hitboxes capsule lame, autorité serveur, clash (stamina −8, micro-KB, VFX stub)
+- Hitboxes capsule lame, autorité serveur, clash (stamina −8, micro-KB, VFX)
 - Esquive i-frames, dash combat, feinte
-- Caméra lock soft adversaire
-- HUD HP / stamina / flash Perfect·Clash·Riposte
+- Caméra lock soft + shake léger
+- HUD soigné HP / stamina / flash Perfect·Clash·Riposte
+- Sabre Constructible (hilt + Beam/Neon/Trail/Light) + poses Motor6D
 
 ### Match + Focus + arènes (P2)
 
 - Lobby auto → countdown → duel **BO3 (FT2)** → rematch
 - Score UI + rotation d’arènes
 - **Poussée Focus** / **Dash Focus** (CDs, stamina, anti-parade push, anti-stack esquive)
-- Arènes GDD :
-  - **Obsidian Pit** — lave bordure (8 DPS soft)
-  - **Sanctum des Deux Astres** — vents latéraux
-  - **Trône d’Éclipse** — pression anti-camp estrade
-  - **Quai Mirage** — panneaux temporaires (cycle collide)
+- Arènes GDD (art pass matériaux / lighting / props) :
+  - **Obsidian Pit** — lave glow + cendres (8 DPS soft)
+  - **Sanctum des Deux Astres** — vents + astres lumineux
+  - **Trône d’Éclipse** — trône Constructible + pression estrade
+  - **Quai Mirage** — quai / eau / panneaux mirage
 
 ### Méta (P3)
 
@@ -80,19 +81,20 @@ Boutons ContextActionService : **Attaque**, **Parade**, **Esquive**, **Dash**, *
 ```
 src/
   ReplicatedStorage/BladeConcord/
-    Shared/     CombatConfig, CombatTypes, Remotes, FormConfig, EconomyConfig, RankedConfig, QuestConfig
+    Shared/     CombatConfig, Theme, Remotes, Form/Economy/Ranked/QuestConfig
+    Visual/     SaberBuilder (Constructible)
     Remotes/    créés au runtime (Combat + Meta)
   ServerScriptService/BladeConcord/
-    Combat/     services combat + ArenaService + Dodge/Dash/Focus
-    Match/      MatchService BO3
-    Data/       DataStoreSafe, PlayerDataService
-    Meta/       FormService, ShopService, RankedService, QuestService, MetaBootstrap
+    Combat/     services + ArenaService art pass
+    Match/      MatchService BO3 + KoFinisher FX
+    Data/ Meta/ …
   StarterPlayer/.../BladeConcord/
-    Combat/     Input, Predict, Hud, Bootstrap
-    Camera/     SoftLockCamera
+    Combat/     Input, SaberPose, Hud, Predict, Bootstrap
+    Camera/     SoftLock + CameraShake
+    FX/         CombatFx
+    Audio/      SoundHooks
     UI/         MetaHud
-  Workspace/Arenas/          mapping Rojo (build runtime)
-  ServerStorage/BladeConcord stubs assets TODO
+  Workspace/Arenas/   mapping Rojo (build runtime ArtPass=2)
 ```
 
 ---
@@ -110,4 +112,5 @@ src/
 
 ## Notes assets
 
-Meshes sabre, animations swing/dodge, finishers, emotes : **stubs** (Parts Neon, Trails, StringValue TODO sous `ServerStorage/BladeConcord`). La **logique** est complète sans ces assets.
+Sabre / arènes / VFX / UI : **Constructible Studio-native** (voir `docs/visual-polish-notes.md` dans l’Agent Store).  
+SoundIds et meshes importés restent optionnels (`SoundHooks`, `ServerStorage`). La **logique** serveur P0–P3 est inchangée.

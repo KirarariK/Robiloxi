@@ -7,10 +7,19 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local CombatTypes = require(Shared:WaitForChild("CombatTypes"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 local FighterState = require(script.Parent:WaitForChild("FighterState"))
 local StaminaService = require(script.Parent:WaitForChild("StaminaService"))
 
 local DashService = {}
+local remotes: Remotes.CombatRemotes? = nil
+
+local function getRemotes(): Remotes.CombatRemotes
+	if not remotes then
+		remotes = Remotes.get()
+	end
+	return remotes :: Remotes.CombatRemotes
+end
 
 local function applyDash(fighter: FighterState.Fighter, direction: Vector3?, distance: number)
 	local character = fighter.character
@@ -66,6 +75,10 @@ function DashService.tryDash(fighter: FighterState.Fighter, direction: Vector3?,
 	fighter.iFramesUntil = math.min(fighter.iFramesUntil, now)
 
 	applyDash(fighter, direction, cfg.Distance)
+	getRemotes().FxEvent:FireAllClients({
+		kind = "Dash",
+		payload = { userId = fighter.player.UserId },
+	})
 	return true
 end
 
