@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Lighting croiseur — Future / Realistic, néons-métaux, DoF off.
+	Lighting cour ouverte — jour, haze faible, DoF off.
 ]]
 
 local Lighting = game:GetService("Lighting")
@@ -32,50 +32,50 @@ function LobbyLighting.applyHall()
 	end)
 
 	Lighting.GlobalShadows = true
-	Lighting.ClockTime = 0.5 -- nuit/espace extérieur visible via baie
-	Lighting.Brightness = 1.6
-	Lighting.Ambient = Color3.fromRGB(28, 32, 48)
-	Lighting.OutdoorAmbient = Color3.fromRGB(40, 48, 72)
-	Lighting.ColorShift_Top = Color3.fromRGB(80, 100, 160)
-	Lighting.ColorShift_Bottom = Color3.fromRGB(20, 18, 30)
-	Lighting.EnvironmentDiffuseScale = 0.45
-	Lighting.EnvironmentSpecularScale = 1.0
-	Lighting.ExposureCompensation = 0.1
-	Lighting.FogColor = Color3.fromRGB(18, 22, 40)
-	Lighting.FogStart = 80
-	Lighting.FogEnd = 520
-	Lighting.GeographicLatitude = 10
+	Lighting.ClockTime = 15.2
+	Lighting.Brightness = 2.4
+	Lighting.Ambient = Color3.fromRGB(96, 102, 118)
+	Lighting.OutdoorAmbient = Color3.fromRGB(150, 158, 176)
+	Lighting.ColorShift_Top = Color3.fromRGB(180, 196, 220)
+	Lighting.ColorShift_Bottom = Color3.fromRGB(70, 74, 88)
+	Lighting.EnvironmentDiffuseScale = 0.85
+	Lighting.EnvironmentSpecularScale = 0.55
+	Lighting.ExposureCompensation = 0.2
+	Lighting.FogColor = Color3.fromRGB(168, 186, 210)
+	Lighting.FogStart = 500
+	Lighting.FogEnd = 2400
+	Lighting.GeographicLatitude = 28
 
 	local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
 	if not atmo then
 		atmo = Instance.new("Atmosphere")
 		atmo.Parent = Lighting
 	end
-	atmo.Density = 0.18
-	atmo.Offset = 0.22
-	atmo.Color = Color3.fromRGB(90, 100, 150)
-	atmo.Decay = Color3.fromRGB(20, 16, 40)
-	atmo.Glare = 0.15
-	atmo.Haze = 0.8
+	atmo.Density = 0.22
+	atmo.Offset = 0.15
+	atmo.Color = Color3.fromRGB(190, 206, 224)
+	atmo.Decay = Color3.fromRGB(120, 140, 170)
+	atmo.Glare = 0.05
+	atmo.Haze = 0.08
 
 	local sky = ensureChild("Sky", "BC_LobbySky") :: Sky
 	sky.CelestialBodiesShown = true
-	sky.StarCount = 5000
-	sky.MoonAngularSize = 14
-	sky.SunAngularSize = 8
+	sky.StarCount = 0
+	sky.MoonAngularSize = 8
+	sky.SunAngularSize = 16
 
 	local bloom = ensureChild("BloomEffect", "BC_Bloom") :: BloomEffect
 	bloom.Enabled = true
-	bloom.Intensity = 0.45
-	bloom.Size = 22
-	bloom.Threshold = 1.35 -- néons Metal/Neon lisibles
+	bloom.Intensity = 0.16
+	bloom.Size = 8
+	bloom.Threshold = 1.7
 
 	local cc = ensureChild("ColorCorrectionEffect", "BC_LobbyCC") :: ColorCorrectionEffect
 	cc.Enabled = true
-	cc.Contrast = 0.1
-	cc.Saturation = 0.08
-	cc.TintColor = Color3.fromRGB(230, 235, 255)
-	cc.Brightness = 0.02
+	cc.Contrast = 0.06
+	cc.Saturation = 0.04
+	cc.TintColor = Color3.fromRGB(255, 250, 244)
+	cc.Brightness = 0.04
 
 	local rays = ensureChild("SunRaysEffect", "BC_SunRays") :: SunRaysEffect
 	rays.Enabled = false
@@ -91,7 +91,7 @@ function LobbyLighting.applyHall()
 		end
 	end
 
-	Lighting:SetAttribute("BC_LightingMode", "ConcordCruiser")
+	Lighting:SetAttribute("BC_LightingMode", "ConcordCourt")
 	Lighting:SetAttribute("BC_AccentGold", colors.Gold)
 	Lighting:SetAttribute("BC_DoF", false)
 	Lighting:SetAttribute("BC_Layout", LobbyConfig.Layout)
@@ -103,15 +103,15 @@ function LobbyLighting.applyMobileFallback()
 	end)
 	local bloom = Lighting:FindFirstChild("BC_Bloom")
 	if bloom and bloom:IsA("BloomEffect") then
-		bloom.Intensity = 0.28
-		bloom.Size = 14
+		bloom.Intensity = 0.12
+		bloom.Size = 6
 	end
 	local dof = Lighting:FindFirstChild("BC_LobbyDoF")
 	if dof and dof:IsA("DepthOfFieldEffect") then
 		dof.Enabled = false
 	end
 	Lighting.FogEnd = 380
-	Lighting:SetAttribute("BC_LightingMode", "ConcordCruiserMobile")
+	Lighting:SetAttribute("BC_LightingMode", "ConcordCourtMobile")
 end
 
 return LobbyLighting

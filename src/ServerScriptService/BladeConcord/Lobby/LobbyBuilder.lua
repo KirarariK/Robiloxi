@@ -1,10 +1,10 @@
 --!strict
 --[[
-	Concord Lobby — croiseur intérieur + baie Glass + 2 slots (ArtPass 9).
+	Cour Concord — cour ouverte, 8 terrains × 2 slots (ArtPass 12).
 
 	API :
 	  ensure / getSpawnCFrame / applyLobbyLighting
-	  bindDuelSlots(claimFn) — claimFn(player, slotIndex 1|2)
+	  bindDuelSlots(claimFn) — claimFn(player, slotIndex 1..8)
 	  bindQueuePads(enqueueFn) — legacy Casual/Ranked
 	  getDuelSlotInfos / getDuelSlotPad
 
@@ -31,6 +31,7 @@ local padBound = false
 local duelBound = false
 local neonBound = false
 local duelPadsByIndex: { [number]: BasePart } = {}
+local duelPadLists: { [number]: { BasePart } } = {}
 
 local C = LobbyConfig.Colors
 local H = LobbyConfig.Hall
@@ -44,266 +45,82 @@ local function colorForKey(key: string): Color3
 	return C.Focus
 end
 
-local function neonStrip(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3, withLight: boolean?)
-	local p = LobbyUtil.part(name, size, cf, color, parent, Enum.Material.Neon, {
-		canCollide = false,
-		castShadow = false,
-		transparency = 0.15,
-	})
-	if p then
-		LobbyProps.attachNeonStrip(p, color)
-		if withLight then
-			LobbyUtil.pointLight(p, color, 0.7, 18)
-		end
-	end
-	return p
-end
+local function buildCourt(root: Model)
+	local court = LobbyUtil.model("Court", root, "Hall")
+	local spawnZ = H.SpawnLocal.Z
+	local endZ = H.BayZ
+	local south = spawnZ + 16
+	local midZ = (south + endZ) * 0.5
+	local len = south - endZ
 
-local function buildCruiserHull(root: Model)
-	local hull = LobbyUtil.model("CruiserHull", root, "Hall")
-	local w = H.Width
-	local len = H.Length
-	local h = H.Height
-	local midZ = (H.SpawnLocal.Z + H.BayZ) * 0.5
-
-	-- Sol intérieur
 	LobbyUtil.part(
 		"Deck",
-		Vector3.new(w, 2, len),
-		LobbyUtil.cf(Vector3.new(0, -1, midZ)),
-		C.Hull,
-		hull,
-		Enum.Material.Metal,
-		{ reflectance = 0.08 }
+		Vector3.new(H.Width, 2, len),
+		LobbyUtil.cf(Vector3.new(0, -0.9, midZ)),
+		C.Marble,
+		court,
+		Enum.Material.Slate,
+		{ reflectance = 0.05 }
 	)
 	LobbyUtil.part(
-		"DeckInlay",
-		Vector3.new(w * 0.55, 0.25, len * 0.92),
-		LobbyUtil.cf(Vector3.new(0, 0.2, midZ)),
-		C.HullLite,
-		hull,
+		"Alley",
+		Vector3.new(10, 0.25, len - 18),
+		LobbyUtil.cf(Vector3.new(0, 0.2, midZ - 4)),
+		C.MarbleLite,
+		court,
+		Enum.Material.Slate,
+		{ reflectance = 0.08, canCollide = false }
+	)
+	LobbyUtil.part(
+		"EndCurb",
+		Vector3.new(H.Width, 2.2, 2),
+		LobbyUtil.cf(Vector3.new(0, 1.1, endZ)),
+		C.Metal,
+		court,
+		Enum.Material.Slate
+	)
+
+	local archZ = spawnZ + 10
+	for _, x in { -6.5, 6.5 } do
+		LobbyUtil.part(
+			"ArchPost",
+			Vector3.new(1.8, 9, 1.8),
+			LobbyUtil.cf(Vector3.new(x, 4.5, archZ)),
+			C.Metal,
+			court,
+			Enum.Material.Slate,
+			{ reflectance = 0.12 }
+		)
+	end
+	local lintel = LobbyUtil.part(
+		"ArchLintel",
+		Vector3.new(16, 1.4, 2),
+		LobbyUtil.cf(Vector3.new(0, 9.4, archZ)),
+		C.Metal,
+		court,
 		Enum.Material.Metal,
-		{ reflectance = 0.12, canCollide = false }
+		{ reflectance = 0.18 }
 	)
-	-- Liserés Focus / Dawn le long de l’allée
-	neonStrip(
-		hull,
-		"StripL",
-		Vector3.new(0.35, 0.2, len * 0.9),
-		LobbyUtil.cf(Vector3.new(-w * 0.22, 0.35, midZ)),
-		C.Focus,
-		false
-	)
-	neonStrip(
-		hull,
-		"StripR",
-		Vector3.new(0.35, 0.2, len * 0.9),
-		LobbyUtil.cf(Vector3.new(w * 0.22, 0.35, midZ)),
+	if lintel then
+		LobbyUtil.billboard(lintel, "COUR CONCORD", C.Gold, Vector2.new(240, 36), 2)
+	end
+	LobbyUtil.part(
+		"BannerDawn",
+		Vector3.new(0.35, 6, 2.2),
+		LobbyUtil.cf(Vector3.new(-8.4, 6, archZ)),
 		C.Dawn,
-		false
-	)
-
-	-- Parois Metal
-	local wallH = h
-	LobbyUtil.part(
-		"WallL",
-		Vector3.new(2.5, wallH, len),
-		LobbyUtil.cf(Vector3.new(-w * 0.5, wallH * 0.5, midZ)),
-		C.MetalDark,
-		hull,
-		Enum.Material.Metal,
-		{ reflectance = 0.15 }
+		court,
+		Enum.Material.Fabric,
+		{ canCollide = false }
 	)
 	LobbyUtil.part(
-		"WallR",
-		Vector3.new(2.5, wallH, len),
-		LobbyUtil.cf(Vector3.new(w * 0.5, wallH * 0.5, midZ)),
-		C.MetalDark,
-		hull,
-		Enum.Material.Metal,
-		{ reflectance = 0.15 }
-	)
-	-- Plafond
-	LobbyUtil.part(
-		"Ceiling",
-		Vector3.new(w + 4, 2, len),
-		LobbyUtil.cf(Vector3.new(0, h + 0.5, midZ)),
-		C.Hull,
-		hull,
-		Enum.Material.Metal,
-		{ reflectance = 0.1 }
-	)
-	-- Strips plafond néon
-	for i = 0, 5 do
-		local z = H.SpawnLocal.Z - 12 - i * 22
-		neonStrip(
-			hull,
-			"CeilNeon" .. i,
-			Vector3.new(w * 0.7, 0.3, 0.5),
-			LobbyUtil.cf(Vector3.new(0, h - 0.8, z)),
-			if i % 2 == 0 then C.Focus else C.Arcane,
-			i == 1 or i == 3
-		)
-	end
-	-- Strips muraux verticaux
-	for i = 0, 6 do
-		local z = H.SpawnLocal.Z - 8 - i * 18
-		neonStrip(
-			hull,
-			"WallNeonL" .. i,
-			Vector3.new(0.3, h * 0.7, 0.3),
-			LobbyUtil.cf(Vector3.new(-w * 0.5 + 1.6, h * 0.4, z)),
-			C.Dusk,
-			false
-		)
-		neonStrip(
-			hull,
-			"WallNeonR" .. i,
-			Vector3.new(0.3, h * 0.7, 0.3),
-			LobbyUtil.cf(Vector3.new(w * 0.5 - 1.6, h * 0.4, z)),
-			C.Dawn,
-			false
-		)
-	end
-
-	-- Cloison arrière (sud, derrière spawn)
-	LobbyUtil.part(
-		"BulkheadAft",
-		Vector3.new(w + 4, wallH, 3),
-		LobbyUtil.cf(Vector3.new(0, wallH * 0.5, H.SpawnLocal.Z + 28)),
-		C.Metal,
-		hull,
-		Enum.Material.Metal,
-		{ reflectance = 0.12 }
-	)
-
-	-- Piliers structure
-	for _, x in { -18, 18 } do
-		for i = 0, 4 do
-			local z = 20 - i * 28
-			LobbyUtil.part(
-				"Rib",
-				Vector3.new(2, h - 2, 2),
-				LobbyUtil.cf(Vector3.new(x, h * 0.45, z)),
-				C.Steel,
-				hull,
-				Enum.Material.Metal,
-				{ reflectance = 0.2 }
-			)
-		end
-	end
-
-	local titleHost = LobbyUtil.part(
-		"TitleHost",
-		Vector3.new(1, 1, 1),
-		LobbyUtil.cf(Vector3.new(0, 10, 48)),
-		C.Gold,
-		hull,
-		Enum.Material.ForceField,
-		{ transparency = 1, canCollide = false }
-	)
-	if titleHost then
-		LobbyUtil.billboard(titleHost, "CONCORD HALL", C.GoldLite, Vector2.new(280, 40), 0)
-	end
-end
-
-local function buildGlassBay(root: Model)
-	local bay = LobbyUtil.model("ObservationBay", root, "Bay")
-	local z = H.BayZ
-	local bw = H.BayWidth
-	local bh = H.BayHeight
-
-	-- Cadre Metal
-	LobbyUtil.part(
-		"BayFrameL",
-		Vector3.new(3, bh + 4, 4),
-		LobbyUtil.cf(Vector3.new(-bw * 0.5, bh * 0.5 + 1, z)),
-		C.Metal,
-		bay,
-		Enum.Material.Metal,
-		{ reflectance = 0.25 }
-	)
-	LobbyUtil.part(
-		"BayFrameR",
-		Vector3.new(3, bh + 4, 4),
-		LobbyUtil.cf(Vector3.new(bw * 0.5, bh * 0.5 + 1, z)),
-		C.Metal,
-		bay,
-		Enum.Material.Metal,
-		{ reflectance = 0.25 }
-	)
-	LobbyUtil.part(
-		"BayFrameTop",
-		Vector3.new(bw + 6, 3, 4),
-		LobbyUtil.cf(Vector3.new(0, bh + 2.5, z)),
-		C.Metal,
-		bay,
-		Enum.Material.Metal,
-		{ reflectance = 0.2 }
-	)
-	LobbyUtil.part(
-		"BaySill",
-		Vector3.new(bw + 4, 1.5, 5),
-		LobbyUtil.cf(Vector3.new(0, 0.75, z + 1)),
-		C.HullLite,
-		bay,
-		Enum.Material.Metal
-	)
-
-	-- Immense baie Glass (spectate arènes)
-	local glass = LobbyUtil.part(
-		"BayGlass",
-		Vector3.new(bw, bh, 1.2),
-		LobbyUtil.cf(Vector3.new(0, bh * 0.5 + 1.2, z)),
-		C.Glass,
-		bay,
-		Enum.Material.Glass,
-		{ canCollide = true, transparency = 0.35, reflectance = 0.45 }
-	)
-	if glass then
-		glass:SetAttribute("BC_ZoneId", "Bay")
-		LobbyUtil.billboard(glass, "BAIE D'OBSERVATION", C.Focus, Vector2.new(260, 32), 14)
-		LobbyUtil.pointLight(glass, C.Focus, 0.5, 24)
-	end
-
-	-- Montants Glass
-	for i = -2, 2 do
-		if i ~= 0 then
-			LobbyUtil.part(
-				"Mullion",
-				Vector3.new(0.6, bh, 1.4),
-				LobbyUtil.cf(Vector3.new(i * (bw / 5), bh * 0.5 + 1.2, z)),
-				C.MetalDark,
-				bay,
-				Enum.Material.Metal,
-				{ reflectance = 0.15 }
-			)
-		end
-	end
-
-	neonStrip(
-		bay,
-		"BayNeonTop",
-		Vector3.new(bw * 0.9, 0.35, 0.35),
-		LobbyUtil.cf(Vector3.new(0, bh + 0.8, z + 1.5)),
-		C.Focus,
-		true
-	)
-	neonStrip(
-		bay,
-		"BayNeonDawn",
-		Vector3.new(bw * 0.4, 0.3, 0.3),
-		LobbyUtil.cf(Vector3.new(-bw * 0.25, 2, z + 1.5)),
-		C.Dawn,
-		false
-	)
-	neonStrip(
-		bay,
-		"BayNeonDusk",
-		Vector3.new(bw * 0.4, 0.3, 0.3),
-		LobbyUtil.cf(Vector3.new(bw * 0.25, 2, z + 1.5)),
+		"BannerDusk",
+		Vector3.new(0.35, 6, 2.2),
+		LobbyUtil.cf(Vector3.new(8.4, 6, archZ)),
 		C.Dusk,
-		false
+		court,
+		Enum.Material.Fabric,
+		{ canCollide = false }
 	)
 end
 
@@ -334,20 +151,32 @@ local function buildSpawns(root: Model)
 	end
 end
 
+local function rememberPad(idx: number, pad: BasePart)
+	local list = duelPadLists[idx]
+	if not list then
+		list = {}
+		duelPadLists[idx] = list
+	end
+	table.insert(list, pad)
+	if not duelPadsByIndex[idx] then
+		duelPadsByIndex[idx] = pad
+	end
+end
+
 local function buildDuelSlots(root: Model)
 	local folder = LobbyUtil.model("DuelSlots", root, "DuelSlots")
 	duelPadsByIndex = {}
-	-- Exactement 2 slots devant la baie
-	for i, spec in LobbyConfig.DuelSlots do
-		local pad = LobbyProps.duelSlot(folder, {
+	duelPadLists = {}
+	for _, spec in LobbyConfig.DuelSlots do
+		local pads = LobbyProps.terrainPair(folder, {
 			index = spec.index,
 			x = spec.x,
 			z = spec.z,
 			side = spec.side,
 			color = colorForKey(spec.colorKey),
-		}, true)
-		if pad then
-			duelPadsByIndex[spec.index] = pad
+		})
+		for _, pad in pads do
+			rememberPad(spec.index, pad)
 		end
 	end
 end
@@ -437,6 +266,10 @@ function LobbyBuilder.getDuelSlotPad(slotIndex: number): BasePart?
 	return duelPadsByIndex[slotIndex]
 end
 
+function LobbyBuilder.getDuelSlotPads(slotIndex: number): { BasePart }
+	return duelPadLists[slotIndex] or {}
+end
+
 function LobbyBuilder.getArenaLayout()
 	return LobbyConfig.ArenaLayout
 end
@@ -449,11 +282,12 @@ function LobbyBuilder.ensure(parent: Instance): Model
 	if existing and existing:IsA("Model") and existing:GetAttribute("ArtPass") == LobbyConfig.ArtPass then
 		built = existing
 		duelPadsByIndex = {}
+		duelPadLists = {}
 		for _, inst in CollectionService:GetTagged(LobbyConfig.Tags.DuelSlotPad) do
 			if inst:IsA("BasePart") and inst.Name == "ClaimPad" and inst:IsDescendantOf(existing) then
 				local idx = inst:GetAttribute("BC_DuelSlot")
 				if typeof(idx) == "number" then
-					duelPadsByIndex[idx] = inst
+					rememberPad(idx, inst)
 				end
 			end
 		end
@@ -482,13 +316,12 @@ function LobbyBuilder.ensure(parent: Instance): Model
 		workspace.StreamingEnabled = true
 	end)
 
-	buildCruiserHull(root)
-	buildGlassBay(root)
+	buildCourt(root)
 	buildSpawns(root)
 	buildDuelSlots(root)
 	buildLegacyQueuePads(root)
 
-	local primary = root:FindFirstChild("BayGlass", true)
+	local primary = root:FindFirstChild("Deck", true)
 	if primary and primary:IsA("BasePart") then
 		root.PrimaryPart = primary
 	end

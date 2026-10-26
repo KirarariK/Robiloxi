@@ -1,12 +1,12 @@
 --!strict
 --[[
-	Concord Lobby — croiseur intérieur + baie Glass + 2 slots (ArtPass 9).
-	Repère local : spawn (0,0,0) zone ; −Z = vers baie / arènes.
+	Cour Concord — cour ouverte, 8 terrains × 2 slots (ArtPass 12).
+	Repère local : spawn sud, −Z = le long de l’allée.
 	Monde : Origin = (0,0,700).
 
 	Attributs :
-	- ConcordLobby : ArtPass, BC_Layout=CruiserBay, BC_LobbyOrigin, BC_DuelSlotCount=2
-	- Slots : BC_DuelSlot 1|2, tag BC_DuelSlotPad (Prompt + Touched)
+	- ConcordLobby : ArtPass, BC_Layout=ConcordCourt, BC_LobbyOrigin, BC_DuelSlotCount=8
+	- Slots : BC_DuelSlot 1..8 (2 pads par terrain), tag BC_DuelSlotPad (Prompt + Touched)
 	- Spawn : tag BC_LobbySpawn (si CombatConfig.Tags.LobbySpawn)
 
 	Contrat Match : LobbyBuilder.bindDuelSlots(claimFn) — SlotMatchService.
@@ -15,10 +15,10 @@
 
 local LobbyConfig = {}
 
-LobbyConfig.ArtPass = 9
+LobbyConfig.ArtPass = 12
 LobbyConfig.Name = "ConcordLobby"
-LobbyConfig.DisplayName = "Concord Hall"
-LobbyConfig.Layout = "CruiserBay"
+LobbyConfig.DisplayName = "Cour Concord"
+LobbyConfig.Layout = "ConcordCourt"
 
 LobbyConfig.Origin = Vector3.new(0, 0, 700)
 
@@ -66,26 +66,27 @@ LobbyConfig.Colors = {
 	MarblePolish = Color3.fromRGB(58, 66, 92),
 }
 
---[[ Hall croiseur : spawn sud → baie nord (−Z). ]]
+--[[ Cour ouverte : spawn sud → allée −Z. Pas de plafond. ]]
 LobbyConfig.Hall = {
-	Width = 56,
-	Length = 140,
-	Height = 28,
-	SpawnLocal = Vector3.new(0, 4, 40), -- début hall, face baie (−Z)
-	BayZ = -85, -- paroi Glass face arènes
-	BayWidth = 72,
-	BayHeight = 22,
+	Width = 70,
+	Length = 110,
+	Height = 0,
+	SpawnLocal = Vector3.new(0, 4, 36),
+	BayZ = -56,
+	BayWidth = 0,
+	BayHeight = 0,
 	FloorY = 0,
 }
 
--- Exactement 2 slots devant la baie
-LobbyConfig.DuelSlots = {
-	{ index = 1, x = -16, z = -58, side = "Left", colorKey = "Focus" },
-	{ index = 2, x = 16, z = -58, side = "Right", colorKey = "Dawn" },
-}
-
-LobbyConfig.SlotRingSize = Vector3.new(22, 1.0, 22)
-LobbyConfig.SlotPadSize = Vector3.new(11, 0.4, 9)
+-- 8 terrains (4 gauche / 4 droite). Deux pads face à face, même index.
+local terrainZ = { 22, 0, -22, -44 }
+LobbyConfig.DuelSlots = {}
+for i = 1, 4 do
+	local keyL = if i % 2 == 1 then "Focus" else "Dawn"
+	local keyR = if i % 2 == 1 then "Dawn" else "Focus"
+	table.insert(LobbyConfig.DuelSlots, { index = i, x = -18, z = terrainZ[i], side = "Left", colorKey = keyL })
+	table.insert(LobbyConfig.DuelSlots, { index = i + 4, x = 18, z = terrainZ[i], side = "Right", colorKey = keyR })
+end
 
 --[[
 	8 arènes vastes (monde studs) — 4 gauche / 4 droite du hall.

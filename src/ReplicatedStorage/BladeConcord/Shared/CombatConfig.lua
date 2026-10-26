@@ -141,8 +141,8 @@ local CombatConfig = {
 		RematchServerCooldown = 2.0,
 		SoloMatchmakingDelay = 1.6, -- après Jouer Amical solo → bot
 		SlotSoloBotDelay = 2.5, -- claim slot seul en Studio → ConcordBot
-		-- Croiseur : 2 pads devant baie (BC_DuelSlot 1–2) → pool 8 arènes L/R
-		MaxDuelSlots = 2,
+		-- 8 terrains, 2 pads par terrain (même BC_DuelSlot = une file 1v1)
+		MaxDuelSlots = 8,
 		MatchArenaCount = 8,
 	},
 
@@ -163,7 +163,7 @@ local CombatConfig = {
 		KillPlane = "KillPlane",
 		Hazard = "Hazard",
 		-- World lobby — Combat lit / écrit attrs, ne pose pas la géométrie
-		-- Tag pads = BC_DuelSlotPad ; Attribute BC_DuelSlot = 1|2 (croiseur)
+		-- Tag pads = BC_DuelSlotPad ; Attribute BC_DuelSlot = 1..8 (terrain)
 		DuelSlotPad = "BC_DuelSlotPad",
 		LobbySpawn = "BC_LobbySpawn",
 		-- 8 arènes L/R : tag BC_MatchArena + Attribute BC_ArenaIndex = 1..8

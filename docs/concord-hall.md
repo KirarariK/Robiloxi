@@ -1,6 +1,6 @@
-# Concord Hall — croiseur + baie + 8 arènes
+# Cour Concord — cour ouverte + 8 arènes
 
-**ArtPass 9** (`BC_Layout = CruiserBay`). Origin monde `(0, 0, 700)`. Esthétique Dawn/Dusk sombre — pas de noms Star Wars.
+**ArtPass 12** (`BC_Layout = ConcordCourt`). Origin monde `(0, 0, 700)`. Cour à ciel ouvert, 8 terrains × 2 slots. Pas de noms Star Wars.
 
 ## Lobby (intérieur croiseur)
 

@@ -28,19 +28,19 @@ GDD / TDD / roadmap (store Project, si monté) :
 
 ---
 
-## État actuel de la map (ArtPass 9)
+## État actuel de la map (ArtPass 12)
 
 | Élément | Détail |
 |--------|--------|
-| Lobby | Hall intérieur type croiseur (Metal/Neon), lighting **Future** |
-| Baie | Grande baie **Glass** pour spectate visuel |
-| Matchmaking | **Exactement 2 slots** devant la baie (`BC_DuelSlot` 1–2, ProximityPrompt + Touched) |
+| Lobby | **Cour Concord** ouverte (ardoise, allée, arche), lighting jour, DoF off |
+| Baie | Pas de baie. Bout de cour = muret nord |
+| Matchmaking | **8 terrains × 2 slots** face à face (`BC_DuelSlot` 1–8) |
 | Arènes | **8** grandes (4 gauche / 4 droite), tag `BC_MatchArena`, floors ~120² |
 | UI lobby | Rails **Classe** / **Boutique** (gauche) · **Reroll** (droite) |
 | VFX | `NeonFx.lua` + tags `BC_NeonStrip` |
 | Bug Play | Fix sons ambiance IDs non-Audio (Output rouge) — Ambient* vides / skip preload |
 
-**Polish restant** : densifier volumes (moins “strips dans le vide”), DoF faible/off, baie + arènes plus lisibles.
+**Polish restant** : habillage des 8 arènes, sons Ambient valides.
 
 ---
 

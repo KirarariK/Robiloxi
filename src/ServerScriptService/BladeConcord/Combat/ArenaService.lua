@@ -36,7 +36,7 @@ local ARENA_ORDER: { ArenaId } = {
 	"RecifNeant",
 	"CourCristal",
 }
-local ART_PASS = 6
+local ART_PASS = 7
 
 -- Accents partagés (cohérence 4 arènes)
 local CONCORD_STEEL = Color3.fromRGB(72, 88, 110)
@@ -511,6 +511,24 @@ end
 
 local function buildSpawns(folder: Folder, offset: Vector3)
 	local sep = spawnSep()
+	local stoneA = part(
+		"SpawnStoneA",
+		Vector3.new(7, 0.4, 7),
+		CFrame.new(offset + Vector3.new(-sep, 1.15, 0)),
+		Color3.fromRGB(88, 86, 96),
+		folder,
+		Enum.Material.Slate
+	)
+	stoneA.CanCollide = false
+	local stoneB = part(
+		"SpawnStoneB",
+		Vector3.new(7, 0.4, 7),
+		CFrame.new(offset + Vector3.new(sep, 1.15, 0)),
+		Color3.fromRGB(88, 86, 96),
+		folder,
+		Enum.Material.Slate
+	)
+	stoneB.CanCollide = false
 	local spawnA = part(
 		"SpawnA",
 		Vector3.new(5, 0.4, 5),

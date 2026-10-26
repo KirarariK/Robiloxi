@@ -1,11 +1,11 @@
 --!strict
 --[[
-	Matchmaking par slot 1v1 — contrat World croiseur (ArtPass 9 = 2 pads baie).
+	Matchmaking par slot 1v1 — 8 terrains, 2 pads par terrain (même index = une file).
 
 	World pose les pads ; Combat ne touche PAS LobbyBuilder géométrie.
 	API World :
 	  LobbyBuilder.bindDuelSlots(claimFn) — claimFn(player, slotIndex)
-	  Tag BC_DuelSlotPad · Attribute BC_DuelSlot = 1|2 seulement (MaxDuelSlots)
+	Tag BC_DuelSlotPad · Attribute BC_DuelSlot = 1..8 (2 pads par terrain, MaxDuelSlots)
 
 	Flux : claim → file slot-scoped (max 2) → MatchService.tryStartPair →
 	  une des 8 grandes arènes (ArenaService.pickMatchArena).
@@ -37,7 +37,7 @@ local started = false
 local LobbyBuilder: any = nil
 
 local function maxSlots(): number
-	return CombatConfig.Match.MaxDuelSlots or 2
+	return CombatConfig.Match.MaxDuelSlots or 8
 end
 
 local function getLobbyBuilder()
@@ -64,23 +64,40 @@ local function padFor(index: number): BasePart?
 	return nil
 end
 
+local function padsFor(index: number): { BasePart }
+	local lb = getLobbyBuilder()
+	if lb.getDuelSlotPads then
+		local list = lb.getDuelSlotPads(index)
+		if list and #list > 0 then
+			return list
+		end
+	end
+	local one = padFor(index)
+	if one then
+		return { one }
+	end
+	return {}
+end
+
 local function writePadAttrs(state: SlotState)
-	local pad = padFor(state.index)
-	if not pad then
+	local pads = padsFor(state.index)
+	if #pads == 0 then
 		return
 	end
 	local a = state.claimers[1]
 	local b = state.claimers[2]
-	pad:SetAttribute("BC_SlotClaimCount", #state.claimers)
-	pad:SetAttribute("BC_SlotOccupantA", if a then a.UserId else 0)
-	pad:SetAttribute("BC_SlotOccupantB", if b then b.UserId else 0)
 	local status = "Open"
 	if #state.claimers >= 2 then
 		status = "Full"
 	elseif #state.claimers == 1 then
 		status = "Waiting"
 	end
-	pad:SetAttribute("BC_SlotStatus", status)
+	for _, pad in pads do
+		pad:SetAttribute("BC_SlotClaimCount", #state.claimers)
+		pad:SetAttribute("BC_SlotOccupantA", if a then a.UserId else 0)
+		pad:SetAttribute("BC_SlotOccupantB", if b then b.UserId else 0)
+		pad:SetAttribute("BC_SlotStatus", status)
+	end
 end
 
 local function removeFromSlot(player: Player)
@@ -130,8 +147,7 @@ local function tryLaunch(state: SlotState)
 	end
 	table.clear(state.claimers)
 	state.soloTimer = nil
-	local pad = padFor(state.index)
-	if pad then
+	for _, pad in padsFor(state.index) do
 		pad:SetAttribute("BC_SlotStatus", "InMatch")
 		pad:SetAttribute("BC_SlotClaimCount", 0)
 		pad:SetAttribute("BC_SlotOccupantA", 0)
@@ -256,7 +272,7 @@ function SlotMatchService.start()
 	end
 	started = true
 
-	-- Pré-crée les 2 files slot
+	-- Pré-crée une file par terrain
 	for i = 1, maxSlots() do
 		ensureSlot(i)
 	end
