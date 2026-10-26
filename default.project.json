@@ -1,0 +1,42 @@
+{
+  "name": "BladeConcord",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "BladeConcord": {
+        "$path": "src/ReplicatedStorage/BladeConcord"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "BladeConcord": {
+        "$path": "src/ServerScriptService/BladeConcord"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "BladeConcord": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/BladeConcord"
+        }
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      },
+      "Arenas": {
+        "$path": "src/Workspace/Arenas"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "BladeConcord": {
+        "$path": "src/ServerStorage/BladeConcord"
+      }
+    }
+  }
+}
