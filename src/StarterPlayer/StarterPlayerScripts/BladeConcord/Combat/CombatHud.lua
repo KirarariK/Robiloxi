@@ -3,6 +3,7 @@
 	HUD combat soigné — HP / stamina / score BO3 / CDs Focus / flash feedback.
 	Pass 3 : countdown 3-2-1 + versus plaque, vignette faction optionnelle.
 	Sprint : copy FR countdown / CONTRE / ALLEZ / REVANCHE + hooks audio.
+	Vague 5 : recap manche / mort (plaque score + vignette KO).
 ]]
 
 local Players = game:GetService("Players")
@@ -37,10 +38,16 @@ local versusPlate: Frame
 local versusLeft: TextLabel
 local versusRight: TextLabel
 local versusVs: TextLabel
+local recapPlate: Frame
+local recapTitle: TextLabel
+local recapScore: TextLabel
+local recapSub: TextLabel
+local deathVeil: Frame
 local lastCountdownCeil: number? = nil
 local playerFaction: string? = nil
 local lastPhase: string? = nil
 local rematchAnnounced = false
+local recapToken = 0
 
 local function corner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -193,6 +200,109 @@ local function flashBanner(text: string, color: Color3)
 		TextStrokeTransparency = 1,
 	}):Play()
 	TweenService:Create(vignette, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
+end
+
+local function hideRecap()
+	recapToken += 1
+	if not recapPlate.Visible then
+		return
+	end
+	TweenService:Create(recapPlate, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 280, 0, 72),
+	}):Play()
+	TweenService:Create(recapTitle, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
+	TweenService:Create(recapScore, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
+	TweenService:Create(recapSub, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
+	TweenService:Create(deathVeil, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
+	local token = recapToken
+	task.delay(0.28, function()
+		if token == recapToken then
+			recapPlate.Visible = false
+		end
+	end)
+end
+
+local function pulseDeathVeil(lost: boolean)
+	if not lost then
+		deathVeil.BackgroundTransparency = 1
+		return
+	end
+	deathVeil.BackgroundColor3 = Theme.Danger
+	deathVeil.BackgroundTransparency = 0.72
+	TweenService:Create(deathVeil, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1,
+	}):Play()
+	vignette.BackgroundTransparency = 0.7
+	TweenService:Create(vignette, TweenInfo.new(0.85), { BackgroundTransparency = 1 }):Play()
+end
+
+local function showRecap(opts: {
+	title: string,
+	color: Color3,
+	myWins: number,
+	theirWins: number,
+	matchOver: boolean,
+	lost: boolean,
+})
+	recapToken += 1
+	local token = recapToken
+	recapTitle.Text = opts.title
+	recapTitle.TextColor3 = opts.color
+	recapScore.Text = string.format("%d  —  %d", opts.myWins, opts.theirWins)
+	if opts.matchOver then
+		recapSub.Text = if opts.lost then "Match terminé · revanche auto…" else "Victoire · revanche auto…"
+	else
+		recapSub.Text = "Prochaine manche…"
+	end
+	recapPlate.Visible = true
+	recapPlate.BackgroundTransparency = 0.55
+	recapPlate.Size = UDim2.new(0, 260, 0, 68)
+	recapTitle.TextTransparency = 1
+	recapScore.TextTransparency = 1
+	recapSub.TextTransparency = 1
+	TweenService:Create(recapPlate, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.1,
+		Size = UDim2.new(0, 340, 0, 96),
+	}):Play()
+	TweenService:Create(recapTitle, TweenInfo.new(0.28), { TextTransparency = 0 }):Play()
+	TweenService:Create(recapScore, TweenInfo.new(0.32), { TextTransparency = 0 }):Play()
+	TweenService:Create(recapSub, TweenInfo.new(0.36), { TextTransparency = 0.05 }):Play()
+	pulseDeathVeil(opts.lost)
+	-- Auto-hide (match over stays a bit longer)
+	local hold = if opts.matchOver then 2.6 else 1.9
+	task.delay(hold, function()
+		if token == recapToken then
+			hideRecap()
+		end
+	end)
+end
+
+local function scoreFromPayload(scores: any): (number, number)
+	local myWins, theirWins = 0, 0
+	if typeof(scores) ~= "table" then
+		return myWins, theirWins
+	end
+	for key, value in scores do
+		-- Format scoreboard { { userId, wins }, … } ou map userId → wins
+		if typeof(value) == "table" and value.userId ~= nil then
+			local uid = value.userId
+			local w = if typeof(value.wins) == "number" then value.wins else 0
+			if uid == player.UserId then
+				myWins = w
+			else
+				theirWins = w
+			end
+		elseif typeof(value) == "number" then
+			local uid = tonumber(key) or key
+			if uid == player.UserId then
+				myWins = value
+			else
+				theirWins = value
+			end
+		end
+	end
+	return myWins, theirWins
 end
 
 function CombatHud.start()
@@ -357,6 +467,80 @@ function CombatHud.start()
 	versusRight.Text = ""
 	versusRight.ZIndex = 45
 	versusRight.Parent = versusPlate
+
+	-- Veil mort / KO (sous le recap)
+	deathVeil = Instance.new("Frame")
+	deathVeil.Name = "DeathVeil"
+	deathVeil.Size = UDim2.fromScale(1, 1)
+	deathVeil.BackgroundColor3 = Theme.Danger
+	deathVeil.BackgroundTransparency = 1
+	deathVeil.BorderSizePixel = 0
+	deathVeil.ZIndex = 48
+	deathVeil.Parent = root
+
+	-- Plaque recap manche / match
+	recapPlate = Instance.new("Frame")
+	recapPlate.Name = "RecapPlate"
+	recapPlate.AnchorPoint = Vector2.new(0.5, 0.5)
+	recapPlate.Position = UDim2.fromScale(0.5, 0.52)
+	recapPlate.Size = UDim2.new(0, 340, 0, 96)
+	recapPlate.BackgroundColor3 = Theme.Panel
+	recapPlate.BackgroundTransparency = 0.1
+	recapPlate.BorderSizePixel = 0
+	recapPlate.Visible = false
+	recapPlate.ZIndex = 49
+	recapPlate.Parent = root
+	corner(recapPlate, 12)
+	stroke(recapPlate, Theme.PanelEdge, 1.4)
+
+	local recapAccent = Instance.new("Frame")
+	recapAccent.Name = "Accent"
+	recapAccent.Size = UDim2.new(0, 4, 1, -16)
+	recapAccent.Position = UDim2.new(0, 8, 0, 8)
+	recapAccent.BackgroundColor3 = Theme.Accent
+	recapAccent.BorderSizePixel = 0
+	recapAccent.ZIndex = 50
+	recapAccent.Parent = recapPlate
+	corner(recapAccent, 2)
+
+	recapTitle = Instance.new("TextLabel")
+	recapTitle.Name = "Title"
+	recapTitle.BackgroundTransparency = 1
+	recapTitle.Position = UDim2.new(0, 22, 0, 10)
+	recapTitle.Size = UDim2.new(1, -32, 0, 28)
+	recapTitle.Font = Theme.FontTitle
+	recapTitle.TextSize = 22
+	recapTitle.TextXAlignment = Enum.TextXAlignment.Left
+	recapTitle.TextColor3 = Theme.Bone
+	recapTitle.Text = ""
+	recapTitle.ZIndex = 50
+	recapTitle.Parent = recapPlate
+
+	recapScore = Instance.new("TextLabel")
+	recapScore.Name = "Score"
+	recapScore.BackgroundTransparency = 1
+	recapScore.Position = UDim2.new(0, 22, 0, 40)
+	recapScore.Size = UDim2.new(1, -32, 0, 24)
+	recapScore.Font = Theme.FontTitle
+	recapScore.TextSize = 20
+	recapScore.TextXAlignment = Enum.TextXAlignment.Left
+	recapScore.TextColor3 = Theme.Bone
+	recapScore.Text = "0  —  0"
+	recapScore.ZIndex = 50
+	recapScore.Parent = recapPlate
+
+	recapSub = Instance.new("TextLabel")
+	recapSub.Name = "Sub"
+	recapSub.BackgroundTransparency = 1
+	recapSub.Position = UDim2.new(0, 22, 0, 66)
+	recapSub.Size = UDim2.new(1, -32, 0, 18)
+	recapSub.Font = Theme.FontBody
+	recapSub.TextSize = 13
+	recapSub.TextXAlignment = Enum.TextXAlignment.Left
+	recapSub.TextColor3 = Theme.Muted
+	recapSub.Text = ""
+	recapSub.ZIndex = 50
+	recapSub.Parent = recapPlate
 
 	statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
@@ -591,6 +775,7 @@ function CombatHud.start()
 			if versusPlate.Visible then
 				hideVersus()
 			end
+			hideRecap()
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
 			rematchAnnounced = false
@@ -598,6 +783,7 @@ function CombatHud.start()
 			local ceilN = math.max(1, math.ceil(payload.countdown))
 			arenaLabel.Text = if arenaBase ~= "" then arenaBase .. " · prêt…" else "Prêt…"
 			if lastPhase ~= "Countdown" then
+				hideRecap()
 				local left = resolveFighterName(player.UserId)
 				local right = resolveFighterName(theirId or -9001)
 				showVersus(left, right)
@@ -618,6 +804,7 @@ function CombatHud.start()
 			end
 		elseif phase == "Fighting" and lastPhase == "Countdown" then
 			hideVersus()
+			hideRecap()
 			arenaLabel.Text = if arenaBase ~= "" then arenaBase .. " · en duel" else "En duel"
 			countdownLabel.Text = "ALLEZ !"
 			countdownLabel.TextColor3 = Theme.Accent
@@ -682,19 +869,41 @@ function CombatHud.start()
 		if typeof(payload) ~= "table" then
 			return
 		end
-		if payload.matchOver then
-			if payload.winnerUserId == player.UserId then
-				flashBanner("CONCORDANCE — VICTOIRE", Theme.Success)
+		local myWins, theirWins = scoreFromPayload(payload.scores)
+		local matchOver = payload.matchOver == true
+		local won = payload.winnerUserId == player.UserId
+		local draw = payload.winnerUserId == nil
+		local lost = not won and not draw
+		local title: string
+		local color: Color3
+		if matchOver then
+			if won then
+				title = "CONCORDANCE"
+				color = Theme.Success
 			else
-				flashBanner("DÉFAITE", Theme.Danger)
+				title = "DÉFAITE"
+				color = Theme.Danger
 			end
-		elseif payload.winnerUserId == player.UserId then
-			flashBanner("ROUND GAGNÉ", Theme.Success)
-		elseif payload.winnerUserId == nil then
-			flashBanner("ÉGALITÉ", Theme.Muted)
+		elseif won then
+			title = "MANCHE GAGNÉE"
+			color = Theme.Success
+		elseif draw then
+			title = "ÉGALITÉ"
+			color = Theme.Muted
 		else
-			flashBanner("ROUND PERDU", Theme.Danger)
+			title = "MANCHE PERDUE"
+			color = Theme.Danger
 		end
+		-- Flash court + plaque recap (score BO3)
+		flashBanner(title, color)
+		showRecap({
+			title = title,
+			color = color,
+			myWins = myWins,
+			theirWins = theirWins,
+			matchOver = matchOver,
+			lost = lost,
+		})
 	end)
 
 	remotes.FxEvent.OnClientEvent:Connect(function(payload)
