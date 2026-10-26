@@ -1,24 +1,14 @@
 --!strict
 --[[
-	Concord Lobby — grande allée + slots 1v1 (ArtPass 8, réf ref-lobby).
+	Concord Lobby — croiseur intérieur + baie Glass + 2 slots (ArtPass 9).
 
-	API World lobby :
-	  LobbyBuilder.ensure(parentFolder) → Model ConcordLobby
-	  LobbyBuilder.getSpawnCFrame() → début d’allée face −Z
-	  LobbyBuilder.applyLobbyLighting()
-	  LobbyBuilder.bindQueuePads(enqueueFn) — legacy Casual/Ranked (fin d’allée)
-	  LobbyBuilder.bindDuelSlots(claimFn) — claimFn(player, slotIndex: number)
-	  LobbyBuilder.getDuelSlotInfos() → { index, localPos, side, color }
-	  LobbyBuilder.getDuelSlotPad(slotIndex) → BasePart?
+	API :
+	  ensure / getSpawnCFrame / applyLobbyLighting
+	  bindDuelSlots(claimFn) — claimFn(player, slotIndex 1|2)
+	  bindQueuePads(enqueueFn) — legacy Casual/Ranked
+	  getDuelSlotInfos / getDuelSlotPad
 
-	Contrat Combat / MatchService (à brancher côté Combat — pas ici) :
-	  1. Joueur claim pad tagué BC_DuelSlotPad (Attribute BC_DuelSlot = N)
-	     via ProximityPrompt ou Touched → bindDuelSlots callback.
-	  2. MatchService maintient une file par slotIndex (max 2).
-	  3. 2 joueurs sur le même slot → téléport arène 1v1 (rotation ArenaService) → BO3.
-	  4. Solo Studio : option bot si 1 claim seul après délai (décision Match).
-	  5. Retour lobby → getSpawnCFrame() / ensureLobby.
-	  Ne pas confondre avec BC_QueueMode (pads Casual/Ranked legacy en fin d’allée).
+	Contrat SlotMatchService : BC_DuelSlot + BC_DuelSlotPad (inchangé).
 ]]
 
 local Players = game:GetService("Players")
@@ -43,6 +33,7 @@ local neonBound = false
 local duelPadsByIndex: { [number]: BasePart } = {}
 
 local C = LobbyConfig.Colors
+local H = LobbyConfig.Hall
 local Z = LobbyConfig.Zones
 
 local function colorForKey(key: string): Color3
@@ -53,146 +44,283 @@ local function colorForKey(key: string): Color3
 	return C.Focus
 end
 
-local function buildAlleyFloor(root: Model)
-	local floor = LobbyUtil.model("AlleyFloor", root, "Alley")
-	local halfLen = LobbyConfig.Alley.Length * 0.5
-	local midZ = -halfLen + 20 -- allée centrée vers −Z depuis spawn
+local function neonStrip(parent: Instance, name: string, size: Vector3, cf: CFrame, color: Color3, withLight: boolean?)
+	local p = LobbyUtil.part(name, size, cf, color, parent, Enum.Material.Neon, {
+		canCollide = false,
+		castShadow = false,
+		transparency = 0.15,
+	})
+	if p then
+		LobbyProps.attachNeonStrip(p, color)
+		if withLight then
+			LobbyUtil.pointLight(p, color, 0.7, 18)
+		end
+	end
+	return p
+end
 
-	-- Sol large (allée + bas-côtés pour rings)
+local function buildCruiserHull(root: Model)
+	local hull = LobbyUtil.model("CruiserHull", root, "Hall")
+	local w = H.Width
+	local len = H.Length
+	local h = H.Height
+	local midZ = (H.SpawnLocal.Z + H.BayZ) * 0.5
+
+	-- Sol intérieur
 	LobbyUtil.part(
-		"Ground",
-		Vector3.new(160, 2.2, LobbyConfig.Alley.Length + 40),
-		LobbyUtil.cf(Vector3.new(0, -1.1, midZ)),
-		C.Alley,
-		floor,
-		Enum.Material.Asphalt
+		"Deck",
+		Vector3.new(w, 2, len),
+		LobbyUtil.cf(Vector3.new(0, -1, midZ)),
+		C.Hull,
+		hull,
+		Enum.Material.Metal,
+		{ reflectance = 0.08 }
 	)
-	-- Bande centrale (boulevard)
 	LobbyUtil.part(
-		"Boulevard",
-		Vector3.new(LobbyConfig.Alley.Width, 0.35, LobbyConfig.Alley.Length),
-		LobbyUtil.cf(Vector3.new(0, 0.15, midZ)),
-		C.AlleyEdge,
-		floor,
-		Enum.Material.Slate,
-		{ reflectance = 0.04 }
+		"DeckInlay",
+		Vector3.new(w * 0.55, 0.25, len * 0.92),
+		LobbyUtil.cf(Vector3.new(0, 0.2, midZ)),
+		C.HullLite,
+		hull,
+		Enum.Material.Metal,
+		{ reflectance = 0.12, canCollide = false }
 	)
-	-- Liserés or allée
-	for _, x in { -LobbyConfig.Alley.Width * 0.5, LobbyConfig.Alley.Width * 0.5 } do
-		LobbyUtil.part(
-			"AlleyEdge",
-			Vector3.new(0.6, 0.25, LobbyConfig.Alley.Length),
-			LobbyUtil.cf(Vector3.new(x, 0.35, midZ)),
-			C.GoldDark,
-			floor,
-			Enum.Material.Metal,
-			{ canCollide = false, reflectance = 0.25 }
-		)
-	end
-	-- Marques au sol (segments)
-	for i = 0, 10 do
-		local z = 10 - i * 26
-		LobbyUtil.part(
-			"LaneMark" .. i,
-			Vector3.new(4, 0.12, 8),
-			LobbyUtil.cf(Vector3.new(0, 0.4, z)),
-			C.Muted,
-			floor,
-			Enum.Material.Neon,
-			{ canCollide = false, transparency = 0.65, castShadow = false }
-		)
-	end
-	-- Escaliers / seuils spawn
+	-- Liserés Focus / Dawn le long de l’allée
+	neonStrip(
+		hull,
+		"StripL",
+		Vector3.new(0.35, 0.2, len * 0.9),
+		LobbyUtil.cf(Vector3.new(-w * 0.22, 0.35, midZ)),
+		C.Focus,
+		false
+	)
+	neonStrip(
+		hull,
+		"StripR",
+		Vector3.new(0.35, 0.2, len * 0.9),
+		LobbyUtil.cf(Vector3.new(w * 0.22, 0.35, midZ)),
+		C.Dawn,
+		false
+	)
+
+	-- Parois Metal
+	local wallH = h
 	LobbyUtil.part(
-		"SpawnPlaza",
-		Vector3.new(48, 1.4, 36),
-		LobbyUtil.cf(Vector3.new(0, 0.2, 18)),
-		C.MarblePolish,
-		floor,
-		Enum.Material.Marble,
+		"WallL",
+		Vector3.new(2.5, wallH, len),
+		LobbyUtil.cf(Vector3.new(-w * 0.5, wallH * 0.5, midZ)),
+		C.MetalDark,
+		hull,
+		Enum.Material.Metal,
+		{ reflectance = 0.15 }
+	)
+	LobbyUtil.part(
+		"WallR",
+		Vector3.new(2.5, wallH, len),
+		LobbyUtil.cf(Vector3.new(w * 0.5, wallH * 0.5, midZ)),
+		C.MetalDark,
+		hull,
+		Enum.Material.Metal,
+		{ reflectance = 0.15 }
+	)
+	-- Plafond
+	LobbyUtil.part(
+		"Ceiling",
+		Vector3.new(w + 4, 2, len),
+		LobbyUtil.cf(Vector3.new(0, h + 0.5, midZ)),
+		C.Hull,
+		hull,
+		Enum.Material.Metal,
 		{ reflectance = 0.1 }
 	)
+	-- Strips plafond néon
+	for i = 0, 5 do
+		local z = H.SpawnLocal.Z - 12 - i * 22
+		neonStrip(
+			hull,
+			"CeilNeon" .. i,
+			Vector3.new(w * 0.7, 0.3, 0.5),
+			LobbyUtil.cf(Vector3.new(0, h - 0.8, z)),
+			if i % 2 == 0 then C.Focus else C.Arcane,
+			i == 1 or i == 3
+		)
+	end
+	-- Strips muraux verticaux
+	for i = 0, 6 do
+		local z = H.SpawnLocal.Z - 8 - i * 18
+		neonStrip(
+			hull,
+			"WallNeonL" .. i,
+			Vector3.new(0.3, h * 0.7, 0.3),
+			LobbyUtil.cf(Vector3.new(-w * 0.5 + 1.6, h * 0.4, z)),
+			C.Dusk,
+			false
+		)
+		neonStrip(
+			hull,
+			"WallNeonR" .. i,
+			Vector3.new(0.3, h * 0.7, 0.3),
+			LobbyUtil.cf(Vector3.new(w * 0.5 - 1.6, h * 0.4, z)),
+			C.Dawn,
+			false
+		)
+	end
+
+	-- Cloison arrière (sud, derrière spawn)
+	LobbyUtil.part(
+		"BulkheadAft",
+		Vector3.new(w + 4, wallH, 3),
+		LobbyUtil.cf(Vector3.new(0, wallH * 0.5, H.SpawnLocal.Z + 28)),
+		C.Metal,
+		hull,
+		Enum.Material.Metal,
+		{ reflectance = 0.12 }
+	)
+
+	-- Piliers structure
+	for _, x in { -18, 18 } do
+		for i = 0, 4 do
+			local z = 20 - i * 28
+			LobbyUtil.part(
+				"Rib",
+				Vector3.new(2, h - 2, 2),
+				LobbyUtil.cf(Vector3.new(x, h * 0.45, z)),
+				C.Steel,
+				hull,
+				Enum.Material.Metal,
+				{ reflectance = 0.2 }
+			)
+		end
+	end
+
 	local titleHost = LobbyUtil.part(
 		"TitleHost",
 		Vector3.new(1, 1, 1),
-		LobbyUtil.cf(Vector3.new(0, 8, 24)),
+		LobbyUtil.cf(Vector3.new(0, 10, 48)),
 		C.Gold,
-		floor,
+		hull,
 		Enum.Material.ForceField,
 		{ transparency = 1, canCollide = false }
 	)
 	if titleHost then
-		LobbyUtil.billboard(titleHost, "CONCORD HALL — ALLÉE 1v1", C.GoldLite, Vector2.new(340, 40), 0)
+		LobbyUtil.billboard(titleHost, "CONCORD HALL", C.GoldLite, Vector2.new(280, 40), 0)
 	end
 end
 
-local function buildAlleyDecor(root: Model)
-	local decor = LobbyUtil.model("AlleyDecor", root)
-	-- Piliers légers le long de l’allée (silhouette, pas temple dense)
-	for i = 0, 7 do
-		local z = -20 - i * 28
-		for _, x in { -22, 22 } do
+local function buildGlassBay(root: Model)
+	local bay = LobbyUtil.model("ObservationBay", root, "Bay")
+	local z = H.BayZ
+	local bw = H.BayWidth
+	local bh = H.BayHeight
+
+	-- Cadre Metal
+	LobbyUtil.part(
+		"BayFrameL",
+		Vector3.new(3, bh + 4, 4),
+		LobbyUtil.cf(Vector3.new(-bw * 0.5, bh * 0.5 + 1, z)),
+		C.Metal,
+		bay,
+		Enum.Material.Metal,
+		{ reflectance = 0.25 }
+	)
+	LobbyUtil.part(
+		"BayFrameR",
+		Vector3.new(3, bh + 4, 4),
+		LobbyUtil.cf(Vector3.new(bw * 0.5, bh * 0.5 + 1, z)),
+		C.Metal,
+		bay,
+		Enum.Material.Metal,
+		{ reflectance = 0.25 }
+	)
+	LobbyUtil.part(
+		"BayFrameTop",
+		Vector3.new(bw + 6, 3, 4),
+		LobbyUtil.cf(Vector3.new(0, bh + 2.5, z)),
+		C.Metal,
+		bay,
+		Enum.Material.Metal,
+		{ reflectance = 0.2 }
+	)
+	LobbyUtil.part(
+		"BaySill",
+		Vector3.new(bw + 4, 1.5, 5),
+		LobbyUtil.cf(Vector3.new(0, 0.75, z + 1)),
+		C.HullLite,
+		bay,
+		Enum.Material.Metal
+	)
+
+	-- Immense baie Glass (spectate arènes)
+	local glass = LobbyUtil.part(
+		"BayGlass",
+		Vector3.new(bw, bh, 1.2),
+		LobbyUtil.cf(Vector3.new(0, bh * 0.5 + 1.2, z)),
+		C.Glass,
+		bay,
+		Enum.Material.Glass,
+		{ canCollide = true, transparency = 0.35, reflectance = 0.45 }
+	)
+	if glass then
+		glass:SetAttribute("BC_ZoneId", "Bay")
+		LobbyUtil.billboard(glass, "BAIE D'OBSERVATION", C.Focus, Vector2.new(260, 32), 14)
+		LobbyUtil.pointLight(glass, C.Focus, 0.5, 24)
+	end
+
+	-- Montants Glass
+	for i = -2, 2 do
+		if i ~= 0 then
 			LobbyUtil.part(
-				"Pillar",
-				Vector3.new(2.5, 18, 2.5),
-				LobbyUtil.cf(Vector3.new(x, 9, z)),
-				C.Ink700,
-				decor,
-				Enum.Material.Slate
-			)
-			LobbyUtil.part(
-				"PillarCap",
-				Vector3.new(3.2, 0.6, 3.2),
-				LobbyUtil.cf(Vector3.new(x, 18.2, z)),
-				C.GoldDark,
-				decor,
+				"Mullion",
+				Vector3.new(0.6, bh, 1.4),
+				LobbyUtil.cf(Vector3.new(i * (bw / 5), bh * 0.5 + 1.2, z)),
+				C.MetalDark,
+				bay,
 				Enum.Material.Metal,
-				{ canCollide = false, reflectance = 0.25 }
+				{ reflectance = 0.15 }
 			)
-		end
-		-- Portique néon occasionnel (+ tag BC_NeonStrip pour VFX polish)
-		if i % 2 == 0 then
-			LobbyUtil.part(
-				"Overhang",
-				Vector3.new(44, 0.8, 2),
-				LobbyUtil.cf(Vector3.new(0, 16, z)),
-				C.Ink600,
-				decor,
-				Enum.Material.Metal
-			)
-			local strip = LobbyUtil.part(
-				"OverhangNeon",
-				Vector3.new(40, 0.25, 0.35),
-				LobbyUtil.cf(Vector3.new(0, 15.5, z)),
-				if i % 4 == 0 then C.Focus else C.Arcane,
-				decor,
-				Enum.Material.Neon,
-				{ canCollide = false, transparency = 0.35, castShadow = false }
-			)
-			if strip then
-				LobbyProps.attachNeonStrip(strip, strip.Color)
-			end
 		end
 	end
-	-- Fin d’allée : portail simple
-	LobbyProps.grandArch(decor, Vector3.new(0, 0, -255), 40, 28, 0, C.Gold, true)
+
+	neonStrip(
+		bay,
+		"BayNeonTop",
+		Vector3.new(bw * 0.9, 0.35, 0.35),
+		LobbyUtil.cf(Vector3.new(0, bh + 0.8, z + 1.5)),
+		C.Focus,
+		true
+	)
+	neonStrip(
+		bay,
+		"BayNeonDawn",
+		Vector3.new(bw * 0.4, 0.3, 0.3),
+		LobbyUtil.cf(Vector3.new(-bw * 0.25, 2, z + 1.5)),
+		C.Dawn,
+		false
+	)
+	neonStrip(
+		bay,
+		"BayNeonDusk",
+		Vector3.new(bw * 0.4, 0.3, 0.3),
+		LobbyUtil.cf(Vector3.new(bw * 0.25, 2, z + 1.5)),
+		C.Dusk,
+		false
+	)
 end
 
 local function buildSpawns(root: Model)
-	local spawns = LobbyUtil.model("Spawns", root, "Alley")
-	local base = LobbyConfig.Alley.SpawnLocal
+	local spawns = LobbyUtil.model("Spawns", root, "Hall")
+	local base = H.SpawnLocal
 	local spots = {
 		base,
-		base + Vector3.new(6, 0, 4),
-		base + Vector3.new(-6, 0, 4),
+		base + Vector3.new(5, 0, 4),
+		base + Vector3.new(-5, 0, 4),
 		base + Vector3.new(0, 0, 8),
 	}
 	for i, pos in spots do
 		local spawn = Instance.new("SpawnLocation")
 		spawn.Name = if i == 1 then "LobbySpawn" else ("LobbySpawnReserve" .. (i - 1))
 		spawn.Size = Vector3.new(6, 1, 6)
-		-- Face nord (−Z) vers les slots
-		spawn.CFrame = LobbyUtil.cf(pos) * CFrame.Angles(0, math.rad(180), 0)
+		spawn.CFrame = LobbyUtil.cf(pos) * CFrame.Angles(0, math.rad(180), 0) -- face baie (−Z)
 		spawn.Anchored = true
 		spawn.Transparency = 1
 		spawn.CanCollide = false
@@ -200,12 +328,16 @@ local function buildSpawns(root: Model)
 		spawn.Neutral = true
 		spawn.Enabled = true
 		spawn.Parent = spawns
+		if i == 1 then
+			LobbyUtil.tag(spawn, LobbyConfig.Tags.LobbySpawn)
+		end
 	end
 end
 
 local function buildDuelSlots(root: Model)
 	local folder = LobbyUtil.model("DuelSlots", root, "DuelSlots")
 	duelPadsByIndex = {}
+	-- Exactement 2 slots devant la baie
 	for i, spec in LobbyConfig.DuelSlots do
 		local pad = LobbyProps.duelSlot(folder, {
 			index = spec.index,
@@ -213,7 +345,7 @@ local function buildDuelSlots(root: Model)
 			z = spec.z,
 			side = spec.side,
 			color = colorForKey(spec.colorKey),
-		}, i <= 4) -- lights sur les 4 premiers (budget)
+		}, true)
 		if pad then
 			duelPadsByIndex[spec.index] = pad
 		end
@@ -228,18 +360,10 @@ local function makeQueuePad(
 	label: string
 ): BasePart?
 	local zone = LobbyUtil.model("Pad_" .. mode, parent, "Pads")
-	local platform = LobbyUtil.part(
-		"Platform",
-		Vector3.new(LobbyConfig.PadRadius * 2, 1, LobbyConfig.PadRadius * 2),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 0.5, 0)),
-		C.Ink700,
-		zone,
-		Enum.Material.Slate
-	)
 	local pad = LobbyUtil.part(
 		"QueuePad",
 		Vector3.new(LobbyConfig.PadRadius * 1.6, 0.35, LobbyConfig.PadRadius * 1.6),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.1, 0)),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 0.9, 0)),
 		color,
 		zone,
 		Enum.Material.Neon,
@@ -250,31 +374,20 @@ local function makeQueuePad(
 	end
 	pad:SetAttribute("BC_QueueMode", mode)
 	LobbyUtil.tag(pad, LobbyConfig.Tags.QueuePad)
-	if platform then
-		LobbyUtil.pointLight(pad, color, 1.0, 20)
-	end
-	LobbyUtil.emitter(pad, "PadEnergy", {
-		rate = 4,
-		lifetime = NumberRange.new(1, 2),
-		speed = NumberRange.new(1, 2.5),
-		accel = Vector3.new(0, 5, 0),
-		color = ColorSequence.new(color, C.Bone),
-		lightEmission = 0.7,
-	})
-	LobbyUtil.billboard(pad, label, color, Vector2.new(200, 36), 5)
+	LobbyUtil.billboard(pad, label, color, Vector2.new(180, 32), 4)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "QueuePrompt"
 	prompt.ActionText = if mode == "Casual" then "File Amical" else "File Classé"
 	prompt.ObjectText = label
 	prompt.HoldDuration = 0.15
-	prompt.MaxActivationDistance = 14
+	prompt.MaxActivationDistance = 12
 	prompt.RequiresLineOfSight = false
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.Parent = pad
 	local touch = LobbyUtil.part(
 		"TouchVolume",
-		Vector3.new(LobbyConfig.PadRadius * 2.2, 6, LobbyConfig.PadRadius * 2.2),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 3.5, 0)),
+		Vector3.new(LobbyConfig.PadRadius * 2, 5, LobbyConfig.PadRadius * 2),
+		LobbyUtil.cf(localPos + Vector3.new(0, 3, 0)),
 		color,
 		zone,
 		Enum.Material.ForceField,
@@ -288,13 +401,12 @@ local function makeQueuePad(
 end
 
 local function buildLegacyQueuePads(root: Model)
-	-- Conservés en fin d’allée pour MatchService actuel (bindQueuePads)
 	makeQueuePad(root, Z.PadCasual, "Casual", C.Focus, "AMICAL")
-	makeQueuePad(root, Z.PadRanked, "Ranked", C.Gold, "CLASSÉ — Fair Kit")
+	makeQueuePad(root, Z.PadRanked, "Ranked", C.Gold, "CLASSÉ")
 end
 
 function LobbyBuilder.getSpawnCFrame(): CFrame
-	return LobbyUtil.cf(LobbyConfig.Alley.SpawnLocal) * CFrame.Angles(0, math.rad(180), 0)
+	return LobbyUtil.cf(H.SpawnLocal) * CFrame.Angles(0, math.rad(180), 0)
 end
 
 function LobbyBuilder.applyLobbyLighting()
@@ -325,6 +437,10 @@ function LobbyBuilder.getDuelSlotPad(slotIndex: number): BasePart?
 	return duelPadsByIndex[slotIndex]
 end
 
+function LobbyBuilder.getArenaLayout()
+	return LobbyConfig.ArenaLayout
+end
+
 function LobbyBuilder.ensure(parent: Instance): Model
 	if built and built.Parent then
 		return built
@@ -332,7 +448,6 @@ function LobbyBuilder.ensure(parent: Instance): Model
 	local existing = parent:FindFirstChild(LobbyConfig.Name)
 	if existing and existing:IsA("Model") and existing:GetAttribute("ArtPass") == LobbyConfig.ArtPass then
 		built = existing
-		-- Rehydrate pad map
 		duelPadsByIndex = {}
 		for _, inst in CollectionService:GetTagged(LobbyConfig.Tags.DuelSlotPad) do
 			if inst:IsA("BasePart") and inst.Name == "ClaimPad" and inst:IsDescendantOf(existing) then
@@ -342,7 +457,6 @@ function LobbyBuilder.ensure(parent: Instance): Model
 				end
 			end
 		end
-		-- VFX : binders strips même si géométrie déjà posée (idempotent)
 		LobbyBuilder.bindNeonStrips()
 		return existing
 	end
@@ -361,19 +475,20 @@ function LobbyBuilder.ensure(parent: Instance): Model
 	root:SetAttribute("OffsetX", LobbyConfig.Origin.X)
 	root:SetAttribute("OffsetZ", LobbyConfig.Origin.Z)
 	root:SetAttribute("BC_DuelSlotCount", #LobbyConfig.DuelSlots)
+	root:SetAttribute("BC_BayZ", H.BayZ)
 	root.Parent = parent
 
 	pcall(function()
 		workspace.StreamingEnabled = true
 	end)
 
-	buildAlleyFloor(root)
-	buildAlleyDecor(root)
+	buildCruiserHull(root)
+	buildGlassBay(root)
 	buildSpawns(root)
 	buildDuelSlots(root)
 	buildLegacyQueuePads(root)
 
-	local primary = root:FindFirstChild("Boulevard", true)
+	local primary = root:FindFirstChild("BayGlass", true)
 	if primary and primary:IsA("BasePart") then
 		root.PrimaryPart = primary
 	end
@@ -386,9 +501,9 @@ function LobbyBuilder.ensure(parent: Instance): Model
 	return root
 end
 
+
 --[[
 	Attache NeonFx sur tous les BC_NeonStrip du hall (idempotent, budget restant).
-	Safe à rappeler après hydrate ArtPass existant.
 ]]
 function LobbyBuilder.bindNeonStrips()
 	local root = built
@@ -411,7 +526,6 @@ function LobbyBuilder.bindQueuePads(enqueueFn: (Player, string) -> ())
 		return
 	end
 	padBound = true
-
 	local debounce: { [Player]: number } = {}
 
 	local function tryEnqueue(player: Player, modeAttr: any)
@@ -466,16 +580,11 @@ function LobbyBuilder.bindQueuePads(enqueueFn: (Player, string) -> ())
 	end)
 end
 
---[[
-	Combat / MatchService : passer claimFn(player, slotIndex).
-	Débounce 1.2 s / joueur. Ne gère PAS la file — owner Match.
-]]
 function LobbyBuilder.bindDuelSlots(claimFn: (Player, number) -> ())
 	if duelBound then
 		return
 	end
 	duelBound = true
-
 	local debounce: { [Player]: number } = {}
 
 	local function tryClaim(player: Player, slotAttr: any)
@@ -495,7 +604,6 @@ function LobbyBuilder.bindDuelSlots(claimFn: (Player, number) -> ())
 	end
 
 	local function hookPad(pad: BasePart)
-		-- Évite double-hook TouchVolume + ClaimPad : claim sur Attribute présent
 		local prompt = pad:FindFirstChildOfClass("ProximityPrompt")
 		if prompt then
 			prompt.Triggered:Connect(function(player)

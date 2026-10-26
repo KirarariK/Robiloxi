@@ -1,67 +1,48 @@
-# Concord Hall — lobby allée + slots 1v1
+# Concord Hall — croiseur + baie + 8 arènes
 
-Layout **ArtPass 8** (`BC_Layout = AlleySlots`) : grande allée centrale + rings 1v1 côte à côte (réf `ref-lobby.png`). Origin monde `(0, 0, 700)`.
+**ArtPass 9** (`BC_Layout = CruiserBay`). Origin monde `(0, 0, 700)`. Esthétique Dawn/Dusk sombre — pas de noms Star Wars.
+
+## Lobby (intérieur croiseur)
+
+| Élément | Local (studs) |
+|---------|----------------|
+| Spawn | `(0, 4, 40)` face −Z (baie) · tag `BC_LobbySpawn` |
+| Hall | largeur 56 · longueur 140 · hauteur 28 · plafond + parois Metal + strips Neon |
+| Baie Glass | Z = **−85**, 72×22, spectate arènes |
+| Slot 1 | ring (−16, −58) pad Focus · `BC_DuelSlot=1` |
+| Slot 2 | ring (+16, −58) pad Dawn · `BC_DuelSlot=2` |
+| Legacy Amical/Classé | (±20, +55) `BC_QueuePad` |
+
+Monde slots ≈ `(±16, ~1, 642)` · baie ≈ `(0, 12, 615)`.
+
+## Lighting
+
+- `Technology=Future` (pcall) + `LightingStyle=Realistic`
+- Atmosphere sombre · Bloom néons · ColorCorrection froid · **DoF off**
+- Attr : `BC_LightingMode=ConcordCruiser`, `BC_DoF=false`
+
+## 8 arènes (ArenaService ArtPass 6)
+
+Floors **120²**, spawns ±32. Offsets monde :
+
+| # | Id | Côté | OffsetX | OffsetZ |
+|---|-----|------|---------|---------|
+| 1 | ObsidianPit | Left | −380 | 450 |
+| 2 | SanctumAstres | Left | −380 | 280 |
+| 3 | TroneEclipse | Left | −380 | 110 |
+| 4 | QuaiMirage | Left | −380 | −60 |
+| 5 | ForgeAube | Right | +380 | 450 |
+| 6 | SpireCrepuscule | Right | +380 | 280 |
+| 7 | RecifNeant | Right | +380 | 110 |
+| 8 | CourCristal | Right | +380 | −60 |
+
+Source : `LobbyConfig.ArenaLayout`. `getSpawnCFrames` lit `OffsetX`+`OffsetZ`.
+
+## Contrats Match
+
+- `bindDuelSlots` → `SlotMatchService` (slots **1–2** seulement)
+- `ArenaService.list()` = 8 ids · rotation match inchangée
 
 ## Modules
 
-| Module | Rôle |
-|--------|------|
-| `Lobby/LobbyConfig.lua` | Allée, slots, palette, budgets, tags |
-| `Lobby/LobbyUtil.lua` | Parts / lights / emitters + compteurs |
-| `Lobby/LobbyLighting.lua` | Ciel clair, Bloom/CC légers, **DoF off** |
-| `Lobby/LobbyProps.lua` | `duelSlot` (ring + pad + SurfaceGui) |
-| `Lobby/LobbyBuilder.lua` | Assemble allée + slots + hooks |
-
-`ArenaService.ensureLobby()` → `LobbyBuilder.ensure`.  
-`MatchService` actuel : `bindQueuePads` (pads Amical/Classé fin d’allée).  
-**À brancher (Combat)** : `LobbyBuilder.bindDuelSlots(claimFn)`.
-
-## Spawn
-
-Local `(0, 4, 8)` face **nord (−Z)** — début d’allée. Monde ≈ `(0, 4, 708)`.
-
-## Slots 1v1 (locaux X,Z → monde Z+700)
-
-| Slot | Côté | Centre ring (X,Z) | Pad couleur |
-|------|------|-------------------|-------------|
-| 1 | Left | (−52, −36) | cyan Focus |
-| 2 | Right | (+52, −36) | vert Success |
-| 3 | Left | (−52, −88) | violet Arcane |
-| 4 | Right | (+52, −88) | orange Dawn |
-| 5 | Left | (−52, −140) | or Gold |
-| 6 | Right | (+52, −140) | teal Mirage |
-| 7 | Left | (−52, −192) | cyan Focus |
-| 8 | Right | (+52, −192) | violet Arcane |
-
-Pad claim ≈ vers l’allée (X ±28). Monde ring ≈ `(X, ~1, Z+700)`.
-
-## Attributs / tags
-
-| Élément | Attribut / tag |
-|---------|----------------|
-| Root | `ArtPass=8`, `BC_Layout=AlleySlots`, `BC_DuelSlotCount=8`, `BC_LobbyOrigin` |
-| Claim pad / touch | `BC_DuelSlot` (number), tag **`BC_DuelSlotPad`**, ProximityPrompt « Rejoindre Slot N » |
-| Slot model | `BC_DuelSlot`, `BC_DuelSlotSide`, `BC_ZoneId=DuelSlot` |
-| SurfaceGui panneau | titre `SLOT N`, status « 1v1 — libre » |
-| Legacy queue | `BC_QueueMode` Casual\|Ranked, tag `BC_QueuePad` — coords (−18/−240) (+18/−240) |
-| Lighting | `BC_LightingMode=ConcordAlley`, `BC_DoF=false` |
-
-## Contrat MatchService / Combat (hooks Lobby)
-
-```luau
--- Après ArenaService.ensureLobby() :
-LobbyBuilder.bindDuelSlots(function(player: Player, slotIndex: number)
-  -- File par slotIndex (max 2). 2 joueurs → téléport arène BO3.
-  -- Solo Studio : bot optionnel après délai.
-end)
-
-LobbyBuilder.getDuelSlotInfos()  -- layout
-LobbyBuilder.getDuelSlotPad(n)   -- BasePart ClaimPad
-LobbyBuilder.getSpawnCFrame()    -- retour lobby
-```
-
-World lobby **ne code pas** la file ni le téléport match.
-
-## Budgets
-
-≤ 6000 parts · ≤ 20 lights · ≤ 30 emitters · ≤ 12 SurfaceGui. Log : `[BladeConcord] ConcordHall budget …`.
+`Lobby/{Config,Util,Lighting,Props,Builder}` · `ArenaService` · docs store `archi-croiseur-lobby.md`

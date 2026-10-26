@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Matchmaking par slot 1v1 — contrat World croiseur (2 pads devant baie).
+	Matchmaking par slot 1v1 — contrat World croiseur (ArtPass 9 = 2 pads baie).
 
 	World pose les pads ; Combat ne touche PAS LobbyBuilder géométrie.
 	API World :

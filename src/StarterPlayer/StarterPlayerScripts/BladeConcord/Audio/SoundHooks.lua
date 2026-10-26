@@ -67,6 +67,10 @@ local AMBIENT_BY_ARENA: { [string]: string } = {
 	SanctumAstres = "AmbientSanctum",
 	TroneEclipse = "AmbientEclipse",
 	QuaiMirage = "AmbientMirage",
+	ForgeAube = "AmbientObsidian",
+	SpireCrepuscule = "AmbientEclipse",
+	RecifNeant = "AmbientMirage",
+	CourCristal = "AmbientSanctum",
 	ConcordLobby = "AmbientLobby",
 }
 

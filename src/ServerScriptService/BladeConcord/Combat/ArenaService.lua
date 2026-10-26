@@ -1,11 +1,8 @@
 --!strict
 --[[
-	Arènes GDD §6 — art direction showcase (matériaux, lighting, props, hazards lisibles).
-	ArtPass 5 : cohérence visuelle légère — duel ring + titre Billboard + lighting unifié.
-	- Obsidian Pit : lave glow + cendres + ember drift
-	- Sanctum des Deux Astres : vents bleutés + dust drift
-	- Trône d'Éclipse : estrade + void embers
-	- Quai Mirage : quai teal + mist drift
+	Arènes Blade Concord — 8 floors vastes (ArtPass 6) autour du croiseur.
+	L1–4 gauche / R1–4 droite — offsets LobbyConfig.ArenaLayout (ox, oz).
+	Floors ~120² pour dash + Force. Baie Glass lobby spectate.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -19,10 +16,27 @@ local FighterState = require(script.Parent:WaitForChild("FighterState"))
 
 local ArenaService = {}
 
-export type ArenaId = "ObsidianPit" | "SanctumAstres" | "TroneEclipse" | "QuaiMirage"
+export type ArenaId =
+	"ObsidianPit"
+	| "SanctumAstres"
+	| "TroneEclipse"
+	| "QuaiMirage"
+	| "ForgeAube"
+	| "SpireCrepuscule"
+	| "RecifNeant"
+	| "CourCristal"
 
-local ARENA_ORDER: { ArenaId } = { "ObsidianPit", "SanctumAstres", "TroneEclipse", "QuaiMirage" }
-local ART_PASS = 5
+local ARENA_ORDER: { ArenaId } = {
+	"ObsidianPit",
+	"SanctumAstres",
+	"TroneEclipse",
+	"QuaiMirage",
+	"ForgeAube",
+	"SpireCrepuscule",
+	"RecifNeant",
+	"CourCristal",
+}
+local ART_PASS = 6
 
 -- Accents partagés (cohérence 4 arènes)
 local CONCORD_STEEL = Color3.fromRGB(72, 88, 110)
@@ -42,6 +56,23 @@ local activePoolIndex = 1
 local activeWorldRoot: Instance? = nil
 local poolRotation = 0
 local occupiedPoolIndex: number? = nil
+
+local function arenaOffset(id: string): (Vector3, string)
+	for _, entry in LobbyConfig.ArenaLayout do
+		if entry.id == id then
+			return Vector3.new(entry.ox, 0, entry.oz), entry.displayName
+		end
+	end
+	return Vector3.new(0, 0, 0), id
+end
+
+local function spawnSep(): number
+	return LobbyConfig.ArenaSpawnSep or 32
+end
+
+local function floorSize(): number
+	return LobbyConfig.ArenaFloorSize or 120
+end
 
 local function part(
 	name: string,
@@ -63,6 +94,33 @@ local function part(
 	p.BottomSurface = Enum.SurfaceType.Smooth
 	p.Parent = parent
 	return p
+end
+
+--[[ Plateforme vaste + muret bas (dash/Force) — commun aux 8 arènes. ]]
+local function vastDeck(folder: Folder, offset: Vector3, color: Color3, material: Enum.Material?): BasePart
+	local s = floorSize()
+	local deck = part("VastDeck", Vector3.new(s, 2.2, s), CFrame.new(offset), color, folder, material or Enum.Material.Basalt)
+	deck.Reflectance = 0.06
+	part(
+		"DeckRim",
+		Vector3.new(s + 6, 1.2, s + 6),
+		CFrame.new(offset + Vector3.new(0, -0.4, 0)),
+		Color3.fromRGB(28, 30, 40),
+		folder,
+		Enum.Material.Metal
+	)
+	local half = s * 0.5
+	local wallH = 4
+	for _, wall in {
+		{ "WN", Vector3.new(s + 4, wallH, 2), Vector3.new(0, wallH * 0.5, -half - 1) },
+		{ "WS", Vector3.new(s + 4, wallH, 2), Vector3.new(0, wallH * 0.5, half + 1) },
+		{ "WE", Vector3.new(2, wallH, s), Vector3.new(half + 1, wallH * 0.5, 0) },
+		{ "WW", Vector3.new(2, wallH, s), Vector3.new(-half - 1, wallH * 0.5, 0) },
+	} do
+		part(wall[1] :: string, wall[2] :: Vector3, CFrame.new(offset + (wall[3] :: Vector3)), Color3.fromRGB(40, 44, 56), folder, Enum.Material.Metal)
+	end
+	folder:SetAttribute("FloorSize", s)
+	return deck
 end
 
 local function neonGlow(parent: BasePart, color: Color3, brightness: number, range: number)
@@ -452,30 +510,31 @@ local function getArenasRoot(): Folder
 end
 
 local function buildSpawns(folder: Folder, offset: Vector3)
+	local sep = spawnSep()
 	local spawnA = part(
 		"SpawnA",
-		Vector3.new(4, 0.4, 4),
-		CFrame.new(offset + Vector3.new(-18, 1.3, 0)),
+		Vector3.new(5, 0.4, 5),
+		CFrame.new(offset + Vector3.new(-sep, 1.3, 0)),
 		Color3.fromRGB(90, 160, 220),
 		folder,
 		Enum.Material.Neon
 	)
 	spawnA.Transparency = 0.55
 	spawnA.CanCollide = false
-	neonGlow(spawnA, Color3.fromRGB(90, 160, 220), 0.8, 10)
+	neonGlow(spawnA, Color3.fromRGB(90, 160, 220), 0.8, 12)
 	CollectionService:AddTag(spawnA, CombatConfig.Tags.ArenaSpawnA)
 
 	local spawnB = part(
 		"SpawnB",
-		Vector3.new(4, 0.4, 4),
-		CFrame.new(offset + Vector3.new(18, 1.3, 0)),
+		Vector3.new(5, 0.4, 5),
+		CFrame.new(offset + Vector3.new(sep, 1.3, 0)),
 		Color3.fromRGB(220, 100, 90),
 		folder,
 		Enum.Material.Neon
 	)
 	spawnB.Transparency = 0.55
 	spawnB.CanCollide = false
-	neonGlow(spawnB, Color3.fromRGB(220, 100, 90), 0.8, 10)
+	neonGlow(spawnB, Color3.fromRGB(220, 100, 90), 0.8, 12)
 	CollectionService:AddTag(spawnB, CombatConfig.Tags.ArenaSpawnB)
 end
 
@@ -483,12 +542,16 @@ local function buildObsidianPit(parent: Folder): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = "ObsidianPit"
 	folder.Parent = parent
-	folder:SetAttribute("DisplayName", "Obsidian Pit — Creuset de Lave")
-	folder:SetAttribute("OffsetX", 0)
+	local offset, displayName = arenaOffset("ObsidianPit")
+	folder:SetAttribute("DisplayName", displayName)
+	folder:SetAttribute("OffsetX", offset.X)
+	folder:SetAttribute("OffsetZ", offset.Z)
 	folder:SetAttribute("ArtPass", ART_PASS)
+	folder:SetAttribute("BC_ArenaSide", "Left")
+	folder:SetAttribute("BC_ArenaIndex", 1)
 
-	local offset = Vector3.new(0, 0, 0)
 	local basalt = Color3.fromRGB(42, 40, 48)
+	vastDeck(folder, offset, basalt, Enum.Material.Basalt)
 	local basaltLite = Color3.fromRGB(70, 68, 78)
 	local ember = Color3.fromRGB(255, 110, 40)
 	local lava = Color3.fromRGB(255, 90, 30)
@@ -618,12 +681,15 @@ local function buildSanctum(parent: Folder): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = "SanctumAstres"
 	folder.Parent = parent
-	folder:SetAttribute("DisplayName", "Sanctum des Deux Astres")
+	local offset, displayName = arenaOffset("SanctumAstres")
+	folder:SetAttribute("DisplayName", displayName)
 	folder:SetAttribute("ArtPass", ART_PASS)
-	local ox = 120
-	folder:SetAttribute("OffsetX", ox)
-	local offset = Vector3.new(ox, 0, 0)
+	folder:SetAttribute("OffsetX", offset.X)
+	folder:SetAttribute("OffsetZ", offset.Z)
+	folder:SetAttribute("BC_ArenaSide", "Left")
+	folder:SetAttribute("BC_ArenaIndex", 2)
 	local marble = Color3.fromRGB(210, 205, 195)
+	vastDeck(folder, offset, marble, Enum.Material.Marble)
 	local gold = Color3.fromRGB(190, 160, 90)
 	local sky = Color3.fromRGB(140, 190, 230)
 	local size = Vector3.new(56, 2, 56)
@@ -751,12 +817,15 @@ local function buildThrone(parent: Folder): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = "TroneEclipse"
 	folder.Parent = parent
-	folder:SetAttribute("DisplayName", "Trône d'Éclipse")
+	local offset, displayName = arenaOffset("TroneEclipse")
+	folder:SetAttribute("DisplayName", displayName)
 	folder:SetAttribute("ArtPass", ART_PASS)
-	local ox = 240
-	folder:SetAttribute("OffsetX", ox)
-	local offset = Vector3.new(ox, 0, 0)
+	folder:SetAttribute("OffsetX", offset.X)
+	folder:SetAttribute("OffsetZ", offset.Z)
+	folder:SetAttribute("BC_ArenaSide", "Left")
+	folder:SetAttribute("BC_ArenaIndex", 3)
 	local dark = Color3.fromRGB(32, 28, 42)
+	vastDeck(folder, offset, dark, Enum.Material.Slate)
 	local violet = Color3.fromRGB(90, 55, 140)
 	local void = Color3.fromRGB(18, 14, 28)
 	local size = Vector3.new(60, 2, 60)
@@ -871,11 +940,15 @@ local function buildMirage(parent: Folder): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = "QuaiMirage"
 	folder.Parent = parent
-	folder:SetAttribute("DisplayName", "Quai Mirage")
+	local offsetMirage, displayMirage = arenaOffset("QuaiMirage")
+	folder:SetAttribute("DisplayName", displayMirage)
 	folder:SetAttribute("ArtPass", ART_PASS)
-	local ox = 360
-	folder:SetAttribute("OffsetX", ox)
-	local offset = Vector3.new(ox, 0, 0)
+	folder:SetAttribute("OffsetX", offsetMirage.X)
+	folder:SetAttribute("OffsetZ", offsetMirage.Z)
+	folder:SetAttribute("BC_ArenaSide", "Left")
+	folder:SetAttribute("BC_ArenaIndex", 4)
+	vastDeck(folder, offsetMirage, Color3.fromRGB(55, 140, 150), Enum.Material.Concrete)
+	local offset = offsetMirage
 	local teal = Color3.fromRGB(55, 110, 120)
 	local sand = Color3.fromRGB(180, 170, 140)
 	local water = Color3.fromRGB(40, 120, 140)
@@ -984,6 +1057,155 @@ local function buildMirage(parent: Folder): Folder
 	return folder
 end
 
+--[[ Arènes droites R1–R4 — floors vastes thématiques Dawn/Dusk/Néant/Cristal. ]]
+local function buildThematicVast(
+	parent: Folder,
+	id: ArenaId,
+	side: string,
+	arenaIndex: number,
+	deckColor: Color3,
+	accent: Color3,
+	material: Enum.Material,
+	propsFn: ((Folder, Vector3) -> ())?
+): Folder
+	local folder = Instance.new("Folder")
+	folder.Name = id
+	folder.Parent = parent
+	local offset, displayName = arenaOffset(id)
+	folder:SetAttribute("DisplayName", displayName)
+	folder:SetAttribute("ArtPass", ART_PASS)
+	folder:SetAttribute("OffsetX", offset.X)
+	folder:SetAttribute("OffsetZ", offset.Z)
+	folder:SetAttribute("BC_ArenaSide", side)
+	folder:SetAttribute("BC_ArenaIndex", arenaIndex)
+
+	vastDeck(folder, offset, deckColor, material)
+	part(
+		"CenterInlay",
+		Vector3.new(36, 0.3, 36),
+		CFrame.new(offset + Vector3.new(0, 1.2, 0)),
+		accent,
+		folder,
+		Enum.Material.Neon
+	).Transparency = 0.55
+	neonGlow(
+		part("AccentOrb", Vector3.new(4, 4, 4), CFrame.new(offset + Vector3.new(0, 10, -40)), accent, folder, Enum.Material.Neon),
+		accent,
+		1.2,
+		28
+	)
+	if propsFn then
+		propsFn(folder, offset)
+	end
+	coherenceKit(folder, offset, accent)
+	arenaTitle(folder, offset, displayName, accent)
+	buildSpawns(folder, offset)
+	return folder
+end
+
+local function buildForgeAube(parent: Folder): Folder
+	return buildThematicVast(parent, "ForgeAube", "Right", 5, Color3.fromRGB(48, 32, 24), Color3.fromRGB(255, 140, 60), Enum.Material.Basalt, function(folder, offset)
+		for i = -2, 2 do
+			part(
+				"Brazier",
+				Vector3.new(3, 2, 3),
+				CFrame.new(offset + Vector3.new(i * 18, 2, 40)),
+				Color3.fromRGB(255, 100, 40),
+				folder,
+				Enum.Material.Neon
+			)
+		end
+		driftField(folder, offset, Color3.fromRGB(255, 140, 50), Color3.fromRGB(80, 30, 10), 10, 1.2, "ForgeEmbers")
+	end)
+end
+
+local function buildSpireCrepuscule(parent: Folder): Folder
+	return buildThematicVast(
+		parent,
+		"SpireCrepuscule",
+		"Right",
+		6,
+		Color3.fromRGB(28, 24, 48),
+		Color3.fromRGB(120, 90, 255),
+		Enum.Material.Slate,
+		function(folder, offset)
+			part(
+				"Spire",
+				Vector3.new(8, 36, 8),
+				CFrame.new(offset + Vector3.new(0, 20, -45)),
+				Color3.fromRGB(60, 50, 100),
+				folder,
+				Enum.Material.Metal
+			)
+			local tip = part(
+				"SpireTip",
+				Vector3.new(5, 5, 5),
+				CFrame.new(offset + Vector3.new(0, 40, -45)),
+				Color3.fromRGB(150, 120, 255),
+				folder,
+				Enum.Material.Neon
+			)
+			tip.Shape = Enum.PartType.Ball
+			tip.CanCollide = false
+			neonGlow(tip, Color3.fromRGB(150, 120, 255), 1.4, 30)
+			driftField(folder, offset, Color3.fromRGB(160, 120, 255), Color3.fromRGB(40, 20, 80), 10, 0.5, "DuskMotes")
+		end
+	)
+end
+
+local function buildRecifNeant(parent: Folder): Folder
+	return buildThematicVast(
+		parent,
+		"RecifNeant",
+		"Right",
+		7,
+		Color3.fromRGB(22, 26, 32),
+		Color3.fromRGB(80, 200, 180),
+		Enum.Material.Rock,
+		function(folder, offset)
+			for i = 1, 8 do
+				local ang = (i / 8) * math.pi * 2
+				part(
+					"Reef",
+					Vector3.new(6, 4 + (i % 3) * 2, 6),
+					CFrame.new(offset + Vector3.new(math.sin(ang) * 40, 2, math.cos(ang) * 40)),
+					Color3.fromRGB(50, 70, 75),
+					folder,
+					Enum.Material.Limestone
+				)
+			end
+			fogBank(folder, offset, Color3.fromRGB(40, 80, 90), 4)
+		end
+	)
+end
+
+local function buildCourCristal(parent: Folder): Folder
+	return buildThematicVast(
+		parent,
+		"CourCristal",
+		"Right",
+		8,
+		Color3.fromRGB(40, 48, 62),
+		Color3.fromRGB(120, 210, 255),
+		Enum.Material.Marble,
+		function(folder, offset)
+			for i = 0, 5 do
+				local shard = part(
+					"Crystal",
+					Vector3.new(2, 10, 2),
+					CFrame.new(offset + Vector3.new(-30 + i * 12, 6, 42)) * CFrame.Angles(0, 0, math.rad(12)),
+					Color3.fromRGB(140, 220, 255),
+					folder,
+					Enum.Material.Neon
+				)
+				shard.Transparency = 0.25
+				shard.CanCollide = false
+			end
+			driftField(folder, offset, Color3.fromRGB(180, 230, 255), Color3.fromRGB(100, 160, 220), 8, 0.4, "CrystalDust")
+		end
+	)
+end
+
 function ArenaService.ensureAll(): Folder
 	local root = getArenasRoot()
 	-- Purge greybox / art pass < ART_PASS
@@ -1009,20 +1231,29 @@ function ArenaService.ensureAll(): Folder
 		end
 	end
 
-	if not built.ObsidianPit or not built.ObsidianPit.Parent then
-		built.ObsidianPit = buildObsidianPit(root)
+	local builders: { [ArenaId]: (Folder) -> Folder } = {
+		ObsidianPit = buildObsidianPit,
+		SanctumAstres = buildSanctum,
+		TroneEclipse = buildThrone,
+		QuaiMirage = buildMirage,
+		ForgeAube = buildForgeAube,
+		SpireCrepuscule = buildSpireCrepuscule,
+		RecifNeant = buildRecifNeant,
+		CourCristal = buildCourCristal,
+	}
+	for _, id in ARENA_ORDER do
+		local folder = built[id]
+		if not folder or not folder.Parent then
+			built[id] = builders[id](root)
+		end
+		-- Pool Match : tag BC_MatchArena pour pickMatchArena / refreshWorldPool
+		local f = built[id]
+		if f then
+			CollectionService:AddTag(f, CombatConfig.Tags.MatchArena)
+		end
 	end
-	if not built.SanctumAstres or not built.SanctumAstres.Parent then
-		built.SanctumAstres = buildSanctum(root)
-	end
-	if not built.TroneEclipse or not built.TroneEclipse.Parent then
-		built.TroneEclipse = buildThrone(root)
-	end
-	if not built.QuaiMirage or not built.QuaiMirage.Parent then
-		built.QuaiMirage = buildMirage(root)
-	end
+	ArenaService.refreshWorldPool()
 	ArenaService.ensureLobby()
-	-- Boot = Concord Hall ; les matchs rappellent applyArenaLighting via setActive
 	LobbyLighting.applyHall()
 	return root
 end
@@ -1182,15 +1413,18 @@ function ArenaService.getSpawnCFrames(): (CFrame, CFrame)
 		local oy = (activeWorldRoot:GetAttribute("OffsetY") :: number?) or 0
 		local oz = (activeWorldRoot:GetAttribute("OffsetZ") :: number?) or 0
 		local origin = Vector3.new(ox, oy, oz)
-		local a = CFrame.new(origin + Vector3.new(-18, 4, 0)) * CFrame.Angles(0, math.rad(90), 0)
-		local b = CFrame.new(origin + Vector3.new(18, 4, 0)) * CFrame.Angles(0, math.rad(-90), 0)
+		local sep = spawnSep()
+		local a = CFrame.new(origin + Vector3.new(-sep, 4, 0)) * CFrame.Angles(0, math.rad(90), 0)
+		local b = CFrame.new(origin + Vector3.new(sep, 4, 0)) * CFrame.Angles(0, math.rad(-90), 0)
 		return a, b
 	end
 
 	local folder = built[activeId]
 	local ox = if folder then (folder:GetAttribute("OffsetX") :: number?) or 0 else 0
-	local a = CFrame.new(ox - 18, 4, 0) * CFrame.Angles(0, math.rad(90), 0)
-	local b = CFrame.new(ox + 18, 4, 0) * CFrame.Angles(0, math.rad(-90), 0)
+	local oz = if folder then (folder:GetAttribute("OffsetZ") :: number?) or 0 else 0
+	local sep = spawnSep()
+	local a = CFrame.new(ox - sep, 4, oz) * CFrame.Angles(0, math.rad(90), 0)
+	local b = CFrame.new(ox + sep, 4, oz) * CFrame.Angles(0, math.rad(-90), 0)
 	return a, b
 end
 
