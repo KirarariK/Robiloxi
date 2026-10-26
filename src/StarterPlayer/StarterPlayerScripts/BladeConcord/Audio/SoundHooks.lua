@@ -58,6 +58,8 @@ SoundHooks.AssetIds = {
 	AmbientSanctum = "rbxassetid://9114221256", -- soft wind
 	AmbientEclipse = "rbxassetid://9116395309", -- low drone / buzz
 	AmbientMirage = "rbxassetid://9114221571", -- water / breeze adjacent
+	-- Concord Hall (placeholder configurable — swap Creator Store libre)
+	AmbientLobby = "rbxassetid://9114221256",
 }
 
 local AMBIENT_BY_ARENA: { [string]: string } = {
@@ -65,6 +67,7 @@ local AMBIENT_BY_ARENA: { [string]: string } = {
 	SanctumAstres = "AmbientSanctum",
 	TroneEclipse = "AmbientEclipse",
 	QuaiMirage = "AmbientMirage",
+	ConcordLobby = "AmbientLobby",
 }
 
 local group: SoundGroup
@@ -96,6 +99,7 @@ local DEFS: { [string]: { vol: number, speed: number, loop: boolean? } } = {
 	AmbientSanctum = { vol = 0.055, speed = 0.85, loop = true },
 	AmbientEclipse = { vol = 0.06, speed = 0.7, loop = true },
 	AmbientMirage = { vol = 0.055, speed = 0.95, loop = true },
+	AmbientLobby = { vol = 0.06, speed = 0.88, loop = true },
 }
 
 function SoundHooks.setArenaAmbient(arenaId: string?)

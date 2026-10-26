@@ -31,8 +31,10 @@ local activeId: ArenaId = "ObsidianPit"
 local arenasRoot: Folder? = nil
 local built: { [ArenaId]: Folder } = {}
 local hazardAccumulator = 0
-local lobbyBuilt: Folder? = nil
-local LOBBY_OFFSET = Vector3.new(-180, 0, 0)
+local lobbyBuilt: Instance? = nil
+local LobbyBuilder = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyBuilder"))
+local LobbyConfig = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyConfig"))
+local LobbyLighting = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyLighting"))
 
 local function part(
 	name: string,
@@ -227,12 +229,14 @@ local function coherenceKit(folder: Folder, offset: Vector3, accent: Color3)
 	inner.Reflectance = 0.2
 
 	-- Rails latéraux (lisibilité bordure arène)
-	for _, xz in {
-		Vector3.new(0, 0, -30),
-		Vector3.new(0, 0, 30),
-		Vector3.new(-30, 0, 0),
-		Vector3.new(30, 0, 0),
-	} do
+	for _, xz in
+		{
+			Vector3.new(0, 0, -30),
+			Vector3.new(0, 0, 30),
+			Vector3.new(-30, 0, 0),
+			Vector3.new(30, 0, 0),
+		}
+	do
 		local rail = part(
 			"ConcordRail",
 			if math.abs(xz.X) > 1 then Vector3.new(2, 0.6, 40) else Vector3.new(40, 0.6, 2),
@@ -441,13 +445,27 @@ local function getArenasRoot(): Folder
 end
 
 local function buildSpawns(folder: Folder, offset: Vector3)
-	local spawnA = part("SpawnA", Vector3.new(4, 0.4, 4), CFrame.new(offset + Vector3.new(-18, 1.3, 0)), Color3.fromRGB(90, 160, 220), folder, Enum.Material.Neon)
+	local spawnA = part(
+		"SpawnA",
+		Vector3.new(4, 0.4, 4),
+		CFrame.new(offset + Vector3.new(-18, 1.3, 0)),
+		Color3.fromRGB(90, 160, 220),
+		folder,
+		Enum.Material.Neon
+	)
 	spawnA.Transparency = 0.55
 	spawnA.CanCollide = false
 	neonGlow(spawnA, Color3.fromRGB(90, 160, 220), 0.8, 10)
 	CollectionService:AddTag(spawnA, CombatConfig.Tags.ArenaSpawnA)
 
-	local spawnB = part("SpawnB", Vector3.new(4, 0.4, 4), CFrame.new(offset + Vector3.new(18, 1.3, 0)), Color3.fromRGB(220, 100, 90), folder, Enum.Material.Neon)
+	local spawnB = part(
+		"SpawnB",
+		Vector3.new(4, 0.4, 4),
+		CFrame.new(offset + Vector3.new(18, 1.3, 0)),
+		Color3.fromRGB(220, 100, 90),
+		folder,
+		Enum.Material.Neon
+	)
 	spawnB.Transparency = 0.55
 	spawnB.CanCollide = false
 	neonGlow(spawnB, Color3.fromRGB(220, 100, 90), 0.8, 10)
@@ -473,29 +491,90 @@ local function buildObsidianPit(parent: Folder): Folder
 	local platform = part("Platform", size, CFrame.new(offset), basalt, folder, Enum.Material.Basalt)
 	platform.Reflectance = 0.05
 	-- Dallage central
-	part("Inlay", Vector3.new(28, 0.25, 28), CFrame.new(offset + Vector3.new(0, 1.1, 0)), basaltLite, folder, Enum.Material.Slate)
-	part("Ring", Vector3.new(size.X + 10, 1.2, size.Z + 10), CFrame.new(offset + Vector3.new(0, -0.6, 0)), Color3.fromRGB(28, 26, 32), folder, Enum.Material.Rock)
+	part(
+		"Inlay",
+		Vector3.new(28, 0.25, 28),
+		CFrame.new(offset + Vector3.new(0, 1.1, 0)),
+		basaltLite,
+		folder,
+		Enum.Material.Slate
+	)
+	part(
+		"Ring",
+		Vector3.new(size.X + 10, 1.2, size.Z + 10),
+		CFrame.new(offset + Vector3.new(0, -0.6, 0)),
+		Color3.fromRGB(28, 26, 32),
+		folder,
+		Enum.Material.Rock
+	)
 
 	local halfX, halfZ = size.X / 2, size.Z / 2
-	for _, wall in {
-		part("WallN", Vector3.new(size.X + 6, wallH, 3), CFrame.new(offset + Vector3.new(0, wallH / 2, -halfZ - 1.5)), basalt, folder, Enum.Material.Basalt),
-		part("WallS", Vector3.new(size.X + 6, wallH, 3), CFrame.new(offset + Vector3.new(0, wallH / 2, halfZ + 1.5)), basalt, folder, Enum.Material.Basalt),
-		part("WallE", Vector3.new(3, wallH, size.Z), CFrame.new(offset + Vector3.new(halfX + 1.5, wallH / 2, 0)), basalt, folder, Enum.Material.Basalt),
-		part("WallW", Vector3.new(3, wallH, size.Z), CFrame.new(offset + Vector3.new(-halfX - 1.5, wallH / 2, 0)), basalt, folder, Enum.Material.Basalt),
-	} do
+	for _, wall in
+		{
+			part(
+				"WallN",
+				Vector3.new(size.X + 6, wallH, 3),
+				CFrame.new(offset + Vector3.new(0, wallH / 2, -halfZ - 1.5)),
+				basalt,
+				folder,
+				Enum.Material.Basalt
+			),
+			part(
+				"WallS",
+				Vector3.new(size.X + 6, wallH, 3),
+				CFrame.new(offset + Vector3.new(0, wallH / 2, halfZ + 1.5)),
+				basalt,
+				folder,
+				Enum.Material.Basalt
+			),
+			part(
+				"WallE",
+				Vector3.new(3, wallH, size.Z),
+				CFrame.new(offset + Vector3.new(halfX + 1.5, wallH / 2, 0)),
+				basalt,
+				folder,
+				Enum.Material.Basalt
+			),
+			part(
+				"WallW",
+				Vector3.new(3, wallH, size.Z),
+				CFrame.new(offset + Vector3.new(-halfX - 1.5, wallH / 2, 0)),
+				basalt,
+				folder,
+				Enum.Material.Basalt
+			),
+		}
+	do
 		wall.Material = Enum.Material.Basalt
 	end
 
 	-- Piliers d'angle
-	for _, corner in { Vector3.new(-28, 5, -28), Vector3.new(28, 5, -28), Vector3.new(-28, 5, 28), Vector3.new(28, 5, 28) } do
-		local pillar = part("Pillar", Vector3.new(4, 10, 4), CFrame.new(offset + corner), basaltLite, folder, Enum.Material.Rock)
-		local torch = part("Ember", Vector3.new(1.2, 1.2, 1.2), CFrame.new(offset + corner + Vector3.new(0, 6, 0)), ember, folder, Enum.Material.Neon)
+	for _, corner in
+		{ Vector3.new(-28, 5, -28), Vector3.new(28, 5, -28), Vector3.new(-28, 5, 28), Vector3.new(28, 5, 28) }
+	do
+		local pillar =
+			part("Pillar", Vector3.new(4, 10, 4), CFrame.new(offset + corner), basaltLite, folder, Enum.Material.Rock)
+		local torch = part(
+			"Ember",
+			Vector3.new(1.2, 1.2, 1.2),
+			CFrame.new(offset + corner + Vector3.new(0, 6, 0)),
+			ember,
+			folder,
+			Enum.Material.Neon
+		)
 		torch.CanCollide = false
 		neonGlow(torch, ember, 2.5, 18)
 		ashEmitter(torch)
 	end
 
-	local lavaPart = part("LavaBorder", Vector3.new(size.X + 28, 1.5, size.Z + 28), CFrame.new(offset + Vector3.new(0, -3.2, 0)), lava, folder, Enum.Material.Neon)
+	local lavaPart = part(
+		"LavaBorder",
+		Vector3.new(size.X + 28, 1.5, size.Z + 28),
+		CFrame.new(offset + Vector3.new(0, -3.2, 0)),
+		lava,
+		folder,
+		Enum.Material.Neon
+	)
 	lavaPart.Transparency = 0.15
 	neonGlow(lavaPart, lava, 3, 40)
 	lavaPart:SetAttribute("Dps", CombatConfig.Arena.LavaDps)
@@ -505,7 +584,14 @@ local function buildObsidianPit(parent: Folder): Folder
 	hazardLabel(lavaPart, "LAVE — mortelle", ember)
 
 	-- Lave intérieure (anneau visible au bord plateforme)
-	local lavaInner = part("LavaLip", Vector3.new(size.X + 4, 0.6, size.Z + 4), CFrame.new(offset + Vector3.new(0, 0.2, 0)), ember, folder, Enum.Material.Neon)
+	local lavaInner = part(
+		"LavaLip",
+		Vector3.new(size.X + 4, 0.6, size.Z + 4),
+		CFrame.new(offset + Vector3.new(0, 0.2, 0)),
+		ember,
+		folder,
+		Enum.Material.Neon
+	)
 	lavaInner.Transparency = 0.45
 	lavaInner.CanCollide = false
 	neonGlow(lavaInner, ember, 1.2, 20)
@@ -536,10 +622,31 @@ local function buildSanctum(parent: Folder): Folder
 	local size = Vector3.new(56, 2, 56)
 
 	part("Platform", size, CFrame.new(offset), marble, folder, Enum.Material.Marble)
-	local inlayStar = part("InlayStar", Vector3.new(16, 0.3, 16), CFrame.new(offset + Vector3.new(0, 1.1, 0)) * CFrame.Angles(0, math.rad(45), 0), gold, folder, Enum.Material.Metal)
+	local inlayStar = part(
+		"InlayStar",
+		Vector3.new(16, 0.3, 16),
+		CFrame.new(offset + Vector3.new(0, 1.1, 0)) * CFrame.Angles(0, math.rad(45), 0),
+		gold,
+		folder,
+		Enum.Material.Metal
+	)
 	inlayStar.Reflectance = 0.4
-	part("WallN", Vector3.new(size.X, 12, 2.5), CFrame.new(offset + Vector3.new(0, 6, -29)), marble, folder, Enum.Material.Limestone)
-	part("WallS", Vector3.new(size.X, 12, 2.5), CFrame.new(offset + Vector3.new(0, 6, 29)), marble, folder, Enum.Material.Limestone)
+	part(
+		"WallN",
+		Vector3.new(size.X, 12, 2.5),
+		CFrame.new(offset + Vector3.new(0, 6, -29)),
+		marble,
+		folder,
+		Enum.Material.Limestone
+	)
+	part(
+		"WallS",
+		Vector3.new(size.X, 12, 2.5),
+		CFrame.new(offset + Vector3.new(0, 6, 29)),
+		marble,
+		folder,
+		Enum.Material.Limestone
+	)
 
 	-- Colonnes latérales
 	for z = -18, 18, 12 do
@@ -552,23 +659,51 @@ local function buildSanctum(parent: Folder): Folder
 				folder,
 				Enum.Material.Marble
 			)
-			local cap = part("Cap", Vector3.new(3.2, 1, 3.2), CFrame.new(offset + Vector3.new(xSign * 22, 15.5, z)), gold, folder, Enum.Material.Metal)
+			local cap = part(
+				"Cap",
+				Vector3.new(3.2, 1, 3.2),
+				CFrame.new(offset + Vector3.new(xSign * 22, 15.5, z)),
+				gold,
+				folder,
+				Enum.Material.Metal
+			)
 			cap.Reflectance = 0.3
 			col.Material = Enum.Material.Marble
 		end
 	end
 
 	-- Deux « astres » lumineux
-	local sun = part("AstreDawn", Vector3.new(5, 5, 5), CFrame.new(offset + Vector3.new(-10, 18, 0)), Color3.fromRGB(255, 200, 120), folder, Enum.Material.Neon)
+	local sun = part(
+		"AstreDawn",
+		Vector3.new(5, 5, 5),
+		CFrame.new(offset + Vector3.new(-10, 18, 0)),
+		Color3.fromRGB(255, 200, 120),
+		folder,
+		Enum.Material.Neon
+	)
 	sun.Shape = Enum.PartType.Ball
 	sun.CanCollide = false
 	neonGlow(sun, Color3.fromRGB(255, 200, 120), 3, 35)
-	local moon = part("AstreDusk", Vector3.new(4, 4, 4), CFrame.new(offset + Vector3.new(10, 17, 0)), Color3.fromRGB(160, 180, 255), folder, Enum.Material.Neon)
+	local moon = part(
+		"AstreDusk",
+		Vector3.new(4, 4, 4),
+		CFrame.new(offset + Vector3.new(10, 17, 0)),
+		Color3.fromRGB(160, 180, 255),
+		folder,
+		Enum.Material.Neon
+	)
 	moon.Shape = Enum.PartType.Ball
 	moon.CanCollide = false
 	neonGlow(moon, Color3.fromRGB(160, 180, 255), 2.5, 30)
 
-	local windL = part("WindWest", Vector3.new(8, 6, 40), CFrame.new(offset + Vector3.new(-22, 4, 0)), sky, folder, Enum.Material.ForceField)
+	local windL = part(
+		"WindWest",
+		Vector3.new(8, 6, 40),
+		CFrame.new(offset + Vector3.new(-22, 4, 0)),
+		sky,
+		folder,
+		Enum.Material.ForceField
+	)
 	windL.Transparency = 0.55
 	windL.CanCollide = false
 	windL:SetAttribute("HazardKind", "Wind")
@@ -578,7 +713,14 @@ local function buildSanctum(parent: Folder): Folder
 	ashEmitter(windL, 22, Color3.fromRGB(180, 210, 255), Color3.fromRGB(120, 160, 220))
 	hazardLabel(windL, "VENT — poussée", sky)
 
-	local windR = part("WindEast", Vector3.new(8, 6, 40), CFrame.new(offset + Vector3.new(22, 4, 0)), sky, folder, Enum.Material.ForceField)
+	local windR = part(
+		"WindEast",
+		Vector3.new(8, 6, 40),
+		CFrame.new(offset + Vector3.new(22, 4, 0)),
+		sky,
+		folder,
+		Enum.Material.ForceField
+	)
 	windR.Transparency = 0.55
 	windR.CanCollide = false
 	windR:SetAttribute("HazardKind", "Wind")
@@ -613,10 +755,24 @@ local function buildThrone(parent: Folder): Folder
 	local size = Vector3.new(60, 2, 60)
 
 	part("Platform", size, CFrame.new(offset), dark, folder, Enum.Material.Slate)
-	part("OuterRing", Vector3.new(size.X + 8, 0.8, size.Z + 8), CFrame.new(offset + Vector3.new(0, -0.4, 0)), void, folder, Enum.Material.Rock)
+	part(
+		"OuterRing",
+		Vector3.new(size.X + 8, 0.8, size.Z + 8),
+		CFrame.new(offset + Vector3.new(0, -0.4, 0)),
+		void,
+		folder,
+		Enum.Material.Rock
+	)
 
 	-- Estrade centrale (anti-camp)
-	local dais = part("Dais", Vector3.new(16, 3.5, 16), CFrame.new(offset + Vector3.new(0, 2.7, 0)), violet, folder, Enum.Material.Neon)
+	local dais = part(
+		"Dais",
+		Vector3.new(16, 3.5, 16),
+		CFrame.new(offset + Vector3.new(0, 2.7, 0)),
+		violet,
+		folder,
+		Enum.Material.Neon
+	)
 	dais.Transparency = 0.35
 	dais:SetAttribute("HazardKind", "ThronePressure")
 	dais:SetAttribute("Dps", CombatConfig.Arena.ThronePressureDps)
@@ -626,20 +782,69 @@ local function buildThrone(parent: Folder): Folder
 	ashEmitter(dais, 10, Color3.fromRGB(120, 80, 200), Color3.fromRGB(40, 20, 60))
 
 	-- Trône Constructible
-	local seat = part("ThroneSeat", Vector3.new(5, 1.2, 4), CFrame.new(offset + Vector3.new(0, 5.2, -1)), void, folder, Enum.Material.Metal)
-	local back = part("ThroneBack", Vector3.new(5.5, 8, 1.2), CFrame.new(offset + Vector3.new(0, 9, -2.8)), void, folder, Enum.Material.Metal)
+	local seat = part(
+		"ThroneSeat",
+		Vector3.new(5, 1.2, 4),
+		CFrame.new(offset + Vector3.new(0, 5.2, -1)),
+		void,
+		folder,
+		Enum.Material.Metal
+	)
+	local back = part(
+		"ThroneBack",
+		Vector3.new(5.5, 8, 1.2),
+		CFrame.new(offset + Vector3.new(0, 9, -2.8)),
+		void,
+		folder,
+		Enum.Material.Metal
+	)
 	back.Reflectance = 0.15
-	part("ThroneArmL", Vector3.new(1, 2.5, 3.5), CFrame.new(offset + Vector3.new(-2.8, 6.5, -1)), Color3.fromRGB(50, 40, 70), folder, Enum.Material.Metal)
-	part("ThroneArmR", Vector3.new(1, 2.5, 3.5), CFrame.new(offset + Vector3.new(2.8, 6.5, -1)), Color3.fromRGB(50, 40, 70), folder, Enum.Material.Metal)
-	local crown = part("ThroneCrown", Vector3.new(6, 1.5, 1.5), CFrame.new(offset + Vector3.new(0, 13.5, -2.8)), Color3.fromRGB(160, 120, 255), folder, Enum.Material.Neon)
+	part(
+		"ThroneArmL",
+		Vector3.new(1, 2.5, 3.5),
+		CFrame.new(offset + Vector3.new(-2.8, 6.5, -1)),
+		Color3.fromRGB(50, 40, 70),
+		folder,
+		Enum.Material.Metal
+	)
+	part(
+		"ThroneArmR",
+		Vector3.new(1, 2.5, 3.5),
+		CFrame.new(offset + Vector3.new(2.8, 6.5, -1)),
+		Color3.fromRGB(50, 40, 70),
+		folder,
+		Enum.Material.Metal
+	)
+	local crown = part(
+		"ThroneCrown",
+		Vector3.new(6, 1.5, 1.5),
+		CFrame.new(offset + Vector3.new(0, 13.5, -2.8)),
+		Color3.fromRGB(160, 120, 255),
+		folder,
+		Enum.Material.Neon
+	)
 	crown.CanCollide = false
 	neonGlow(crown, Color3.fromRGB(160, 120, 255), 2.2, 20)
 	seat.CanCollide = true
 
 	-- Obélisques
 	for _, xz in { Vector3.new(-22, 0, -22), Vector3.new(22, 0, -22), Vector3.new(-22, 0, 22), Vector3.new(22, 0, 22) } do
-		local ob = part("Obelisk", Vector3.new(2.5, 16, 2.5), CFrame.new(offset + Vector3.new(xz.X, 9, xz.Z)), dark, folder, Enum.Material.Basalt)
-		local tip = part("ObeliskTip", Vector3.new(1.5, 2, 1.5), CFrame.new(offset + Vector3.new(xz.X, 18, xz.Z)), Color3.fromRGB(140, 100, 220), folder, Enum.Material.Neon)
+		local ob = part(
+			"Obelisk",
+			Vector3.new(2.5, 16, 2.5),
+			CFrame.new(offset + Vector3.new(xz.X, 9, xz.Z)),
+			dark,
+			folder,
+			Enum.Material.Basalt
+		)
+		local tip = part(
+			"ObeliskTip",
+			Vector3.new(1.5, 2, 1.5),
+			CFrame.new(offset + Vector3.new(xz.X, 18, xz.Z)),
+			Color3.fromRGB(140, 100, 220),
+			folder,
+			Enum.Material.Neon
+		)
 		tip.CanCollide = false
 		neonGlow(tip, Color3.fromRGB(140, 100, 220), 1.5, 14)
 		ob.Material = Enum.Material.Basalt
@@ -670,21 +875,63 @@ local function buildMirage(parent: Folder): Folder
 	local mirage = Color3.fromRGB(140, 220, 230)
 
 	part("Platform", Vector3.new(58, 2, 40), CFrame.new(offset), teal, folder, Enum.Material.Concrete)
-	part("DockEdge", Vector3.new(60, 1, 3), CFrame.new(offset + Vector3.new(0, 0.5, -20)), sand, folder, Enum.Material.WoodPlanks)
-	part("DockEdgeS", Vector3.new(60, 1, 3), CFrame.new(offset + Vector3.new(0, 0.5, 20)), sand, folder, Enum.Material.WoodPlanks)
+	part(
+		"DockEdge",
+		Vector3.new(60, 1, 3),
+		CFrame.new(offset + Vector3.new(0, 0.5, -20)),
+		sand,
+		folder,
+		Enum.Material.WoodPlanks
+	)
+	part(
+		"DockEdgeS",
+		Vector3.new(60, 1, 3),
+		CFrame.new(offset + Vector3.new(0, 0.5, 20)),
+		sand,
+		folder,
+		Enum.Material.WoodPlanks
+	)
 
-	local waterPlane = part("Water", Vector3.new(90, 1, 70), CFrame.new(offset + Vector3.new(0, -2.5, 0)), water, folder, Enum.Material.Glass)
+	local waterPlane = part(
+		"Water",
+		Vector3.new(90, 1, 70),
+		CFrame.new(offset + Vector3.new(0, -2.5, 0)),
+		water,
+		folder,
+		Enum.Material.Glass
+	)
 	waterPlane.Transparency = 0.35
 	waterPlane.CanCollide = false
 	neonGlow(waterPlane, water, 0.8, 30)
 
 	-- Piliers de quai
 	for x = -24, 24, 12 do
-		part("Pier", Vector3.new(1.5, 6, 1.5), CFrame.new(offset + Vector3.new(x, -1, -22)), Color3.fromRGB(90, 70, 50), folder, Enum.Material.Wood)
-		part("PierS", Vector3.new(1.5, 6, 1.5), CFrame.new(offset + Vector3.new(x, -1, 22)), Color3.fromRGB(90, 70, 50), folder, Enum.Material.Wood)
+		part(
+			"Pier",
+			Vector3.new(1.5, 6, 1.5),
+			CFrame.new(offset + Vector3.new(x, -1, -22)),
+			Color3.fromRGB(90, 70, 50),
+			folder,
+			Enum.Material.Wood
+		)
+		part(
+			"PierS",
+			Vector3.new(1.5, 6, 1.5),
+			CFrame.new(offset + Vector3.new(x, -1, 22)),
+			Color3.fromRGB(90, 70, 50),
+			folder,
+			Enum.Material.Wood
+		)
 	end
 
-	local lantern = part("Lantern", Vector3.new(2, 2, 2), CFrame.new(offset + Vector3.new(0, 8, 0)), mirage, folder, Enum.Material.Neon)
+	local lantern = part(
+		"Lantern",
+		Vector3.new(2, 2, 2),
+		CFrame.new(offset + Vector3.new(0, 8, 0)),
+		mirage,
+		folder,
+		Enum.Material.Neon
+	)
 	lantern.Shape = Enum.PartType.Ball
 	lantern.CanCollide = false
 	neonGlow(lantern, mirage, 2.5, 28)
@@ -734,17 +981,17 @@ function ArenaService.ensureAll(): Folder
 	local root = getArenasRoot()
 	-- Purge greybox / art pass < ART_PASS
 	for _, child in root:GetChildren() do
-		if child:IsA("Folder") then
-			local name = child.Name
-			local pass = child:GetAttribute("ArtPass")
-			if name == "ConcordLobby" then
-				if pass ~= ART_PASS then
-					lobbyBuilt = nil
-					child:Destroy()
-				elseif lobbyBuilt == nil then
-					lobbyBuilt = child
-				end
-			elseif pass ~= ART_PASS then
+		local name = child.Name
+		local pass = child:GetAttribute("ArtPass")
+		if name == "ConcordLobby" then
+			if pass ~= LobbyConfig.ArtPass then
+				lobbyBuilt = nil
+				child:Destroy()
+			elseif lobbyBuilt == nil then
+				lobbyBuilt = child
+			end
+		elseif child:IsA("Folder") then
+			if pass ~= ART_PASS then
 				if built[name :: any] then
 					built[name :: any] = nil
 				end
@@ -768,7 +1015,8 @@ function ArenaService.ensureAll(): Folder
 		built.QuaiMirage = buildMirage(root)
 	end
 	ArenaService.ensureLobby()
-	applyArenaLighting(activeId)
+	-- Boot = Concord Hall ; les matchs rappellent applyArenaLighting via setActive
+	LobbyLighting.applyHall()
 	return root
 end
 
@@ -802,102 +1050,27 @@ function ArenaService.getSpawnCFrames(): (CFrame, CFrame)
 	return a, b
 end
 
---[[ Hub Concord — spawn hors arène (pas de duel imposé). ]]
-local function buildLobbyHub(parent: Folder): Folder
-	local folder = Instance.new("Folder")
-	folder.Name = "ConcordLobby"
-	folder.Parent = parent
-	folder:SetAttribute("DisplayName", "Salon Concord")
-	folder:SetAttribute("OffsetX", LOBBY_OFFSET.X)
-	folder:SetAttribute("ArtPass", ART_PASS)
-
-	local offset = LOBBY_OFFSET
-	local floorCol = Color3.fromRGB(28, 34, 48)
-	local accent = Theme.Accent
-	local bone = Theme.Bone
-
-	local pad = part("LobbyFloor", Vector3.new(48, 2, 36), CFrame.new(offset), floorCol, folder, Enum.Material.Slate)
-	pad.Reflectance = 0.08
-	part("LobbyInlay", Vector3.new(22, 0.3, 16), CFrame.new(offset + Vector3.new(0, 1.12, 0)), Color3.fromRGB(40, 52, 72), folder, Enum.Material.Metal)
-
-	-- Anneau hub
-	local ring = part("HubRing", Vector3.new(18, 0.2, 18), CFrame.new(offset + Vector3.new(0, 1.2, 0)), accent, folder, Enum.Material.Neon)
-	ring.Transparency = 0.65
-	ring.CanCollide = false
-	neonGlow(ring, accent, 0.9, 16)
-
-	-- Murs bas / balustrades
-	for _, xz in {
-		Vector3.new(0, 0, -19),
-		Vector3.new(0, 0, 19),
-		Vector3.new(-25, 0, 0),
-		Vector3.new(25, 0, 0),
-	} do
-		local isX = math.abs(xz.X) > 1
-		part(
-			"Rail",
-			if isX then Vector3.new(2, 3, 34) else Vector3.new(46, 3, 2),
-			CFrame.new(offset + Vector3.new(xz.X, 2.5, xz.Z)),
-			CONCORD_STEEL,
-			folder,
-			Enum.Material.Metal
-		)
-	end
-
-	-- Pilier marque
-	local pillar = part("BrandPillar", Vector3.new(3, 10, 3), CFrame.new(offset + Vector3.new(0, 6, -14)), Color3.fromRGB(36, 44, 62), folder, Enum.Material.Metal)
-	local orb = part("BrandOrb", Vector3.new(2.2, 2.2, 2.2), CFrame.new(offset + Vector3.new(0, 12, -14)), accent, folder, Enum.Material.Neon)
-	orb.Shape = Enum.PartType.Ball
-	orb.CanCollide = false
-	neonGlow(orb, accent, 2.2, 22)
-	pillar.Reflectance = 0.12
-
-	arenaTitle(folder, offset, "Salon Concord", bone)
-	coherenceKit(folder, offset, accent)
-	fogBank(folder, offset, Color3.fromRGB(50, 70, 100), 3)
-	driftField(folder, offset, Color3.fromRGB(120, 180, 255), Color3.fromRGB(60, 90, 140), 8, 0.4, "LobbyMist")
-
-	-- SpawnLocation Roblox natif (priorité join)
-	local spawn = Instance.new("SpawnLocation")
-	spawn.Name = "LobbySpawn"
-	spawn.Size = Vector3.new(8, 1, 8)
-	spawn.CFrame = CFrame.new(offset + Vector3.new(0, 2, 4))
-	spawn.Anchored = true
-	spawn.Transparency = 1
-	spawn.CanCollide = false
-	spawn.Duration = 0
-	spawn.Neutral = true
-	spawn.Parent = folder
-
-	local marker = part("LobbyPad", Vector3.new(6, 0.35, 6), CFrame.new(offset + Vector3.new(0, 1.25, 4)), accent, folder, Enum.Material.Neon)
-	marker.Transparency = 0.55
-	marker.CanCollide = false
-	neonGlow(marker, accent, 1.1, 12)
-
-	applyArenaLighting("SanctumAstres")
-	return folder
-end
-
-function ArenaService.ensureLobby(): Folder
+--[[ Concord Hall — grand lobby procédural (voir Lobby/*). ]]
+function ArenaService.ensureLobby(): Instance
 	local root = getArenasRoot()
-	if lobbyBuilt and lobbyBuilt.Parent then
-		return lobbyBuilt
-	end
-	local existing = root:FindFirstChild("ConcordLobby")
-	if existing and existing:IsA("Folder") and existing:GetAttribute("ArtPass") == ART_PASS then
-		lobbyBuilt = existing
-		return existing
-	end
-	if existing then
+	-- Purge ancien Folder greybox / ArtPass obsolète
+	local existing = root:FindFirstChild(LobbyConfig.Name)
+	if existing and existing:GetAttribute("ArtPass") ~= LobbyConfig.ArtPass then
 		existing:Destroy()
+		lobbyBuilt = nil
 	end
-	lobbyBuilt = buildLobbyHub(root)
-	return lobbyBuilt
+	local model = LobbyBuilder.ensure(root)
+	lobbyBuilt = model
+	return model
 end
 
 function ArenaService.getLobbyCFrame(): CFrame
 	ArenaService.ensureLobby()
-	return CFrame.new(LOBBY_OFFSET + Vector3.new(0, 4, 4))
+	return LobbyBuilder.getSpawnCFrame()
+end
+
+function ArenaService.applyLobbyLighting()
+	LobbyLighting.applyHall()
 end
 
 function ArenaService.getDisplayName(): string
@@ -943,7 +1116,8 @@ function ArenaService.stepHazards(dt: number)
 			if kind == "Lava" then
 				if hrp.Position.Y < 1 then
 					local dps = (inst:GetAttribute("Dps") :: number?) or CombatConfig.Arena.LavaDps
-					local dmg = math.min(dps * step, CombatConfig.MaxHp / CombatConfig.Arena.MinLethalFullHpSeconds * step)
+					local dmg =
+						math.min(dps * step, CombatConfig.MaxHp / CombatConfig.Arena.MinLethalFullHpSeconds * step)
 					fighter.hp = math.max(0, fighter.hp - dmg)
 					local humanoid = fighter.character:FindFirstChildOfClass("Humanoid")
 					if humanoid then

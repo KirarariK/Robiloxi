@@ -92,7 +92,7 @@ local function broadcast()
 		scores = scoreboard,
 		fighters = fighters,
 		arenaId = if phase == "Lobby" then "ConcordLobby" else ArenaService.getActiveId(),
-		arenaName = if phase == "Lobby" then "Salon Concord" else ArenaService.getDisplayName(),
+		arenaName = if phase == "Lobby" then "Concord Hall" else ArenaService.getDisplayName(),
 		fairKit = mode == "Ranked" and phase ~= "Lobby",
 		countdown = if phase == "Countdown" then phaseTimer else nil,
 		rematchIn = if phase == "MatchEnd" then phaseTimer else nil,
@@ -396,6 +396,7 @@ function MatchService.returnToLobby()
 	mode = "Casual"
 
 	teleportPlayersToLobby(toTeleport)
+	ArenaService.applyLobbyLighting()
 	if onLobbyHook then
 		onLobbyHook()
 	end
@@ -589,6 +590,13 @@ function MatchService.start()
 	metaRemotes = Remotes.getMeta()
 	ArenaService.ensureAll()
 	ArenaService.ensureLobby()
+	ArenaService.applyLobbyLighting()
+
+	-- Pads monde → même flux que QueueMatch remote (LobbyHud / ProximityPrompt)
+	local LobbyBuilder = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyBuilder"))
+	LobbyBuilder.bindQueuePads(function(player, mode)
+		MatchService.enqueue(player, mode :: any)
+	end)
 
 	metaRemotes.QueueMatch.OnServerEvent:Connect(function(player, payload)
 		if typeof(payload) ~= "table" then

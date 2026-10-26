@@ -40,6 +40,11 @@ check "CombatService" "src/ServerScriptService/BladeConcord/Combat/CombatService
 check "MatchService" "src/ServerScriptService/BladeConcord/Match/MatchService.lua"
 check "BotStub" "src/ServerScriptService/BladeConcord/Combat/BotStub.lua"
 check "ArenaService" "src/ServerScriptService/BladeConcord/Combat/ArenaService.lua"
+check "LobbyBuilder" "src/ServerScriptService/BladeConcord/Lobby/LobbyBuilder.lua"
+check "LobbyConfig" "src/ServerScriptService/BladeConcord/Lobby/LobbyConfig.lua"
+check "LobbyLighting" "src/ServerScriptService/BladeConcord/Lobby/LobbyLighting.lua"
+check "LobbyProps" "src/ServerScriptService/BladeConcord/Lobby/LobbyProps.lua"
+check "LobbyUtil" "src/ServerScriptService/BladeConcord/Lobby/LobbyUtil.lua"
 check "ShopService" "src/ServerScriptService/BladeConcord/Meta/ShopService.lua"
 check "RankedService" "src/ServerScriptService/BladeConcord/Meta/RankedService.lua"
 
@@ -94,3 +99,4 @@ fi
 
 echo "Smoke check PASS"
 exit 0
+
