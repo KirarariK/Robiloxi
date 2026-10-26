@@ -31,19 +31,24 @@ function Rail.create(
 		name: string?,
 	}
 ): Frame
+	local n = math.max(1, #opts.items)
+	local gap = 10
+	local cell = 76 -- cible tactile ≥44px + label
+	local railH = n * cell + (n - 1) * gap
 	local root = Instance.new("Frame")
 	root.Name = opts.name or (if opts.side == "left" then "LeftRail" else "RightRail")
 	root.BackgroundTransparency = 1
 	root.AnchorPoint = if opts.side == "left" then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
 	root.Position = if opts.side == "left" then UDim2.new(0.012, 0, 0.5, 0) else UDim2.new(0.988, 0, 0.5, 0)
-	root.Size = if opts.side == "left" then UDim2.new(0.075, 0, 0.56, 0) else UDim2.new(0.09, 0, 0.6, 0)
+	-- Largeur ~8 % écran ; hauteur calée sur le nombre de boutons (pas de colonne vide)
+	root.Size = UDim2.new(0.085, 0, 0, railH)
 	root.Parent = parent
-	Util.list(root, Enum.FillDirection.Vertical, 8)
+	Util.list(root, Enum.FillDirection.Vertical, gap)
 
 	for i, item in opts.items do
 		local btn = Instance.new("TextButton")
 		btn.Name = item.id
-		btn.Size = UDim2.new(1, 0, 0, 72)
+		btn.Size = UDim2.new(1, 0, 0, cell)
 		btn.BackgroundColor3 = Theme.Ink700
 		btn.BackgroundTransparency = if item.locked or item.soon then 0.35 else 0.12
 		btn.BorderSizePixel = 0

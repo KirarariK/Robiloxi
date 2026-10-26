@@ -13,6 +13,8 @@ local Icons = {}
 local GLYPHS: { [string]: string } = {
 	Shop = "▣",
 	Forms = "✦",
+	Reroll = "↻",
+	Classe = "✦",
 	Quests = "☰",
 	Codes = "※",
 	Ranked = "⚔",
@@ -93,7 +95,7 @@ function Icons.compose(parent: Instance, kind: string, accent: Color3): Frame
 		handle.BorderSizePixel = 0
 		handle.Parent = wrap
 		Util.corner(handle, 3)
-	elseif kind == "Forms" then
+	elseif kind == "Forms" or kind == "Classe" then
 		for i = 1, 3 do
 			local d = Instance.new("Frame")
 			d.Size = UDim2.fromScale(0.22, 0.22)
@@ -106,6 +108,33 @@ function Icons.compose(parent: Instance, kind: string, accent: Color3): Frame
 			d.Parent = wrap
 			Util.corner(d, 2)
 		end
+	elseif kind == "Reroll" then
+		-- Anneau + accent = tirage / reroll
+		local ring = Instance.new("Frame")
+		ring.Size = UDim2.fromScale(0.55, 0.55)
+		ring.Position = UDim2.fromScale(0.225, 0.2)
+		ring.BackgroundColor3 = accent
+		ring.BackgroundTransparency = 0.55
+		ring.BorderSizePixel = 0
+		ring.Parent = wrap
+		Util.corner(ring, 99)
+		Util.stroke(ring, accent, 2, 0.15)
+		local core = Instance.new("Frame")
+		core.Size = UDim2.fromScale(0.28, 0.28)
+		core.Position = UDim2.fromScale(0.36, 0.335)
+		core.BackgroundColor3 = accent
+		core.BackgroundTransparency = 0.1
+		core.BorderSizePixel = 0
+		core.Parent = wrap
+		Util.corner(core, 99)
+		local tip = Instance.new("Frame")
+		tip.Size = UDim2.fromScale(0.18, 0.18)
+		tip.Position = UDim2.fromScale(0.58, 0.14)
+		tip.Rotation = 45
+		tip.BackgroundColor3 = Theme.GoldHi
+		tip.BorderSizePixel = 0
+		tip.Parent = wrap
+		Util.corner(tip, 2)
 	elseif kind == "Quests" then
 		local scroll = Instance.new("Frame")
 		scroll.Size = UDim2.fromScale(0.5, 0.58)
