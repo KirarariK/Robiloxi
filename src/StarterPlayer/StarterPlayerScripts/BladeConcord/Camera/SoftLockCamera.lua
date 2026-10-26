@@ -2,6 +2,7 @@
 --[[
 	Caméra 3e personne lock soft adversaire (GDD §2.1).
 	Pass 3 : hitstop court, ConcordBot as target, restore propre post-KO.
+	Vague 6 : soft spectate quand mort (jusqu'au reset manche / countdown).
 ]]
 
 local Players = game:GetService("Players")
@@ -17,6 +18,7 @@ local SoftLockCamera = {}
 
 local enabled = true
 local cinematicActive = false
+local spectatorActive = false
 local hitstopUntil = 0
 local frozenCFrame: CFrame? = nil
 local opponentUserId: number? = nil
@@ -63,6 +65,14 @@ function SoftLockCamera.setEnabled(value: boolean)
 	enabled = value
 end
 
+function SoftLockCamera.setSpectator(value: boolean)
+	spectatorActive = value
+end
+
+function SoftLockCamera.isSpectator(): boolean
+	return spectatorActive
+end
+
 --[[ Pause soft-lock pendant une cinématique client (KO). ]]
 function SoftLockCamera.beginCinematic()
 	cinematicActive = true
@@ -105,11 +115,40 @@ function SoftLockCamera.start()
 		if typeof(payload) ~= "table" or typeof(payload.fighters) ~= "table" then
 			return
 		end
+		local localDead = false
 		for _, snap in payload.fighters do
 			if snap.userId ~= player.UserId then
 				opponentUserId = snap.userId
-				break
+			elseif snap.userId == player.UserId then
+				local hp = if typeof(snap.hp) == "number" then snap.hp else 1
+				local actionId = tostring(snap.actionId or "")
+				localDead = hp <= 0 or actionId == "Dead"
 			end
+		end
+		-- Soft spectate tant que mort (RoundEnd / MatchEnd) ; clear si vivant
+		if localDead then
+			spectatorActive = true
+		end
+	end)
+
+	remotes.MatchState.OnClientEvent:Connect(function(payload)
+		if typeof(payload) ~= "table" then
+			return
+		end
+		local phase = tostring(payload.phase)
+		-- Reset manche / lobby → fin spectate
+		if phase == "Countdown" or phase == "Fighting" or phase == "Lobby" then
+			spectatorActive = false
+		end
+	end)
+
+	remotes.RoundEnded.OnClientEvent:Connect(function(payload)
+		if typeof(payload) ~= "table" then
+			return
+		end
+		-- Perdant : soft spectate jusqu'au prochain countdown
+		if payload.winnerUserId ~= nil and payload.winnerUserId ~= player.UserId then
+			spectatorActive = true
 		end
 	end)
 
@@ -132,12 +171,36 @@ function SoftLockCamera.start()
 
 		local character = player.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local target = findOpponentRoot()
+		local cfg = CombatConfig.Camera
+
+		if spectatorActive then
+			-- Soft spectate : ancre sur adversaire (ou cadavre local) , offset haut, lerp doux
+			local anchor = if target then target else hrp
+			if not anchor then
+				return
+			end
+			local lookAt = anchor.Position + Vector3.new(0, 2 + (cfg.SpectatorHeightBias or 1.2), 0)
+			local off = cfg.SpectatorOffset or Vector3.new(0, 6.5, 14)
+			local flatLook = Vector3.new(anchor.CFrame.LookVector.X, 0, anchor.CFrame.LookVector.Z)
+			if flatLook.Magnitude < 1e-3 then
+				flatLook = Vector3.new(0, 0, 1)
+			end
+			flatLook = flatLook.Unit
+			local side = Vector3.new(-flatLook.Z, 0, flatLook.X)
+			local desiredPos = lookAt - flatLook * off.Z + side * off.X + Vector3.new(0, off.Y, 0)
+			local desired = CFrame.lookAt(desiredPos, lookAt)
+			desired = CameraShake.applyTo(camera, desired)
+			camera.CameraType = Enum.CameraType.Scriptable
+			local lerp = cfg.SpectatorLerp or 0.07
+			camera.CFrame = camera.CFrame:Lerp(desired, lerp)
+			return
+		end
+
 		if not hrp then
 			return
 		end
 
-		local target = findOpponentRoot()
-		local cfg = CombatConfig.Camera
 		local lookAt = hrp.Position + Vector3.new(0, 2, 0)
 		if target and (target.Position - hrp.Position).Magnitude <= cfg.SoftLockMaxDistance then
 			lookAt = target.Position + Vector3.new(0, 2, 0)
