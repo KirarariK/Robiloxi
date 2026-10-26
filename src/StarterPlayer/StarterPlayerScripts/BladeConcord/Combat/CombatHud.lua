@@ -2,6 +2,7 @@
 --[[
 	HUD combat soigné — HP / stamina / score BO3 / CDs Focus / flash feedback.
 	Pass 3 : countdown 3-2-1 + versus plaque, vignette faction optionnelle.
+	Sprint : copy FR countdown / CONTRE / ALLEZ / REVANCHE + hooks audio.
 ]]
 
 local Players = game:GetService("Players")
@@ -11,6 +12,7 @@ local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shar
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Theme = require(Shared:WaitForChild("Theme"))
+local SoundHooks = require(script.Parent.Parent:WaitForChild("Audio"):WaitForChild("SoundHooks"))
 
 local CombatHud = {}
 
@@ -34,6 +36,7 @@ local versusVs: TextLabel
 local lastCountdownCeil: number? = nil
 local playerFaction: string? = nil
 local lastPhase: string? = nil
+local rematchAnnounced = false
 
 local function corner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -172,6 +175,20 @@ local function pulseCountdown(n: number)
 	}):Play()
 	vignette.BackgroundTransparency = 0.78
 	TweenService:Create(vignette, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+	SoundHooks.play("Countdown")
+end
+
+local function flashBanner(text: string, color: Color3)
+	flashLabel.Text = text
+	flashLabel.TextColor3 = color
+	flashLabel.TextTransparency = 0
+	flashLabel.TextStrokeTransparency = 0.35
+	vignette.BackgroundTransparency = 0.82
+	TweenService:Create(flashLabel, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	TweenService:Create(vignette, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
 end
 
 function CombatHud.start()
@@ -310,16 +327,16 @@ function CombatHud.start()
 	versusLeft.Parent = versusPlate
 
 	versusVs = Instance.new("TextLabel")
-	versusVs.Name = "VS"
+	versusVs.Name = "Contre"
 	versusVs.AnchorPoint = Vector2.new(0.5, 0.5)
 	versusVs.Position = UDim2.fromScale(0.5, 0.5)
-	versusVs.Size = UDim2.new(0.16, 0, 0.7, 0)
+	versusVs.Size = UDim2.new(0.22, 0, 0.7, 0)
 	versusVs.BackgroundColor3 = Theme.InkSoft
 	versusVs.BackgroundTransparency = 0.25
 	versusVs.Font = Theme.FontTitle
-	versusVs.TextSize = 20
+	versusVs.TextSize = 16
 	versusVs.TextColor3 = Theme.AccentHot
-	versusVs.Text = "VS"
+	versusVs.Text = "CONTRE"
 	versusVs.ZIndex = 45
 	versusVs.Parent = versusPlate
 	corner(versusVs, 8)
@@ -508,53 +525,77 @@ function CombatHud.start()
 		end
 
 		local phase = tostring(payload.phase)
-		if phase == "Countdown" and payload.countdown then
+		local arenaBase = tostring(payload.arenaName or payload.arenaId or "")
+		if phase == "Lobby" then
+			arenaLabel.Text = if (payload.queueCount or 0) > 0
+				then string.format("%s · file %d", arenaBase, payload.queueCount)
+				else (if arenaBase ~= "" then arenaBase .. " · salon" else "Salon · duel auto sous peu")
+			if versusPlate.Visible then
+				hideVersus()
+			end
+			countdownLabel.TextTransparency = 1
+			lastCountdownCeil = nil
+			rematchAnnounced = false
+		elseif phase == "Countdown" and payload.countdown then
 			local ceilN = math.max(1, math.ceil(payload.countdown))
+			arenaLabel.Text = arenaBase
 			if lastPhase ~= "Countdown" then
 				local left = resolveFighterName(player.UserId)
 				local right = resolveFighterName(theirId or -9001)
 				showVersus(left, right)
 				lastCountdownCeil = nil
+				if lastPhase == "MatchEnd" or rematchAnnounced then
+					flashBanner("REVANCHE", Theme.Accent)
+					SoundHooks.play("Rematch")
+					rematchAnnounced = false
+				end
 			end
 			if lastCountdownCeil ~= ceilN then
 				lastCountdownCeil = ceilN
 				pulseCountdown(ceilN)
 			end
-			-- Hide legacy flash during dedicated countdown
-			flashLabel.TextTransparency = 1
+			-- Hide legacy flash during dedicated countdown (sauf bandeau REVANCHE)
+			if flashLabel.Text ~= "REVANCHE" then
+				flashLabel.TextTransparency = 1
+			end
 		elseif phase == "Fighting" and lastPhase == "Countdown" then
 			hideVersus()
-			countdownLabel.Text = "COMBAT"
+			arenaLabel.Text = arenaBase
+			countdownLabel.Text = "ALLEZ !"
 			countdownLabel.TextColor3 = Theme.Accent
 			countdownLabel.TextTransparency = 0
-			countdownLabel.TextSize = 52
-			TweenService:Create(countdownLabel, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			countdownLabel.TextSize = 56
+			SoundHooks.play("Fight")
+			TweenService:Create(countdownLabel, TweenInfo.new(0.75, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 				TextTransparency = 1,
 				TextSize = 36,
 			}):Play()
 			lastCountdownCeil = nil
+		elseif phase == "RoundEnd" then
+			if versusPlate.Visible then
+				hideVersus()
+			end
+			countdownLabel.TextTransparency = 1
+			lastCountdownCeil = nil
+			arenaLabel.Text = arenaBase .. " · entre deux rounds…"
+		elseif phase == "MatchEnd" then
+			if versusPlate.Visible then
+				hideVersus()
+			end
+			countdownLabel.TextTransparency = 1
+			lastCountdownCeil = nil
+			arenaLabel.Text = arenaBase .. " · fin · revanche auto"
+			rematchAnnounced = true
 		elseif phase ~= "Countdown" then
 			if versusPlate.Visible then
 				hideVersus()
 			end
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
+			arenaLabel.Text = arenaBase
 		end
 		lastPhase = phase
 	end)
-
-	local function flash(text: string, color: Color3)
-		flashLabel.Text = text
-		flashLabel.TextColor3 = color
-		flashLabel.TextTransparency = 0
-		flashLabel.TextStrokeTransparency = 0.35
-		vignette.BackgroundTransparency = 0.82
-		TweenService:Create(flashLabel, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		}):Play()
-		TweenService:Create(vignette, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
-	end
 
 	remotes.HitResolved.OnClientEvent:Connect(function(payload)
 		if typeof(payload) ~= "table" then
@@ -565,17 +606,17 @@ function CombatHud.start()
 			return
 		end
 		if payload.perfect then
-			flash("PARADE PARFAITE", Theme.Perfect)
+			flashBanner("PARADE PARFAITE", Theme.Perfect)
 		elseif payload.riposte then
-			flash("RIPOSTE", Theme.AccentHot)
+			flashBanner("RIPOSTE", Theme.AccentHot)
 		elseif payload.guardBreak then
-			flash("GARDE BRISÉE", Theme.Danger)
+			flashBanner("GARDE BRISÉE", Theme.Danger)
 		elseif payload.clash then
-			flash("CLASH", Theme.Clash)
+			flashBanner("CLASH", Theme.Clash)
 		elseif payload.dodged then
-			flash("ESQUIVE", Theme.Success)
+			flashBanner("ESQUIVE", Theme.Success)
 		elseif payload.critical then
-			flash("CRITIQUE", Theme.Danger)
+			flashBanner("CRITIQUE", Theme.Danger)
 		end
 	end)
 
@@ -585,16 +626,16 @@ function CombatHud.start()
 		end
 		if payload.matchOver then
 			if payload.winnerUserId == player.UserId then
-				flash("CONCORDANCE — VICTOIRE", Theme.Success)
+				flashBanner("CONCORDANCE — VICTOIRE", Theme.Success)
 			else
-				flash("DÉFAITE", Theme.Danger)
+				flashBanner("DÉFAITE", Theme.Danger)
 			end
 		elseif payload.winnerUserId == player.UserId then
-			flash("ROUND GAGNÉ", Theme.Success)
+			flashBanner("ROUND GAGNÉ", Theme.Success)
 		elseif payload.winnerUserId == nil then
-			flash("ÉGALITÉ", Theme.Muted)
+			flashBanner("ÉGALITÉ", Theme.Muted)
 		else
-			flash("ROUND PERDU", Theme.Danger)
+			flashBanner("ROUND PERDU", Theme.Danger)
 		end
 	end)
 
@@ -603,11 +644,11 @@ function CombatHud.start()
 			return
 		end
 		if payload.kind == "FocusPushParried" then
-			flash("POUSSÉE RENVOYÉE", Theme.Focus)
+			flashBanner("POUSSÉE RENVOYÉE", Theme.Focus)
 		elseif payload.kind == "FocusPush" then
-			flash("POUSSÉE FOCUS", Theme.Focus)
+			flashBanner("POUSSÉE FOCUS", Theme.Focus)
 		elseif payload.kind == "FocusDash" then
-			flash("DASH FOCUS", Theme.BladeFocus)
+			flashBanner("DASH FOCUS", Theme.BladeFocus)
 		end
 	end)
 end
