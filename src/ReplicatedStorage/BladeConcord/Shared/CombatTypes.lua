@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Enums et types partagés — Blade Concord P0
+	Enums et types partagés — Blade Concord P0–P3
 	Pas de logique ; source de vérité des noms d'états / résultats.
 ]]
 
@@ -14,6 +14,10 @@ export type ActionId =
 	| "Guard"
 	| "Stagger"
 	| "RiposteLock"
+	| "Dodge"
+	| "Dash"
+	| "FocusPush"
+	| "FocusDash"
 	| "Dead"
 
 export type HitResult =
@@ -22,10 +26,17 @@ export type HitResult =
 	| "Perfect"
 	| "GuardBreak"
 	| "Clash"
-	| "Blocked" -- alias lisible côté UI pour Chip/Perfect si besoin
+	| "Blocked"
 	| "Miss"
+	| "Dodged"
 
 export type GuardResult = "None" | "Normal" | "Perfect" | "Break"
+
+export type MobilityKind = "Dodge" | "Dash" | "Feint"
+
+export type FocusKind = "Push" | "DashFocus"
+
+export type MatchMode = "Casual" | "Ranked"
 
 export type CombatFlags = {
 	guarding: boolean,
@@ -33,6 +44,7 @@ export type CombatFlags = {
 	riposteLock: boolean,
 	stagger: boolean,
 	riposteBuff: boolean,
+	iFrames: boolean,
 }
 
 local CombatTypes = {
@@ -48,6 +60,10 @@ local CombatTypes = {
 		Guard = "Guard" :: ActionId,
 		Stagger = "Stagger" :: ActionId,
 		RiposteLock = "RiposteLock" :: ActionId,
+		Dodge = "Dodge" :: ActionId,
+		Dash = "Dash" :: ActionId,
+		FocusPush = "FocusPush" :: ActionId,
+		FocusDash = "FocusDash" :: ActionId,
 		Dead = "Dead" :: ActionId,
 	},
 	HitResult = {
@@ -57,12 +73,26 @@ local CombatTypes = {
 		GuardBreak = "GuardBreak" :: HitResult,
 		Clash = "Clash" :: HitResult,
 		Miss = "Miss" :: HitResult,
+		Dodged = "Dodged" :: HitResult,
 	},
 	GuardResult = {
 		None = "None" :: GuardResult,
 		Normal = "Normal" :: GuardResult,
 		Perfect = "Perfect" :: GuardResult,
 		Break = "Break" :: GuardResult,
+	},
+	MobilityKind = {
+		Dodge = "Dodge" :: MobilityKind,
+		Dash = "Dash" :: MobilityKind,
+		Feint = "Feint" :: MobilityKind,
+	},
+	FocusKind = {
+		Push = "Push" :: FocusKind,
+		DashFocus = "DashFocus" :: FocusKind,
+	},
+	MatchMode = {
+		Casual = "Casual" :: MatchMode,
+		Ranked = "Ranked" :: MatchMode,
 	},
 }
 

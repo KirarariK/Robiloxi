@@ -1,6 +1,7 @@
 --!strict
 --[[
 	Parade hold, angle, perfect window, chip, guard break.
+	Fenêtre perfect modulable via attribut BC_PerfectWindowBonus (formes).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,11 +41,13 @@ function GuardService.setHolding(fighter: FighterState.Fighter, holding: boolean
 	end
 
 	local wasHolding = fighter.guardHolding
-	-- Ignore hold pendant recovery d'attaque exclusive / stagger / riposte lock
 	local now = os.clock()
 	local blocked = fighter.actionId == CombatTypes.ActionId.Startup
 		or fighter.actionId == CombatTypes.ActionId.Active
 		or fighter.actionId == CombatTypes.ActionId.Recovery
+		or fighter.actionId == CombatTypes.ActionId.Dodge
+		or fighter.actionId == CombatTypes.ActionId.Dash
+		or fighter.actionId == CombatTypes.ActionId.FocusDash
 		or now < fighter.staggerUntil
 		or now < fighter.riposteLockUntil
 
@@ -83,7 +86,7 @@ end
 
 export type IncomingResolution = {
 	guardResult: CombatTypes.GuardResult,
-	damageMultiplier: number, -- 1 = full, (1-absorb) = chip, 0 = perfect
+	damageMultiplier: number,
 	applyStaggerToDefender: boolean,
 	applyRiposteLockToAttacker: boolean,
 	refundStamina: number,
@@ -109,14 +112,17 @@ function GuardService.resolveIncomingHit(
 		}
 	end
 
-	-- Perfect : |t_contact - t_intent_edge| dans ±PerfectWindow
+	local perfectWindow = cfg.PerfectWindow
+	local bonus = defender.player:GetAttribute("BC_PerfectWindowBonus")
+	if typeof(bonus) == "number" then
+		perfectWindow += bonus
+	end
+
 	local edge = defender.guardIntentEdgeClock
 	local isPerfect = false
 	if edge then
 		local delta = math.abs(_contactClock - edge)
-		-- Aussi : hold récemment maintenu — fenêtre autour du contact vs edge
-		-- TDD : |t_contact - t_intent_edge| dans ±90 ms
-		isPerfect = delta <= cfg.PerfectWindow
+		isPerfect = delta <= perfectWindow
 	end
 
 	if isPerfect then
@@ -130,7 +136,6 @@ function GuardService.resolveIncomingHit(
 		}
 	end
 
-	-- Guard break si stamina < seuil à l'impact
 	if defender.stamina < cfg.GuardBreakStaminaThreshold then
 		return {
 			guardResult = CombatTypes.GuardResult.Break,
@@ -141,7 +146,6 @@ function GuardService.resolveIncomingHit(
 		}
 	end
 
-	-- Impact stamina cost
 	StaminaService.tryConsume(defender, cfg.ImpactStaminaCost)
 
 	return {

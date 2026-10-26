@@ -1,26 +1,54 @@
 --!strict
 --[[
-	Résout / crée les RemoteEvents sous ReplicatedStorage.BladeConcord.Remotes.Combat
+	Résout / crée les RemoteEvents sous ReplicatedStorage.BladeConcord.Remotes.*
 	Création côté serveur uniquement ; le client WaitForChild.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local REMOTE_NAMES = {
+local COMBAT_REMOTE_NAMES = {
 	"AttackIntent",
 	"GuardIntent",
+	"MobilityIntent",
+	"FocusIntent",
 	"CombatState",
 	"HitResolved",
 	"RoundEnded",
+	"MatchState",
+	"FxEvent",
+}
+
+local META_REMOTE_NAMES = {
+	"MetaState",
+	"ShopPurchase",
+	"GachaPull",
+	"EquipLoadout",
+	"SelectFaction",
+	"QueueMatch",
+	"ClaimQuest",
 }
 
 export type CombatRemotes = {
 	AttackIntent: RemoteEvent,
 	GuardIntent: RemoteEvent,
+	MobilityIntent: RemoteEvent,
+	FocusIntent: RemoteEvent,
 	CombatState: RemoteEvent,
 	HitResolved: RemoteEvent,
 	RoundEnded: RemoteEvent,
+	MatchState: RemoteEvent,
+	FxEvent: RemoteEvent,
+}
+
+export type MetaRemotes = {
+	MetaState: RemoteEvent,
+	ShopPurchase: RemoteEvent,
+	GachaPull: RemoteEvent,
+	EquipLoadout: RemoteEvent,
+	SelectFaction: RemoteEvent,
+	QueueMatch: RemoteEvent,
+	ClaimQuest: RemoteEvent,
 }
 
 local function getBladeRoot(): Folder
@@ -37,29 +65,21 @@ local function getBladeRoot(): Folder
 	return root :: Folder
 end
 
-local function getCombatFolder(): Folder
-	local blade = getBladeRoot()
-	local remotes = blade:FindFirstChild("Remotes")
-	if not remotes then
-		if RunService:IsServer() then
-			remotes = Instance.new("Folder")
-			remotes.Name = "Remotes"
-			remotes.Parent = blade
-		else
-			remotes = blade:WaitForChild("Remotes")
-		end
+local function getFolder(parent: Instance, name: string): Folder
+	local existing = parent:FindFirstChild(name)
+	if existing and existing:IsA("Folder") then
+		return existing
 	end
-	local combat = remotes:FindFirstChild("Combat")
-	if not combat then
-		if RunService:IsServer() then
-			combat = Instance.new("Folder")
-			combat.Name = "Combat"
-			combat.Parent = remotes
-		else
-			combat = remotes:WaitForChild("Combat")
+	if RunService:IsServer() then
+		if existing then
+			existing:Destroy()
 		end
+		local folder = Instance.new("Folder")
+		folder.Name = name
+		folder.Parent = parent
+		return folder
 	end
-	return combat :: Folder
+	return parent:WaitForChild(name) :: Folder
 end
 
 local function ensureRemote(folder: Folder, name: string): RemoteEvent
@@ -79,17 +99,31 @@ local function ensureRemote(folder: Folder, name: string): RemoteEvent
 	return remote
 end
 
+local function mapRemotes(folder: Folder, names: { string }): any
+	local map: any = {}
+	for _, name in names do
+		map[name] = ensureRemote(folder, name)
+	end
+	return map
+end
+
 local Remotes = {}
 
 function Remotes.get(): CombatRemotes
-	local folder = getCombatFolder()
-	local map: any = {}
-	for _, name in REMOTE_NAMES do
-		map[name] = ensureRemote(folder, name)
-	end
-	return map :: CombatRemotes
+	local blade = getBladeRoot()
+	local remotes = getFolder(blade, "Remotes")
+	local combat = getFolder(remotes, "Combat")
+	return mapRemotes(combat, COMBAT_REMOTE_NAMES) :: CombatRemotes
 end
 
-Remotes.Names = REMOTE_NAMES
+function Remotes.getMeta(): MetaRemotes
+	local blade = getBladeRoot()
+	local remotes = getFolder(blade, "Remotes")
+	local meta = getFolder(remotes, "Meta")
+	return mapRemotes(meta, META_REMOTE_NAMES) :: MetaRemotes
+end
+
+Remotes.CombatNames = COMBAT_REMOTE_NAMES
+Remotes.MetaNames = META_REMOTE_NAMES
 
 return Remotes

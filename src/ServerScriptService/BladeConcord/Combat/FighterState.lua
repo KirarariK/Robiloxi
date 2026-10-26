@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Store d'état combattant — HP / stamina / action canoniques serveur.
+	Store d'état combattant — HP / stamina / action / mobilité / Focus canoniques serveur.
 ]]
 
 local CombatConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("BladeConcord"):WaitForChild("Shared"):WaitForChild("CombatConfig"))
@@ -19,14 +19,29 @@ export type Fighter = {
 	riposteLockUntil: number,
 	staggerUntil: number,
 	riposteBuffUntil: number,
+	iFramesUntil: number,
+	dodgeCooldownUntil: number,
+	dashCooldownUntil: number,
+	focusPushCooldownUntil: number,
+	focusDashCooldownUntil: number,
+	lastDodgeClock: number,
 	lastAttackSeq: number,
 	lastGuardSeq: number,
+	lastMobilitySeq: number,
+	lastFocusSeq: number,
 	lastStaminaConsumeClock: number,
-	hitThisSwing: { [number]: boolean }, -- userId déjà touché ce swing
+	hitThisSwing: { [number]: boolean },
 	character: Model?,
 	bladePart: BasePart?,
 	hurtboxes: { BasePart },
 	walkSpeedBase: number,
+	-- Form passives (resolved per match mode)
+	formId: string?,
+	formRarity: string?,
+	formUniqueUsed: boolean, -- Flux / Mur / Rafale once flags
+	aegisWallAvailable: boolean,
+	zephyrDoubleDodgeAvailable: boolean,
+	astraFluxArmed: boolean,
 }
 
 local FighterState = {}
@@ -46,14 +61,28 @@ function FighterState.create(player: Player): Fighter
 		riposteLockUntil = 0,
 		staggerUntil = 0,
 		riposteBuffUntil = 0,
+		iFramesUntil = 0,
+		dodgeCooldownUntil = 0,
+		dashCooldownUntil = 0,
+		focusPushCooldownUntil = 0,
+		focusDashCooldownUntil = 0,
+		lastDodgeClock = 0,
 		lastAttackSeq = 0,
 		lastGuardSeq = 0,
+		lastMobilitySeq = 0,
+		lastFocusSeq = 0,
 		lastStaminaConsumeClock = 0,
 		hitThisSwing = {},
 		character = nil,
 		bladePart = nil,
 		hurtboxes = {},
 		walkSpeedBase = 16,
+		formId = "Astra",
+		formRarity = "Common",
+		formUniqueUsed = false,
+		aegisWallAvailable = true,
+		zephyrDoubleDodgeAvailable = true,
+		astraFluxArmed = false,
 	}
 	byPlayer[player] = fighter
 	return fighter
@@ -69,6 +98,15 @@ function FighterState.getAll(): { Fighter }
 		table.insert(list, f)
 	end
 	return list
+end
+
+function FighterState.getOpponent(fighter: Fighter): Fighter?
+	for _, f in byPlayer do
+		if f.player ~= fighter.player then
+			return f
+		end
+	end
+	return nil
 end
 
 function FighterState.remove(player: Player)
@@ -87,7 +125,25 @@ function FighterState.resetRound(fighter: Fighter)
 	fighter.riposteLockUntil = 0
 	fighter.staggerUntil = 0
 	fighter.riposteBuffUntil = 0
+	fighter.iFramesUntil = 0
 	fighter.hitThisSwing = {}
+	fighter.formUniqueUsed = false
+	fighter.astraFluxArmed = false
+	-- Wall / Rafale : 1×/match — reset only on match start via resetMatch
+end
+
+function FighterState.resetMatch(fighter: Fighter)
+	FighterState.resetRound(fighter)
+	fighter.aegisWallAvailable = true
+	fighter.zephyrDoubleDodgeAvailable = true
+	fighter.focusPushCooldownUntil = 0
+	fighter.focusDashCooldownUntil = 0
+	fighter.dodgeCooldownUntil = 0
+	fighter.dashCooldownUntil = 0
+end
+
+function FighterState.hasIFrames(fighter: Fighter): boolean
+	return os.clock() < fighter.iFramesUntil
 end
 
 function FighterState.snapshot(fighter: Fighter)
@@ -98,12 +154,21 @@ function FighterState.snapshot(fighter: Fighter)
 		stamina = fighter.stamina,
 		actionId = fighter.actionId,
 		attackKind = fighter.attackKind,
+		formId = fighter.formId,
+		formRarity = fighter.formRarity,
+		cooldowns = {
+			dodge = math.max(0, fighter.dodgeCooldownUntil - now),
+			dash = math.max(0, fighter.dashCooldownUntil - now),
+			focusPush = math.max(0, fighter.focusPushCooldownUntil - now),
+			focusDash = math.max(0, fighter.focusDashCooldownUntil - now),
+		},
 		flags = {
 			guarding = fighter.guardHolding and fighter.actionId ~= CombatTypes.ActionId.Dead,
 			exhausted = fighter.exhausted,
 			riposteLock = now < fighter.riposteLockUntil,
 			stagger = now < fighter.staggerUntil,
 			riposteBuff = now < fighter.riposteBuffUntil,
+			iFrames = now < fighter.iFramesUntil,
 		},
 	}
 end

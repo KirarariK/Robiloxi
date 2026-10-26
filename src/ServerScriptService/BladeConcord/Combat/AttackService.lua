@@ -1,6 +1,6 @@
 --!strict
 --[[
-	State machine Idle → Startup → Active → Recovery ; reject inputs illégaux.
+	State machine Idle → Startup → Active → Recovery ; feinte (cancel pre-active).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,7 +27,6 @@ function AttackService.canStart(fighter: FighterState.Fighter, kind: CombatTypes
 	if now < fighter.staggerUntil or now < fighter.riposteLockUntil then
 		return false
 	end
-	-- Max 1 AttackIntent accepté par transition Idle→Startup (ou Guard→Startup)
 	if fighter.actionId ~= CombatTypes.ActionId.Idle and fighter.actionId ~= CombatTypes.ActionId.Guard then
 		return false
 	end
@@ -63,16 +62,36 @@ function AttackService.tryStart(fighter: FighterState.Fighter, kind: CombatTypes
 	return true
 end
 
+--[[
+	Feinte : cancel légère pendant Startup (avant Active) → Guard intent.
+	Coût GDD : 8 stamina. LMB cancel → RMB.
+]]
+function AttackService.tryFeint(fighter: FighterState.Fighter, seq: number): boolean
+	if seq <= fighter.lastMobilitySeq then
+		return false
+	end
+	if fighter.actionId ~= CombatTypes.ActionId.Startup then
+		return false
+	end
+	if fighter.attackKind ~= CombatTypes.AttackKind.Light then
+		return false
+	end
+	if not StaminaService.tryConsume(fighter, CombatConfig.Feint.StaminaCost) then
+		return false
+	end
+
+	fighter.lastMobilitySeq = seq
+	fighter.attackKind = nil
+	fighter.hitThisSwing = {}
+	fighter.actionId = CombatTypes.ActionId.Guard
+	fighter.guardHolding = true
+	fighter.guardIntentEdgeClock = os.clock()
+	fighter.phaseTimer = 0
+	return true
+end
+
 function AttackService.step(fighter: FighterState.Fighter, dt: number)
 	local now = os.clock()
-
-	-- Failsafe softlock
-	if fighter.actionId ~= CombatTypes.ActionId.Idle
-		and fighter.actionId ~= CombatTypes.ActionId.Guard
-		and fighter.actionId ~= CombatTypes.ActionId.Dead
-	then
-		-- handled via phaseTimer
-	end
 
 	if now < fighter.staggerUntil then
 		fighter.actionId = CombatTypes.ActionId.Stagger
