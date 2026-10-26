@@ -1,0 +1,6 @@
+---
+description: Blade Concord project handoff — read AGENTS.md first
+alwaysApply: true
+---
+
+Before exploring or editing this Roblox project, read and follow **AGENTS.md** at the repo root (full handoff: état map, bindings, MCP, skills, règles main-only). Prefer French with the user. Do not open PRs; push `main`. Do not resume procedural animation work unless asked. Skills live under `.agents/skills/` — especially `roblox-building`, `roblox-lighting`, `roblox-studio-mcp`.
