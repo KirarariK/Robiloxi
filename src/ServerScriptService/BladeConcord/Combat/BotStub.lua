@@ -95,7 +95,9 @@ local function ensureBotModel(spawnCf: CFrame): Model
 	humanoid.Parent = model
 
 	model.Parent = workspace
-	SaberBuilder.attach(model, Theme.Danger)
+	local build = SaberBuilder.attach(model, Theme.Danger)
+	-- Garde une ref directe : FindFirstChild peut rater si attach partiel
+	model:SetAttribute("BC_HasSaber", build.blade ~= nil)
 	botModel = model
 	return model
 end
@@ -112,8 +114,19 @@ function BotStub.enable(spawnCf: CFrame)
 		botFighter = FighterState.create(botPlayer :: any)
 	end
 	botFighter.character = model
-	local blade = model:FindFirstChild("SaberBlade", true)
-	botFighter.bladePart = if blade and blade:IsA("BasePart") then blade else nil
+	local blade: BasePart? = nil
+	for _, inst in CollectionService:GetTagged(CombatConfig.Tags.SaberBlade) do
+		if inst:IsDescendantOf(model) and inst:IsA("BasePart") then
+			blade = inst
+			break
+		end
+	end
+	if not blade then
+		-- Re-try attach (nil sabre race)
+		local rebuild = SaberBuilder.attach(model, Theme.Danger)
+		blade = rebuild.blade
+	end
+	botFighter.bladePart = blade
 	botFighter.hurtboxes = {}
 	for _, name in { "UpperTorso", "Head" } do
 		local p = model:FindFirstChild(name)

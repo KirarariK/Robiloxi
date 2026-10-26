@@ -24,6 +24,7 @@ local CameraShake: any = nil
 local SoundHooks: any = nil
 local SoftLockCamera: any = nil
 local koBusy = false
+local hitstopUntil = 0
 
 local function getFolder(): Folder
 	local f = Workspace:FindFirstChild("BC_Fx")
@@ -204,9 +205,33 @@ local function dashTrail(root: BasePart, color: Color3)
 	end)
 end
 
+--[[ Hitstop client-only : pause soft-lock + punch FOV (~2–4 frames). Pas de time-scale serveur. ]]
+local function clientHitstop(seconds: number)
+	local untilT = os.clock() + seconds
+	if untilT > hitstopUntil then
+		hitstopUntil = untilT
+	end
+	if SoftLockCamera and SoftLockCamera.hitstop then
+		SoftLockCamera.hitstop(seconds)
+	end
+	local camera = Workspace.CurrentCamera
+	if camera then
+		local base = camera.FieldOfView
+		camera.FieldOfView = math.clamp(base - 3.5, 48, 80)
+		task.delay(seconds, function()
+			if camera and camera.Parent then
+				TweenService:Create(camera, TweenInfo.new(0.08), { FieldOfView = base }):Play()
+			end
+		end)
+	end
+end
+
 local function perfectFlash(position: Vector3)
-	sparkBurst(position, Theme.Perfect, 40)
-	ringWave(position, Theme.Perfect, 10)
+	-- Sparks densifiés Pass 3
+	sparkBurst(position, Theme.Perfect, 72)
+	sparkBurst(position + Vector3.new(0, 0.6, 0), Color3.new(1, 1, 1), 36)
+	ringWave(position, Theme.Perfect, 12)
+	ringWave(position, Theme.Clash, 7)
 
 	-- Screen white flash léger
 	local cc = Lighting:FindFirstChild("BC_ImpactCC")
@@ -216,13 +241,13 @@ local function perfectFlash(position: Vector3)
 		cc.Parent = Lighting
 	end
 	local effect = cc :: ColorCorrectionEffect
-	effect.Brightness = 0.35
-	effect.Contrast = 0.15
-	TweenService:Create(effect, TweenInfo.new(0.25), { Brightness = 0, Contrast = 0 }):Play()
+	effect.Brightness = 0.42
+	effect.Contrast = 0.2
+	TweenService:Create(effect, TweenInfo.new(0.28), { Brightness = 0, Contrast = 0 }):Play()
 end
 
 local function impactFrame(seconds: number)
-	-- Freeze visuelle courte via ColorCorrection + cam shake
+	-- Freeze visuelle courte via ColorCorrection + hitstop caméra
 	local cc = Lighting:FindFirstChild("BC_ImpactCC")
 	if not cc then
 		cc = Instance.new("ColorCorrectionEffect")
@@ -230,8 +255,9 @@ local function impactFrame(seconds: number)
 		cc.Parent = Lighting
 	end
 	local effect = cc :: ColorCorrectionEffect
-	effect.Contrast = 0.35
-	effect.Saturation = -0.2
+	effect.Contrast = 0.4
+	effect.Saturation = -0.25
+	clientHitstop(seconds)
 	task.delay(seconds, function()
 		TweenService:Create(effect, TweenInfo.new(0.12), { Contrast = 0, Saturation = 0 }):Play()
 	end)
@@ -352,6 +378,7 @@ local function koCinematic(winnerId: number?, loserId: number?)
 	task.delay(duration, function()
 		if conn then
 			conn:Disconnect()
+			conn = nil
 		end
 		TweenService:Create(effect, TweenInfo.new(0.28), {
 			Saturation = 0,
@@ -362,11 +389,18 @@ local function koCinematic(winnerId: number?, loserId: number?)
 		if camera then
 			TweenService:Create(camera, TweenInfo.new(0.3), { FieldOfView = baseFov }):Play()
 		end
+		-- Restore soft-lock AVANT de relâcher (évite 1 frame Custom cassée)
 		if SoftLockCamera then
 			SoftLockCamera.endCinematic()
+		elseif camera then
+			camera.CameraType = Enum.CameraType.Scriptable
 		end
 		koBusy = false
 	end)
+end
+
+function CombatFx.isHitstopping(): boolean
+	return os.clock() < hitstopUntil
 end
 
 function CombatFx.bind(deps: { CameraShake: any?, SoundHooks: any?, SoftLockCamera: any? })
@@ -391,32 +425,39 @@ function CombatFx.start()
 			perfectFlash(pos)
 			local blade = findBlade(payload.defenderUserId or 0) or findBlade(payload.attackerUserId or 0)
 			if blade then
-				SaberBuilder.burstClash(blade, 36)
+				SaberBuilder.burstClash(blade, 56)
 			end
 			if involvesMe and CameraShake then
 				CameraShake.shake(0.35, 0.25)
 			end
-			impactFrame(0.05)
+			if involvesMe then
+				impactFrame(0.055)
+			end
 			if SoundHooks then
 				SoundHooks.play("Perfect")
 			end
 		elseif payload.clash then
-			sparkBurst(pos, Theme.Clash, 32)
+			sparkBurst(pos, Theme.Clash, 40)
 			local blade = findBlade(payload.attackerUserId or 0)
 			if blade then
-				SaberBuilder.burstClash(blade, 28)
+				SaberBuilder.burstClash(blade, 36)
 			end
 			if involvesMe and CameraShake then
 				CameraShake.shake(0.28, 0.2)
 			end
-			impactFrame(0.04)
+			if involvesMe then
+				impactFrame(0.045)
+			end
 			if SoundHooks then
 				SoundHooks.play("Clash")
 			end
 		elseif payload.guardBreak then
-			sparkBurst(pos, Theme.AccentHot, 22)
+			sparkBurst(pos, Theme.AccentHot, 28)
 			if involvesMe and CameraShake then
 				CameraShake.shake(0.4, 0.3)
+			end
+			if involvesMe then
+				impactFrame(0.04)
 			end
 			if SoundHooks then
 				SoundHooks.play("GuardBreak")
@@ -427,12 +468,12 @@ function CombatFx.start()
 				SoundHooks.play("Dodge")
 			end
 		elseif (payload.damage or 0) > 0 then
-			sparkBurst(pos, Theme.Danger, 20)
+			sparkBurst(pos, Theme.Danger, 24)
 			if involvesMe and CameraShake then
 				CameraShake.shake(0.22, 0.18)
 			end
-			if (payload.damage or 0) >= 20 then
-				impactFrame(0.035)
+			if involvesMe then
+				impactFrame(if (payload.damage or 0) >= 20 then 0.04 else 0.028)
 			end
 			if SoundHooks then
 				SoundHooks.play("Hit")

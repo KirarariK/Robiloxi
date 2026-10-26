@@ -27,6 +27,8 @@ local phaseTimer = 0
 local arenaRotationIndex = 1
 local queue: { Player } = {}
 local activePair: { Player } = {}
+local soloPractice = false
+local soloLobbyWait = 0
 local onMatchEndHook: ((winner: Player?, loser: Player?, mode: CombatTypes.MatchMode) -> ())? = nil
 local onRoundEndHook: ((winner: Player?) -> ())? = nil
 
@@ -35,12 +37,23 @@ local function broadcast()
 	for userId, wins in scores do
 		table.insert(scoreboard, { userId = userId, wins = wins })
 	end
+	local fighters = {}
+	for _, p in activePair do
+		table.insert(fighters, {
+			userId = p.UserId,
+			name = p.DisplayName ~= "" and p.DisplayName or p.Name,
+		})
+	end
+	if soloPractice then
+		table.insert(fighters, { userId = -9001, name = "ConcordBot" })
+	end
 	remotes.MatchState:FireAllClients({
 		phase = phase,
 		mode = mode,
 		roundNumber = roundNumber,
 		firstTo = CombatConfig.Match.FirstTo,
 		scores = scoreboard,
+		fighters = fighters,
 		arenaId = ArenaService.getActiveId(),
 		arenaName = ArenaService.getDisplayName(),
 		fairKit = mode == "Ranked",
@@ -154,6 +167,25 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 		end
 	end
 
+	-- Resolve loser for KO camera (player ou bot -9001)
+	local function resolveLoserUserId(winnerId: number?): number?
+		if not winnerId then
+			return nil
+		end
+		if soloPractice then
+			if winnerId == -9001 then
+				return if activePair[1] then activePair[1].UserId else nil
+			end
+			return -9001
+		end
+		for _, p in activePair do
+			if p.UserId ~= winnerId then
+				return p.UserId
+			end
+		end
+		return nil
+	end
+
 	if matchWinnerId then
 		phase = "MatchEnd"
 		phaseTimer = 3
@@ -182,7 +214,7 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 			kind = "KoFinisher",
 			payload = {
 				winnerUserId = matchWinnerId,
-				loserUserId = if loser then loser.UserId else nil,
+				loserUserId = resolveLoserUserId(matchWinnerId),
 				matchOver = true,
 			},
 		})
@@ -197,6 +229,7 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 			kind = "KoFinisher",
 			payload = {
 				winnerUserId = winId,
+				loserUserId = resolveLoserUserId(winId),
 				matchOver = false,
 			},
 		})
@@ -266,9 +299,6 @@ function MatchService.rematch()
 		MatchService.beginCountdown()
 	end
 end
-
-local soloPractice = false
-local soloLobbyWait = 0
 
 function MatchService.isSoloPractice(): boolean
 	return soloPractice

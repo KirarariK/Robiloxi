@@ -6,8 +6,10 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
+local Visual = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual")
 local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local SaberBuilder = require(Visual:WaitForChild("SaberBuilder"))
 local PlayerDataService = require(script.Parent.Parent.Data:WaitForChild("PlayerDataService"))
 
 local ShopService = {}
@@ -80,6 +82,12 @@ function ShopService.purchase(player: Player, itemId: string, usePremium: boolea
 		profile.equippedCosmetics.emote = itemId
 	elseif item.category == "Finisher" then
 		profile.equippedCosmetics.finisher = itemId
+	end
+
+	-- Appliquer immédiatement sur le sabre runtime (évite wait respawn)
+	local character = player.Character
+	if character then
+		SaberBuilder.applyCosmeticsFromModel(character, profile.equippedCosmetics)
 	end
 
 	PlayerDataService.save(player)

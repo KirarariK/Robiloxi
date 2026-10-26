@@ -1,6 +1,7 @@
 --!strict
 --[[
 	Caméra 3e personne lock soft adversaire (GDD §2.1).
+	Pass 3 : hitstop court, ConcordBot as target, restore propre post-KO.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,31 +17,46 @@ local SoftLockCamera = {}
 
 local enabled = true
 local cinematicActive = false
+local hitstopUntil = 0
+local frozenCFrame: CFrame? = nil
 local opponentUserId: number? = nil
 
+local function botRoot(): BasePart?
+	local bot = Workspace:FindFirstChild("ConcordBot")
+	if bot and bot:IsA("Model") then
+		local hrp = bot:FindFirstChild("HumanoidRootPart")
+		if hrp and hrp:IsA("BasePart") then
+			return hrp
+		end
+	end
+	return nil
+end
+
 local function findOpponentRoot(): BasePart?
-	if not opponentUserId then
-		-- Fallback : premier autre joueur
-		local localId = Players.LocalPlayer.UserId
-		for _, p in Players:GetPlayers() do
-			if p.UserId ~= localId and p.Character then
-				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-				if hrp and hrp:IsA("BasePart") then
-					return hrp
-				end
+	if opponentUserId == -9001 then
+		return botRoot()
+	end
+	if opponentUserId then
+		local p = Players:GetPlayerByUserId(opponentUserId)
+		if p and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hrp and hrp:IsA("BasePart") then
+				return hrp
 			end
 		end
 		return nil
 	end
-	local p = Players:GetPlayerByUserId(opponentUserId)
-	if not p or not p.Character then
-		return nil
+	-- Fallback : autre joueur, sinon ConcordBot (solo)
+	local localId = Players.LocalPlayer.UserId
+	for _, p in Players:GetPlayers() do
+		if p.UserId ~= localId and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hrp and hrp:IsA("BasePart") then
+				return hrp
+			end
+		end
 	end
-	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-	if hrp and hrp:IsA("BasePart") then
-		return hrp
-	end
-	return nil
+	return botRoot()
 end
 
 function SoftLockCamera.setEnabled(value: boolean)
@@ -50,14 +66,34 @@ end
 --[[ Pause soft-lock pendant une cinématique client (KO). ]]
 function SoftLockCamera.beginCinematic()
 	cinematicActive = true
+	frozenCFrame = nil
 end
 
 function SoftLockCamera.endCinematic()
 	cinematicActive = false
+	frozenCFrame = nil
+	hitstopUntil = 0
+	local camera = Workspace.CurrentCamera
+	if camera then
+		-- Soft-lock reprend immédiatement en Scriptable (évite Custom / stuck)
+		camera.CameraType = Enum.CameraType.Scriptable
+	end
 end
 
 function SoftLockCamera.isCinematic(): boolean
 	return cinematicActive
+end
+
+--[[ Hitstop client : fige le CFrame caméra ~2–4 frames. ]]
+function SoftLockCamera.hitstop(seconds: number)
+	local camera = Workspace.CurrentCamera
+	if camera then
+		frozenCFrame = camera.CFrame
+	end
+	local untilT = os.clock() + seconds
+	if untilT > hitstopUntil then
+		hitstopUntil = untilT
+	end
 end
 
 function SoftLockCamera.start()
@@ -85,6 +121,15 @@ function SoftLockCamera.start()
 		if not camera then
 			return
 		end
+
+		-- Hitstop : hold last frame
+		if os.clock() < hitstopUntil and frozenCFrame then
+			camera.CameraType = Enum.CameraType.Scriptable
+			camera.CFrame = CameraShake.applyTo(camera, frozenCFrame)
+			return
+		end
+		frozenCFrame = nil
+
 		local character = player.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if not hrp then

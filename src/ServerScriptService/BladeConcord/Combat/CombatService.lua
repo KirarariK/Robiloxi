@@ -265,6 +265,13 @@ function CombatService.step(dt: number)
 	end
 
 	for _, fighter in FighterState.getAll() do
+		-- QoL : re-attacher sabre si nil / détruit (respawn mid, race CharacterAdded)
+		if fighter.character and fighter.character.Parent then
+			if not fighter.bladePart or not fighter.bladePart.Parent then
+				local isBot = BotStub.isEnabled() and fighter == BotStub.getFighter()
+				fighter.bladePart = ensureBlade(fighter.character, if isBot then nil else fighter.player)
+			end
+		end
 		if fighter.actionId ~= CombatTypes.ActionId.Dead then
 			-- Bot AI stepped separately; still run stamina/mobility for all
 			if not BotStub.isEnabled() or fighter ~= BotStub.getFighter() then

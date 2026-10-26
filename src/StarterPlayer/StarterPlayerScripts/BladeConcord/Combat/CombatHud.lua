@@ -1,7 +1,7 @@
 --!strict
 --[[
 	HUD combat soigné — HP / stamina / score BO3 / CDs Focus / flash feedback.
-	Identité Blade Concord (Theme), pas le look default Roblox.
+	Pass 3 : countdown 3-2-1 + versus plaque, vignette faction optionnelle.
 ]]
 
 local Players = game:GetService("Players")
@@ -25,6 +25,15 @@ local arenaLabel: TextLabel
 local cdLabel: TextLabel
 local fairKitLabel: TextLabel
 local vignette: Frame
+local factionVignette: Frame
+local countdownLabel: TextLabel
+local versusPlate: Frame
+local versusLeft: TextLabel
+local versusRight: TextLabel
+local versusVs: TextLabel
+local lastCountdownCeil: number? = nil
+local playerFaction: string? = nil
+local lastPhase: string? = nil
 
 local function corner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -84,8 +93,90 @@ local function makeBar(parent: Instance, name: string, y: number, color: Color3)
 	return fill
 end
 
+local function resolveFighterName(userId: number?): string
+	if not userId then
+		return "—"
+	end
+	if userId == -9001 then
+		return "ConcordBot"
+	end
+	if userId == player.UserId then
+		return player.DisplayName ~= "" and player.DisplayName or player.Name
+	end
+	local p = Players:GetPlayerByUserId(userId)
+	if p then
+		return p.DisplayName ~= "" and p.DisplayName or p.Name
+	end
+	return "Dueliste"
+end
+
+local function applyFactionVignette()
+	if not factionVignette then
+		return
+	end
+	local color = Theme.Ink
+	local alpha = 1
+	if playerFaction == "Dawn" then
+		color = Theme.Dawn
+		alpha = 0.88
+	elseif playerFaction == "Dusk" then
+		color = Theme.Dusk
+		alpha = 0.86
+	end
+	factionVignette.BackgroundColor3 = color
+	-- Edges only : 4 thin frames (optionnelle — invisible si pas de faction)
+	for _, child in factionVignette:GetChildren() do
+		if child:IsA("Frame") then
+			child.BackgroundColor3 = color
+			child.BackgroundTransparency = if playerFaction then alpha else 1
+		end
+	end
+end
+
+local function showVersus(leftName: string, rightName: string)
+	versusLeft.Text = leftName
+	versusRight.Text = rightName
+	versusPlate.Visible = true
+	versusPlate.BackgroundTransparency = 0.15
+	versusLeft.TextTransparency = 0
+	versusRight.TextTransparency = 0
+	versusVs.TextTransparency = 0
+	versusPlate.Size = UDim2.new(0, 0, 0, 88)
+	TweenService:Create(versusPlate, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, 520, 0, 88),
+	}):Play()
+end
+
+local function hideVersus()
+	TweenService:Create(versusPlate, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 420, 0, 72),
+	}):Play()
+	TweenService:Create(versusLeft, TweenInfo.new(0.25), { TextTransparency = 1 }):Play()
+	TweenService:Create(versusRight, TweenInfo.new(0.25), { TextTransparency = 1 }):Play()
+	TweenService:Create(versusVs, TweenInfo.new(0.25), { TextTransparency = 1 }):Play()
+	task.delay(0.3, function()
+		versusPlate.Visible = false
+	end)
+end
+
+local function pulseCountdown(n: number)
+	countdownLabel.Text = tostring(n)
+	countdownLabel.TextTransparency = 0
+	countdownLabel.TextStrokeTransparency = 0.25
+	countdownLabel.TextSize = 96
+	countdownLabel.TextColor3 = if n <= 1 then Theme.AccentHot else Theme.Bone
+	TweenService:Create(countdownLabel, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextSize = 64,
+		TextTransparency = 0.15,
+	}):Play()
+	vignette.BackgroundTransparency = 0.78
+	TweenService:Create(vignette, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+end
+
 function CombatHud.start()
 	local remotes = Remotes.get()
+	local metaRemotes = Remotes.getMeta()
 
 	gui = Instance.new("ScreenGui")
 	gui.Name = "BladeConcordHud"
@@ -100,7 +191,7 @@ function CombatHud.start()
 	root.Size = UDim2.fromScale(1, 1)
 	root.Parent = gui
 
-	-- Vignette douce
+	-- Vignette douce (impacts)
 	vignette = Instance.new("Frame")
 	vignette.Name = "Vignette"
 	vignette.Size = UDim2.fromScale(1, 1)
@@ -109,6 +200,32 @@ function CombatHud.start()
 	vignette.BorderSizePixel = 0
 	vignette.ZIndex = 50
 	vignette.Parent = root
+
+	-- Vignette bords faction (Dawn / Dusk) — optionnelle
+	factionVignette = Instance.new("Frame")
+	factionVignette.Name = "FactionVignette"
+	factionVignette.Size = UDim2.fromScale(1, 1)
+	factionVignette.BackgroundTransparency = 1
+	factionVignette.BorderSizePixel = 0
+	factionVignette.ZIndex = 1
+	factionVignette.Parent = root
+	local edgeSpecs = {
+		{ UDim2.new(1, 0, 0, 28), UDim2.fromScale(0, 0) }, -- top
+		{ UDim2.new(1, 0, 0, 36), UDim2.new(0, 0, 1, -36) }, -- bottom
+		{ UDim2.new(0, 22, 1, 0), UDim2.fromScale(0, 0) }, -- left
+		{ UDim2.new(0, 22, 1, 0), UDim2.new(1, -22, 0, 0) }, -- right
+	}
+	for i, spec in edgeSpecs do
+		local edge = Instance.new("Frame")
+		edge.Name = "Edge" .. i
+		edge.Size = spec[1]
+		edge.Position = spec[2]
+		edge.BackgroundColor3 = Theme.Ink
+		edge.BackgroundTransparency = 1
+		edge.BorderSizePixel = 0
+		edge.ZIndex = 1
+		edge.Parent = factionVignette
+	end
 
 	local brand = Instance.new("TextLabel")
 	brand.Name = "Brand"
@@ -145,7 +262,80 @@ function CombatHud.start()
 	flashLabel.TextTransparency = 1
 	flashLabel.TextStrokeTransparency = 0.5
 	flashLabel.Text = ""
+	flashLabel.ZIndex = 40
 	flashLabel.Parent = root
+
+	countdownLabel = Instance.new("TextLabel")
+	countdownLabel.Name = "Countdown"
+	countdownLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	countdownLabel.Position = UDim2.fromScale(0.5, 0.42)
+	countdownLabel.Size = UDim2.new(0.5, 0, 0, 120)
+	countdownLabel.BackgroundTransparency = 1
+	countdownLabel.Font = Theme.FontTitle
+	countdownLabel.TextSize = 72
+	countdownLabel.TextColor3 = Theme.Bone
+	countdownLabel.TextTransparency = 1
+	countdownLabel.TextStrokeTransparency = 0.4
+	countdownLabel.TextStrokeColor3 = Theme.Ink
+	countdownLabel.Text = ""
+	countdownLabel.ZIndex = 45
+	countdownLabel.Parent = root
+
+	-- Versus plaque
+	versusPlate = Instance.new("Frame")
+	versusPlate.Name = "VersusPlate"
+	versusPlate.AnchorPoint = Vector2.new(0.5, 0.5)
+	versusPlate.Position = UDim2.fromScale(0.5, 0.28)
+	versusPlate.Size = UDim2.new(0, 520, 0, 88)
+	versusPlate.BackgroundColor3 = Theme.Panel
+	versusPlate.BackgroundTransparency = 0.15
+	versusPlate.BorderSizePixel = 0
+	versusPlate.Visible = false
+	versusPlate.ZIndex = 44
+	versusPlate.Parent = root
+	corner(versusPlate, 12)
+	stroke(versusPlate, Theme.Accent, 1.5)
+
+	versusLeft = Instance.new("TextLabel")
+	versusLeft.Name = "Left"
+	versusLeft.Size = UDim2.new(0.4, 0, 1, 0)
+	versusLeft.Position = UDim2.new(0.02, 0, 0, 0)
+	versusLeft.BackgroundTransparency = 1
+	versusLeft.Font = Theme.FontTitle
+	versusLeft.TextSize = 22
+	versusLeft.TextColor3 = Theme.Dawn
+	versusLeft.TextXAlignment = Enum.TextXAlignment.Right
+	versusLeft.Text = ""
+	versusLeft.ZIndex = 45
+	versusLeft.Parent = versusPlate
+
+	versusVs = Instance.new("TextLabel")
+	versusVs.Name = "VS"
+	versusVs.AnchorPoint = Vector2.new(0.5, 0.5)
+	versusVs.Position = UDim2.fromScale(0.5, 0.5)
+	versusVs.Size = UDim2.new(0.16, 0, 0.7, 0)
+	versusVs.BackgroundColor3 = Theme.InkSoft
+	versusVs.BackgroundTransparency = 0.25
+	versusVs.Font = Theme.FontTitle
+	versusVs.TextSize = 20
+	versusVs.TextColor3 = Theme.AccentHot
+	versusVs.Text = "VS"
+	versusVs.ZIndex = 45
+	versusVs.Parent = versusPlate
+	corner(versusVs, 8)
+
+	versusRight = Instance.new("TextLabel")
+	versusRight.Name = "Right"
+	versusRight.Size = UDim2.new(0.4, 0, 1, 0)
+	versusRight.Position = UDim2.new(0.58, 0, 0, 0)
+	versusRight.BackgroundTransparency = 1
+	versusRight.Font = Theme.FontTitle
+	versusRight.TextSize = 22
+	versusRight.TextColor3 = Theme.Dusk
+	versusRight.TextXAlignment = Enum.TextXAlignment.Left
+	versusRight.Text = ""
+	versusRight.ZIndex = 45
+	versusRight.Parent = versusPlate
 
 	statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
@@ -259,20 +449,53 @@ function CombatHud.start()
 		end
 	end)
 
+	metaRemotes.MetaState.OnClientEvent:Connect(function(payload)
+		if typeof(payload) ~= "table" then
+			return
+		end
+		local prof = payload.profile
+		if typeof(prof) == "table" and typeof(prof.faction) == "string" then
+			playerFaction = prof.faction
+			applyFactionVignette()
+		elseif payload.kind == "Profile" and typeof(payload.profile) == "table" then
+			playerFaction = payload.profile.faction
+			applyFactionVignette()
+		end
+	end)
+
 	remotes.MatchState.OnClientEvent:Connect(function(payload)
 		if typeof(payload) ~= "table" then
 			return
 		end
 		local myWins, theirWins = 0, 0
+		local theirId: number? = nil
 		if typeof(payload.scores) == "table" then
 			for _, row in payload.scores do
 				if row.userId == player.UserId then
 					myWins = row.wins or 0
 				else
 					theirWins = row.wins or 0
+					theirId = row.userId
 				end
 			end
 		end
+		-- Resolve opponent from fighters list if provided
+		if typeof(payload.fighters) == "table" then
+			for _, row in payload.fighters do
+				if typeof(row) == "table" and row.userId ~= player.UserId then
+					theirId = row.userId
+				end
+			end
+		end
+		if theirId == nil and typeof(payload.scores) == "table" then
+			-- Solo : ConcordBot often in scores as -9001
+			for _, row in payload.scores do
+				if row.userId == -9001 then
+					theirId = -9001
+				end
+			end
+		end
+
 		local mode = tostring(payload.mode or "Casual")
 		scoreLabel.Text = string.format("%s · R%d · %d : %d (FT%d)", mode, payload.roundNumber or 0, myWins, theirWins, payload.firstTo or 2)
 		arenaLabel.Text = tostring(payload.arenaName or payload.arenaId or "")
@@ -283,11 +506,41 @@ function CombatHud.start()
 			fairKitLabel.Text = ""
 			fairKitLabel.BackgroundTransparency = 1
 		end
-		if tostring(payload.phase) == "Countdown" and payload.countdown then
-			flashLabel.Text = string.format("%.0f", math.ceil(payload.countdown))
-			flashLabel.TextTransparency = 0
-			flashLabel.TextColor3 = Theme.Bone
+
+		local phase = tostring(payload.phase)
+		if phase == "Countdown" and payload.countdown then
+			local ceilN = math.max(1, math.ceil(payload.countdown))
+			if lastPhase ~= "Countdown" then
+				local left = resolveFighterName(player.UserId)
+				local right = resolveFighterName(theirId or -9001)
+				showVersus(left, right)
+				lastCountdownCeil = nil
+			end
+			if lastCountdownCeil ~= ceilN then
+				lastCountdownCeil = ceilN
+				pulseCountdown(ceilN)
+			end
+			-- Hide legacy flash during dedicated countdown
+			flashLabel.TextTransparency = 1
+		elseif phase == "Fighting" and lastPhase == "Countdown" then
+			hideVersus()
+			countdownLabel.Text = "COMBAT"
+			countdownLabel.TextColor3 = Theme.Accent
+			countdownLabel.TextTransparency = 0
+			countdownLabel.TextSize = 52
+			TweenService:Create(countdownLabel, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				TextTransparency = 1,
+				TextSize = 36,
+			}):Play()
+			lastCountdownCeil = nil
+		elseif phase ~= "Countdown" then
+			if versusPlate.Visible then
+				hideVersus()
+			end
+			countdownLabel.TextTransparency = 1
+			lastCountdownCeil = nil
 		end
+		lastPhase = phase
 	end)
 
 	local function flash(text: string, color: Color3)

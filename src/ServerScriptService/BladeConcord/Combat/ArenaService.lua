@@ -1,10 +1,11 @@
 --!strict
 --[[
 	Arènes GDD §6 — art direction showcase (matériaux, lighting, props, hazards lisibles).
-	- Obsidian Pit : lave glow + cendres
-	- Sanctum des Deux Astres : vents bleutés + colonnes
-	- Trône d'Éclipse : estrade + trône Constructible
-	- Quai Mirage : quai teal + panneaux mirage
+	ArtPass 4 : drift dust/embers permanents + lighting Pass 3.
+	- Obsidian Pit : lave glow + cendres + ember drift
+	- Sanctum des Deux Astres : vents bleutés + dust drift
+	- Trône d'Éclipse : estrade + void embers
+	- Quai Mirage : quai teal + mist drift
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -72,6 +73,57 @@ local function ashEmitter(parent: BasePart, rate: number?, colorA: Color3?, colo
 	pe.Color = ColorSequence.new(colorA or Color3.fromRGB(80, 70, 60), colorB or Color3.fromRGB(40, 35, 30))
 	pe.LockedToPart = false
 	pe.Parent = att
+end
+
+--[[ Drift permanent dust / embers (Pass 3 ambiance) — rate bas, lifetime longue. ]]
+local function driftField(
+	folder: Folder,
+	offset: Vector3,
+	colorA: Color3,
+	colorB: Color3,
+	rate: number,
+	upAccel: number,
+	name: string?
+)
+	local host = part(
+		name or "DriftHost",
+		Vector3.new(48, 1, 48),
+		CFrame.new(offset + Vector3.new(0, 6, 0)),
+		colorA,
+		folder,
+		Enum.Material.ForceField
+	)
+	host.Transparency = 1
+	host.CanCollide = false
+	host.CastShadow = false
+	local att = Instance.new("Attachment")
+	att.Parent = host
+	local pe = Instance.new("ParticleEmitter")
+	pe.Name = "Drift"
+	pe.Rate = rate
+	pe.Lifetime = NumberRange.new(4.5, 8)
+	pe.Speed = NumberRange.new(0.15, 0.9)
+	pe.SpreadAngle = Vector2.new(180, 180)
+	pe.Acceleration = Vector3.new(0.2, upAccel, 0.15)
+	pe.Rotation = NumberRange.new(0, 360)
+	pe.RotSpeed = NumberRange.new(-20, 20)
+	pe.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.08),
+		NumberSequenceKeypoint.new(0.5, 0.22),
+		NumberSequenceKeypoint.new(1, 0.04),
+	})
+	pe.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.2, 0.45),
+		NumberSequenceKeypoint.new(0.8, 0.55),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	pe.Color = ColorSequence.new(colorA, colorB)
+	pe.LightEmission = 0.35
+	pe.LightInfluence = 0.2
+	pe.LockedToPart = false
+	pe.Parent = att
+	return host
 end
 
 --[[ Fog volumétrique léger (Parts ForceField semi-transparentes). ]]
@@ -307,7 +359,7 @@ local function buildObsidianPit(parent: Folder): Folder
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Obsidian Pit — Creuset de Lave")
 	folder:SetAttribute("OffsetX", 0)
-	folder:SetAttribute("ArtPass", 3)
+	folder:SetAttribute("ArtPass", 4)
 
 	local offset = Vector3.new(0, 0, 0)
 	local basalt = Color3.fromRGB(42, 40, 48)
@@ -360,6 +412,7 @@ local function buildObsidianPit(parent: Folder): Folder
 
 	scatterDebris(folder, offset, Color3.fromRGB(55, 48, 42), Enum.Material.Rock, 14)
 	fogBank(folder, offset, Color3.fromRGB(80, 35, 20), 5)
+	driftField(folder, offset, Color3.fromRGB(255, 120, 40), Color3.fromRGB(80, 30, 10), 18, 1.8, "EmberDrift")
 
 	buildSpawns(folder, offset)
 	return folder
@@ -370,7 +423,7 @@ local function buildSanctum(parent: Folder): Folder
 	folder.Name = "SanctumAstres"
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Sanctum des Deux Astres")
-	folder:SetAttribute("ArtPass", 3)
+	folder:SetAttribute("ArtPass", 4)
 	local ox = 120
 	folder:SetAttribute("OffsetX", ox)
 	local offset = Vector3.new(ox, 0, 0)
@@ -434,6 +487,7 @@ local function buildSanctum(parent: Folder): Folder
 
 	scatterDebris(folder, offset, Color3.fromRGB(190, 185, 170), Enum.Material.Marble, 10)
 	fogBank(folder, offset, Color3.fromRGB(170, 190, 230), 4)
+	driftField(folder, offset, Color3.fromRGB(200, 220, 255), Color3.fromRGB(140, 160, 210), 14, 0.6, "DustDrift")
 
 	buildSpawns(folder, offset)
 	return folder
@@ -444,7 +498,7 @@ local function buildThrone(parent: Folder): Folder
 	folder.Name = "TroneEclipse"
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Trône d'Éclipse")
-	folder:SetAttribute("ArtPass", 3)
+	folder:SetAttribute("ArtPass", 4)
 	local ox = 240
 	folder:SetAttribute("OffsetX", ox)
 	local offset = Vector3.new(ox, 0, 0)
@@ -488,6 +542,7 @@ local function buildThrone(parent: Folder): Folder
 
 	scatterDebris(folder, offset, Color3.fromRGB(40, 32, 55), Enum.Material.Slate, 12)
 	fogBank(folder, offset, Color3.fromRGB(50, 30, 80), 6)
+	driftField(folder, offset, Color3.fromRGB(160, 100, 255), Color3.fromRGB(40, 20, 70), 16, 0.9, "VoidEmberDrift")
 
 	buildSpawns(folder, offset)
 	return folder
@@ -498,7 +553,7 @@ local function buildMirage(parent: Folder): Folder
 	folder.Name = "QuaiMirage"
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Quai Mirage")
-	folder:SetAttribute("ArtPass", 3)
+	folder:SetAttribute("ArtPass", 4)
 	local ox = 360
 	folder:SetAttribute("OffsetX", ox)
 	local offset = Vector3.new(ox, 0, 0)
@@ -560,6 +615,7 @@ local function buildMirage(parent: Folder): Folder
 
 	scatterDebris(folder, offset, Color3.fromRGB(100, 90, 70), Enum.Material.Sand, 11)
 	fogBank(folder, offset, Color3.fromRGB(120, 180, 190), 5)
+	driftField(folder, offset, Color3.fromRGB(180, 230, 235), Color3.fromRGB(90, 140, 150), 12, 0.35, "MistDrift")
 
 	buildSpawns(folder, offset)
 	return folder
@@ -567,12 +623,12 @@ end
 
 function ArenaService.ensureAll(): Folder
 	local root = getArenasRoot()
-	-- Purge greybox / art pass < 3
+	-- Purge greybox / art pass < 4
 	for _, child in root:GetChildren() do
 		if child:IsA("Folder") then
 			local name = child.Name
 			local pass = child:GetAttribute("ArtPass")
-			if pass ~= 3 then
+			if pass ~= 4 then
 				if built[name :: any] then
 					built[name :: any] = nil
 				end

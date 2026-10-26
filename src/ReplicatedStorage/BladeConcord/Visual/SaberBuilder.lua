@@ -276,29 +276,65 @@ function SaberBuilder.attach(character: Model, bladeColor: Color3?): SaberBuild
 	})
 	beam.Parent = grip
 
-	-- Trail combat
+	-- Trail combat premium (dual : core large + rim fine)
 	local trailA = Instance.new("Attachment")
 	trailA.Name = "TrailA"
-	trailA.Position = Vector3.new(0, 0.08, length * 0.35)
+	trailA.Position = Vector3.new(0, 0.1, length * 0.38)
 	trailA.Parent = blade
 	local trailB = Instance.new("Attachment")
 	trailB.Name = "TrailB"
-	trailB.Position = Vector3.new(0, -0.08, -length * 0.35)
+	trailB.Position = Vector3.new(0, -0.1, -length * 0.38)
 	trailB.Parent = blade
 
 	local trail = Instance.new("Trail")
 	trail.Name = "SaberTrail"
 	trail.Attachment0 = trailA
 	trail.Attachment1 = trailB
-	trail.Lifetime = 0.18
-	trail.MinLength = 0.05
+	trail.Lifetime = 0.28
+	trail.MinLength = 0.04
+	trail.MaxLength = 6
 	trail.LightEmission = 1
 	trail.LightInfluence = 0
-	trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
-	trail.Transparency = NumberSequence.new(0.2, 1)
-	trail.WidthScale = NumberSequence.new(1, 0)
+	trail.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, color),
+		ColorSequenceKeypoint.new(0.45, Color3.new(1, 1, 1)),
+		ColorSequenceKeypoint.new(1, color),
+	})
+	trail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.08),
+		NumberSequenceKeypoint.new(0.55, 0.45),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	trail.WidthScale = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1.15),
+		NumberSequenceKeypoint.new(0.35, 0.85),
+		NumberSequenceKeypoint.new(1, 0),
+	})
 	trail.Enabled = false
 	trail.Parent = blade
+
+	-- Rim trail (plus fine, lifetime courte — silhouette de coupe)
+	local rimA = Instance.new("Attachment")
+	rimA.Name = "TrailRimA"
+	rimA.Position = Vector3.new(0.06, 0, length * 0.2)
+	rimA.Parent = blade
+	local rimB = Instance.new("Attachment")
+	rimB.Name = "TrailRimB"
+	rimB.Position = Vector3.new(-0.06, 0, -length * 0.2)
+	rimB.Parent = blade
+	local rim = Instance.new("Trail")
+	rim.Name = "SaberTrailRim"
+	rim.Attachment0 = rimA
+	rim.Attachment1 = rimB
+	rim.Lifetime = 0.14
+	rim.MinLength = 0.03
+	rim.LightEmission = 1
+	rim.LightInfluence = 0
+	rim.Color = ColorSequence.new(Color3.new(1, 1, 1), color)
+	rim.Transparency = NumberSequence.new(0.25, 1)
+	rim.WidthScale = NumberSequence.new(0.55, 0)
+	rim.Enabled = false
+	rim.Parent = blade
 
 	-- PointLight lame
 	local light = Instance.new("PointLight")
@@ -483,7 +519,15 @@ function SaberBuilder.setBladeColor(blade: BasePart, color: Color3)
 	end
 	local trail = blade:FindFirstChild("SaberTrail") or blade:FindFirstChild("SaberTrailStub")
 	if trail and trail:IsA("Trail") then
-		trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+		trail.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, color),
+			ColorSequenceKeypoint.new(0.45, Color3.new(1, 1, 1)),
+			ColorSequenceKeypoint.new(1, color),
+		})
+	end
+	local rim = blade:FindFirstChild("SaberTrailRim")
+	if rim and rim:IsA("Trail") then
+		rim.Color = ColorSequence.new(Color3.new(1, 1, 1), color)
 	end
 end
 
@@ -491,6 +535,10 @@ function SaberBuilder.setTrailEnabled(blade: BasePart, on: boolean)
 	local trail = blade:FindFirstChild("SaberTrail") or blade:FindFirstChild("SaberTrailStub")
 	if trail and trail:IsA("Trail") then
 		trail.Enabled = on
+	end
+	local rim = blade:FindFirstChild("SaberTrailRim")
+	if rim and rim:IsA("Trail") then
+		rim.Enabled = on
 	end
 end
 

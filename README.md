@@ -94,7 +94,7 @@ src/
     FX/         CombatFx
     Audio/      SoundHooks
     UI/         MetaHud
-  Workspace/Arenas/   mapping Rojo (build runtime ArtPass=2)
+  Workspace/Arenas/   mapping Rojo (build runtime ArtPass=4)
 ```
 
 ---
@@ -114,3 +114,22 @@ src/
 
 Sabre / arènes / VFX / UI : **Constructible Studio-native** (voir `docs/visual-polish-notes.md` dans l’Agent Store).  
 SoundIds et meshes importés restent optionnels (`SoundHooks`, `ServerStorage`). La **logique** serveur P0–P3 est inchangée.
+
+---
+
+## Visual / Playtest polish
+
+Niveau cible : **proto showcase Roblox** jouable — pas un polish live AAA (pas de meshes custom, AnimationClips Editor, skybox textures, pack SFX master).
+
+| Zone | État |
+|------|------|
+| Sabre Constructible + trail dual + Beam | Showcase |
+| Poses Motor6D Light/Heavy | Correct |
+| Hitstop client + sparks Perfect densifiés | Bon feeling |
+| Countdown 3-2-1 + plaque VS | Soigné |
+| KO orbit cam + restore soft-lock | Stub cinématique |
+| Arènes ArtPass 4 (drift dust/embers + ambient loops) | Photographiable |
+| HUD Theme + vignette faction optionnelle | Soigné |
+| Audio library IDs + ambiance map | Jouable (placeholders) |
+
+**Playtest Studio** : `rojo serve` → Play Solo → bot ~2 s → LMB/RMB/F/Shift → KO → touche **M** méta. Vérifier trail Active, countdown VS, ambient arène, pas de caméra stuck post-KO.
