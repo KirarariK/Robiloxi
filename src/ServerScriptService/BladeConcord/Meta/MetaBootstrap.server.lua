@@ -100,8 +100,15 @@ HitService.setPerfectHook(function(defender)
 	QuestService.track(defender.player, "perfects", 1)
 end)
 
+-- Throttle ~10 Hz : pas besoin de Heartbeat full-rate pour un edge phase
 local lastPhase = ""
-RunService.Heartbeat:Connect(function()
+local phaseAccum = 0
+RunService.Heartbeat:Connect(function(dt)
+	phaseAccum += dt
+	if phaseAccum < 0.1 then
+		return
+	end
+	phaseAccum = 0
 	local phase = MatchService.getPhase()
 	if phase == "Countdown" and lastPhase ~= "Countdown" then
 		local mode = MatchService.getMode()

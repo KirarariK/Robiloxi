@@ -111,6 +111,15 @@ local CombatConfig = {
 		RecoveryFailsafe = 2.5, -- timeout softlock Idle
 	},
 
+	-- Caps VFX / Heartbeat (perf pass légère — anti-spam particles)
+	Fx = {
+		SparkBurstMax = 36,
+		ClashEmitMax = 28,
+		SparkBurstsPerSecond = 14,
+		ArenaAshRateMax = 10,
+		ArenaDriftRateMax = 8,
+	},
+
 	Match = {
 		BestOf = 3, -- FT2
 		FirstTo = 2,

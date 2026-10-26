@@ -545,7 +545,14 @@ function SaberBuilder.burstClash(blade: BasePart, count: number?)
 	end
 	local emitter = tip:FindFirstChild("ClashSparks")
 	if emitter and emitter:IsA("ParticleEmitter") then
-		emitter:Emit(count or 28)
+		local cap = CombatConfig.Fx and CombatConfig.Fx.ClashEmitMax or 28
+		local n = count or cap
+		if n > cap then
+			n = cap
+		elseif n < 1 then
+			n = 1
+		end
+		emitter:Emit(n)
 	end
 end
 

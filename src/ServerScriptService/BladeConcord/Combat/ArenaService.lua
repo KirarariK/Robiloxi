@@ -68,7 +68,9 @@ local function ashEmitter(parent: BasePart, rate: number?, colorA: Color3?, colo
 	att.Parent = parent
 	local pe = Instance.new("ParticleEmitter")
 	pe.Name = "Ash"
-	pe.Rate = rate or 12
+	local requested = rate or 12
+	local cap = CombatConfig.Fx.ArenaAshRateMax
+	pe.Rate = if requested > cap then cap else requested
 	pe.Lifetime = NumberRange.new(2, 4)
 	pe.Speed = NumberRange.new(0.5, 2)
 	pe.SpreadAngle = Vector2.new(40, 40)
@@ -105,7 +107,8 @@ local function driftField(
 	att.Parent = host
 	local pe = Instance.new("ParticleEmitter")
 	pe.Name = "Drift"
-	pe.Rate = rate
+	local driftCap = CombatConfig.Fx.ArenaDriftRateMax
+	pe.Rate = if rate > driftCap then driftCap else rate
 	pe.Lifetime = NumberRange.new(4.5, 8)
 	pe.Speed = NumberRange.new(0.15, 0.9)
 	pe.SpreadAngle = Vector2.new(180, 180)

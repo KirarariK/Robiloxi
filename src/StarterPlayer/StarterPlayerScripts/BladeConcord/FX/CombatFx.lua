@@ -26,6 +26,33 @@ local SoftLockCamera: any = nil
 local koBusy = false
 local hitstopUntil = 0
 
+-- Rate-cap sparks : évite spam Emit si HitResolved / FxEvent burstent
+local sparkWindowStart = 0
+local sparkWindowCount = 0
+
+local function sparkBudgetOk(): boolean
+	local now = os.clock()
+	local limit = CombatConfig.Fx.SparkBurstsPerSecond
+	if now - sparkWindowStart >= 1 then
+		sparkWindowStart = now
+		sparkWindowCount = 1
+		return true
+	end
+	sparkWindowCount += 1
+	return sparkWindowCount <= limit
+end
+
+local function clampEmit(count: number?, cap: number): number
+	local n = count or cap
+	if n < 1 then
+		return 1
+	end
+	if n > cap then
+		return cap
+	end
+	return n
+end
+
 local function getFolder(): Folder
 	local f = Workspace:FindFirstChild("BC_Fx")
 	if f and f:IsA("Folder") then
@@ -72,6 +99,11 @@ local function characterRoot(userId: number): BasePart?
 end
 
 local function sparkBurst(position: Vector3, color: Color3, count: number?)
+	if not sparkBudgetOk() then
+		return
+	end
+	local emitCount = clampEmit(count, CombatConfig.Fx.SparkBurstMax)
+
 	local attPart = Instance.new("Part")
 	attPart.Name = "SparkHost"
 	attPart.Anchored = true
@@ -100,7 +132,7 @@ local function sparkBurst(position: Vector3, color: Color3, count: number?)
 	emitter.LightInfluence = 0
 	emitter.Rate = 0
 	emitter.Parent = att
-	emitter:Emit(count or 24)
+	emitter:Emit(emitCount)
 
 	-- Flash ball
 	local flash = Instance.new("Part")
@@ -227,9 +259,9 @@ local function clientHitstop(seconds: number)
 end
 
 local function perfectFlash(position: Vector3)
-	-- Sparks densifiés Pass 3
-	sparkBurst(position, Theme.Perfect, 72)
-	sparkBurst(position + Vector3.new(0, 0.6, 0), Color3.new(1, 1, 1), 36)
+	-- Sparks densifiés Pass 3 (caps Fx — anti-spam)
+	sparkBurst(position, Theme.Perfect, CombatConfig.Fx.SparkBurstMax)
+	sparkBurst(position + Vector3.new(0, 0.6, 0), Color3.new(1, 1, 1), math.floor(CombatConfig.Fx.SparkBurstMax * 0.55))
 	ringWave(position, Theme.Perfect, 12)
 	ringWave(position, Theme.Clash, 7)
 
@@ -274,9 +306,9 @@ local function koCinematic(winnerId: number?, loserId: number?)
 	local focus = if loserRoot then loserRoot else winnerRoot
 	local pos = if focus then focus.Position + Vector3.new(0, 2.2, 0) else Vector3.new(0, 4, 0)
 
-	sparkBurst(pos, Theme.AccentHot, 56)
+	sparkBurst(pos, Theme.AccentHot, CombatConfig.Fx.SparkBurstMax)
 	ringWave(pos, Theme.Danger, 18)
-	sparkBurst(pos + Vector3.new(0, 1, 0), Theme.Perfect, 28)
+	sparkBurst(pos + Vector3.new(0, 1, 0), Theme.Perfect, math.floor(CombatConfig.Fx.SparkBurstMax * 0.7))
 
 	-- Slow-mo léger (CC + blur + FOV) — sensation, pas time-scale serveur
 	local cc = Lighting:FindFirstChild("BC_ImpactCC")
@@ -425,7 +457,7 @@ function CombatFx.start()
 			perfectFlash(pos)
 			local blade = findBlade(payload.defenderUserId or 0) or findBlade(payload.attackerUserId or 0)
 			if blade then
-				SaberBuilder.burstClash(blade, 56)
+				SaberBuilder.burstClash(blade, CombatConfig.Fx.ClashEmitMax)
 			end
 			if involvesMe and CameraShake then
 				CameraShake.shake(0.35, 0.25)
@@ -437,10 +469,10 @@ function CombatFx.start()
 				SoundHooks.play("Perfect")
 			end
 		elseif payload.clash then
-			sparkBurst(pos, Theme.Clash, 40)
+			sparkBurst(pos, Theme.Clash, CombatConfig.Fx.SparkBurstMax)
 			local blade = findBlade(payload.attackerUserId or 0)
 			if blade then
-				SaberBuilder.burstClash(blade, 36)
+				SaberBuilder.burstClash(blade, math.floor(CombatConfig.Fx.ClashEmitMax * 0.85))
 			end
 			if involvesMe and CameraShake then
 				CameraShake.shake(0.28, 0.2)
