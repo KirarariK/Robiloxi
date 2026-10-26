@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
+local RankedConfig = require(Shared:WaitForChild("RankedConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Theme = require(Shared:WaitForChild("Theme"))
 local SoundHooks = require(script.Parent.Parent:WaitForChild("Audio"):WaitForChild("SoundHooks"))
@@ -25,7 +26,10 @@ local statusLabel: TextLabel
 local scoreLabel: TextLabel
 local arenaLabel: TextLabel
 local cdLabel: TextLabel
-local fairKitLabel: TextLabel
+local fairKitBadge: Frame
+local fairKitTitle: TextLabel
+local fairKitSub: TextLabel
+local fairKitVisible = false
 local vignette: Frame
 local factionVignette: Frame
 local countdownLabel: TextLabel
@@ -412,20 +416,56 @@ function CombatHud.start()
 	arenaLabel.Text = ""
 	arenaLabel.Parent = scorePlate
 
-	fairKitLabel = Instance.new("TextLabel")
-	fairKitLabel.Name = "FairKit"
-	fairKitLabel.AnchorPoint = Vector2.new(1, 0)
-	fairKitLabel.Position = UDim2.new(0.98, 0, 0, 18)
-	fairKitLabel.Size = UDim2.new(0.28, 0, 0, 22)
-	fairKitLabel.BackgroundColor3 = Theme.InkSoft
-	fairKitLabel.BackgroundTransparency = 0.25
-	fairKitLabel.BorderSizePixel = 0
-	fairKitLabel.Font = Theme.FontBody
-	fairKitLabel.TextSize = 11
-	fairKitLabel.TextColor3 = Theme.Success
-	fairKitLabel.Text = ""
-	fairKitLabel.Parent = root
-	corner(fairKitLabel, 6)
+	-- Fair Kit Ranked — badge combat visible (titre + sous-label Rare cap)
+	fairKitBadge = Instance.new("Frame")
+	fairKitBadge.Name = "FairKitBadge"
+	fairKitBadge.AnchorPoint = Vector2.new(1, 0)
+	fairKitBadge.Position = UDim2.new(0.985, 0, 0, 14)
+	fairKitBadge.Size = UDim2.new(0, 168, 0, 44)
+	fairKitBadge.BackgroundColor3 = Theme.InkSoft
+	fairKitBadge.BackgroundTransparency = 0.08
+	fairKitBadge.BorderSizePixel = 0
+	fairKitBadge.Visible = false
+	fairKitBadge.ZIndex = 25
+	fairKitBadge.Parent = root
+	corner(fairKitBadge, 8)
+	stroke(fairKitBadge, Theme.Success, 2)
+
+	local fairAccent = Instance.new("Frame")
+	fairAccent.Name = "AccentBar"
+	fairAccent.Size = UDim2.new(0, 4, 1, -10)
+	fairAccent.Position = UDim2.new(0, 6, 0, 5)
+	fairAccent.BackgroundColor3 = Theme.Success
+	fairAccent.BorderSizePixel = 0
+	fairAccent.ZIndex = 26
+	fairAccent.Parent = fairKitBadge
+	corner(fairAccent, 2)
+
+	fairKitTitle = Instance.new("TextLabel")
+	fairKitTitle.Name = "Title"
+	fairKitTitle.BackgroundTransparency = 1
+	fairKitTitle.Position = UDim2.new(0, 16, 0, 4)
+	fairKitTitle.Size = UDim2.new(1, -22, 0, 20)
+	fairKitTitle.Font = Theme.FontTitle
+	fairKitTitle.TextSize = 15
+	fairKitTitle.TextXAlignment = Enum.TextXAlignment.Left
+	fairKitTitle.TextColor3 = Theme.Success
+	fairKitTitle.Text = RankedConfig.FairKitBadge
+	fairKitTitle.ZIndex = 26
+	fairKitTitle.Parent = fairKitBadge
+
+	fairKitSub = Instance.new("TextLabel")
+	fairKitSub.Name = "Sub"
+	fairKitSub.BackgroundTransparency = 1
+	fairKitSub.Position = UDim2.new(0, 16, 0, 22)
+	fairKitSub.Size = UDim2.new(1, -22, 0, 16)
+	fairKitSub.Font = Theme.FontMono
+	fairKitSub.TextSize = 11
+	fairKitSub.TextXAlignment = Enum.TextXAlignment.Left
+	fairKitSub.TextColor3 = Theme.Bone
+	fairKitSub.Text = RankedConfig.FairKitStatsLabel
+	fairKitSub.ZIndex = 26
+	fairKitSub.Parent = fairKitBadge
 
 	remotes.CombatState.OnClientEvent:Connect(function(payload)
 		if typeof(payload) ~= "table" or typeof(payload.fighters) ~= "table" then
@@ -517,11 +557,19 @@ function CombatHud.start()
 		scoreLabel.Text = string.format("%s · R%d · %d : %d (FT%d)", mode, payload.roundNumber or 0, myWins, theirWins, payload.firstTo or 2)
 		arenaLabel.Text = tostring(payload.arenaName or payload.arenaId or "")
 		if payload.fairKit then
-			fairKitLabel.Text = "  Fair Kit · Rare cap  "
-			fairKitLabel.BackgroundTransparency = 0.15
+			fairKitBadge.Visible = true
+			if not fairKitVisible then
+				fairKitVisible = true
+				fairKitBadge.BackgroundTransparency = 0.35
+				fairKitBadge.Size = UDim2.new(0, 140, 0, 36)
+				TweenService:Create(fairKitBadge, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					BackgroundTransparency = 0.08,
+					Size = UDim2.new(0, 168, 0, 44),
+				}):Play()
+			end
 		else
-			fairKitLabel.Text = ""
-			fairKitLabel.BackgroundTransparency = 1
+			fairKitVisible = false
+			fairKitBadge.Visible = false
 		end
 
 		local phase = tostring(payload.phase)
