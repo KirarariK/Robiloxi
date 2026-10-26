@@ -1,6 +1,6 @@
 --!strict
 --[[
-	UI méta Pass 2 — badges rareté, icônes Frames colorées (sans emoji), shop cards premium.
+	UI méta — panneau M clarifié : gacha/pity, formes, Fair Kit Ranked, boutique.
 ]]
 
 local Players = game:GetService("Players")
@@ -9,6 +9,8 @@ local TweenService = game:GetService("TweenService")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Theme = require(Shared:WaitForChild("Theme"))
+local FormConfig = require(Shared:WaitForChild("FormConfig"))
+local RankedConfig = require(Shared:WaitForChild("RankedConfig"))
 
 local MetaHud = {}
 
@@ -16,6 +18,7 @@ local player = Players.LocalPlayer
 local metaRemotes: Remotes.MetaRemotes
 local profile: any = nil
 local catalog: any = nil
+local lastPullFlash: string? = nil
 local open = false
 
 local CATEGORY_COLOR: { [string]: Color3 } = {
@@ -64,9 +67,54 @@ local function mkText(parent: Instance, text: string, size: number, y: number): 
 	return t
 end
 
+local function mkSection(parent: Instance, title: string, hint: string, y: number): number
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, -24, 0, if hint ~= "" then 44 else 28)
+	bar.Position = UDim2.new(0, 12, 0, y)
+	bar.BackgroundColor3 = Theme.InkSoft
+	bar.BorderSizePixel = 0
+	bar.Parent = parent
+	corner(bar, 8)
+	stroke(bar, Theme.PanelEdge, 1).Transparency = 0.55
+
+	local accent = Instance.new("Frame")
+	accent.Size = UDim2.new(0, 3, 1, -8)
+	accent.Position = UDim2.new(0, 4, 0, 4)
+	accent.BackgroundColor3 = Theme.Accent
+	accent.BorderSizePixel = 0
+	accent.Parent = bar
+	corner(accent, 2)
+
+	local t = Instance.new("TextLabel")
+	t.BackgroundTransparency = 1
+	t.Size = UDim2.new(1, -20, 0, 20)
+	t.Position = UDim2.new(0, 14, 0, 4)
+	t.Font = Theme.FontTitle
+	t.TextSize = 14
+	t.TextXAlignment = Enum.TextXAlignment.Left
+	t.TextColor3 = Theme.Bone
+	t.Text = title
+	t.Parent = bar
+
+	if hint ~= "" then
+		local h = Instance.new("TextLabel")
+		h.BackgroundTransparency = 1
+		h.Size = UDim2.new(1, -20, 0, 16)
+		h.Position = UDim2.new(0, 14, 0, 24)
+		h.Font = Theme.FontBody
+		h.TextSize = 11
+		h.TextXAlignment = Enum.TextXAlignment.Left
+		h.TextColor3 = Theme.Muted
+		h.Text = hint
+		h.Parent = bar
+		return 52
+	end
+	return 36
+end
+
 local function mkButton(parent: Instance, text: string, y: number, callback, accent: Color3?): TextButton
 	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1, -24, 0, 30)
+	b.Size = UDim2.new(1, -24, 0, 32)
 	b.Position = UDim2.new(0, 12, 0, y)
 	b.BackgroundColor3 = accent or Theme.InkSoft
 	b.BorderSizePixel = 0
@@ -89,7 +137,6 @@ local function mkButton(parent: Instance, text: string, y: number, callback, acc
 	return b
 end
 
---[[ Icône text-free : Frame colorée + barre catégorie. ]]
 local function mkIcon(parent: Instance, color: Color3, x: number, y: number, size: number?): Frame
 	local s = size or 28
 	local f = Instance.new("Frame")
@@ -131,6 +178,42 @@ local function mkRarityBadge(parent: Instance, rarity: string, x: number, y: num
 	return badge
 end
 
+local function mkPityBar(parent: Instance, label: string, current: number, maxN: number, color: Color3, y: number): number
+	local wrap = Instance.new("Frame")
+	wrap.Size = UDim2.new(1, -24, 0, 36)
+	wrap.Position = UDim2.new(0, 12, 0, y)
+	wrap.BackgroundTransparency = 1
+	wrap.Parent = parent
+
+	local caption = Instance.new("TextLabel")
+	caption.BackgroundTransparency = 1
+	caption.Size = UDim2.new(1, 0, 0, 14)
+	caption.Font = Theme.FontBody
+	caption.TextSize = 11
+	caption.TextXAlignment = Enum.TextXAlignment.Left
+	caption.TextColor3 = Theme.Muted
+	caption.Text = string.format("%s  %d / %d", label, current, maxN)
+	caption.Parent = wrap
+
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, 0, 0, 10)
+	track.Position = UDim2.new(0, 0, 0, 18)
+	track.BackgroundColor3 = Theme.InkSoft
+	track.BorderSizePixel = 0
+	track.Parent = wrap
+	corner(track, 4)
+
+	local fill = Instance.new("Frame")
+	local pct = if maxN > 0 then math.clamp(current / maxN, 0, 1) else 0
+	fill.Size = UDim2.new(pct, 0, 1, 0)
+	fill.BackgroundColor3 = color
+	fill.BorderSizePixel = 0
+	fill.Parent = track
+	corner(fill, 4)
+
+	return 42
+end
+
 local function mkShopCard(parent: Instance, item: any, y: number, onBuy): number
 	local rarity = tostring(item.rarity or "Common")
 	local rarCol = Theme.rarityColor(rarity)
@@ -148,7 +231,6 @@ local function mkShopCard(parent: Instance, item: any, y: number, onBuy): number
 	edge.Transparency = 0.25
 	gradient(card, Theme.Panel, Theme.InkSoft)
 
-	-- Accent barre gauche
 	local bar = Instance.new("Frame")
 	bar.Size = UDim2.new(0, 4, 1, -8)
 	bar.Position = UDim2.new(0, 4, 0, 4)
@@ -207,46 +289,69 @@ local function mkShopCard(parent: Instance, item: any, y: number, onBuy): number
 	return cardH + 8
 end
 
-local function mkFormRow(parent: Instance, owned: any, y: number, onEquip): number
+local function formDisplayName(formId: string): string
+	local def = FormConfig.Forms[formId]
+	if def and typeof(def.displayName) == "string" then
+		return def.displayName
+	end
+	return formId
+end
+
+local function mkFormRow(parent: Instance, owned: any, y: number, equipped: boolean, onEquip): number
 	local rarity = tostring(owned.rarity or "Common")
 	local rarCol = Theme.rarityColor(rarity)
 	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -24, 0, 36)
+	row.Size = UDim2.new(1, -24, 0, 44)
 	row.Position = UDim2.new(0, 12, 0, y)
-	row.BackgroundColor3 = Theme.InkSoft
+	row.BackgroundColor3 = if equipped then Color3.fromRGB(28, 42, 52) else Theme.InkSoft
 	row.BorderSizePixel = 0
 	row.Parent = parent
 	corner(row, 8)
-	stroke(row, rarCol, 1).Transparency = 0.4
+	stroke(row, if equipped then Theme.Accent else rarCol, if equipped then 1.5 else 1).Transparency = if equipped
+		then 0.15
+		else 0.4
 
-	mkIcon(row, rarCol, 8, 4, 28)
-	mkRarityBadge(row, rarity, 44, 9)
+	mkIcon(row, rarCol, 8, 8, 28)
+	mkRarityBadge(row, rarity, 44, 4)
 
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Size = UDim2.new(1, -180, 1, 0)
-	label.Position = UDim2.new(0, 124, 0, 0)
-	label.Font = Theme.FontBody
+	label.Size = UDim2.new(1, -180, 0, 20)
+	label.Position = UDim2.new(0, 124, 0, 4)
+	label.Font = Theme.FontTitle
 	label.TextSize = 13
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextColor3 = Theme.Bone
-	label.Text = string.format("%s  ×%d", tostring(owned.formId), owned.count or 1)
+	label.Text = formDisplayName(tostring(owned.formId))
 	label.Parent = row
 
+	local sub = Instance.new("TextLabel")
+	sub.BackgroundTransparency = 1
+	sub.Size = UDim2.new(1, -180, 0, 16)
+	sub.Position = UDim2.new(0, 124, 0, 24)
+	sub.Font = Theme.FontBody
+	sub.TextSize = 11
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.TextColor3 = Theme.Muted
+	sub.Text = string.format("×%d  ·  tempo %s", owned.count or 1, (FormConfig.Forms[owned.formId] and FormConfig.Forms[owned.formId].tempo) or "—")
+	sub.Parent = row
+
 	local eq = Instance.new("TextButton")
-	eq.Size = UDim2.fromOffset(64, 26)
-	eq.Position = UDim2.new(1, -72, 0.5, -13)
-	eq.BackgroundColor3 = Theme.Accent
+	eq.Size = UDim2.fromOffset(72, 28)
+	eq.Position = UDim2.new(1, -80, 0.5, -14)
+	eq.BackgroundColor3 = if equipped then Theme.Success else Theme.Accent
 	eq.BorderSizePixel = 0
 	eq.Font = Theme.FontBody
 	eq.TextSize = 12
 	eq.TextColor3 = Theme.Ink
-	eq.Text = "ÉQUIPER"
+	eq.Text = if equipped then "ÉQUIPÉE" else "ÉQUIPER"
 	eq.Parent = row
 	corner(eq, 6)
-	eq.MouseButton1Click:Connect(onEquip)
+	if not equipped then
+		eq.MouseButton1Click:Connect(onEquip)
+	end
 
-	return 42
+	return 50
 end
 
 function MetaHud.start()
@@ -278,7 +383,7 @@ function MetaHud.start()
 	panel.Name = "Panel"
 	panel.AnchorPoint = Vector2.new(1, 1)
 	panel.Position = UDim2.new(1, -16, 1, -64)
-	panel.Size = UDim2.new(0, 380, 0, 460)
+	panel.Size = UDim2.new(0, 400, 0, 500)
 	panel.BackgroundColor3 = Theme.Ink
 	panel.BackgroundTransparency = 0.05
 	panel.BorderSizePixel = 0
@@ -298,7 +403,7 @@ function MetaHud.start()
 
 	local content = Instance.new("Frame")
 	content.Name = "Content"
-	content.Size = UDim2.new(1, 0, 0, 1200)
+	content.Size = UDim2.new(1, 0, 0, 1400)
 	content.BackgroundTransparency = 1
 	content.Parent = panel
 
@@ -335,13 +440,15 @@ function MetaHud.start()
 		local title = mkText(content, Theme.Brand .. " — Méta", 18, y)
 		title.Font = Theme.FontTitle
 		title.TextColor3 = Theme.Accent
-		y += 30
+		y += 28
 
+		-- Profil résumé
 		if profile then
+			y += mkSection(content, "Profil", "Devises · rang · forme équipée", y)
 			mkText(
 				content,
 				string.format(
-					"Crédits %d · Éclats %d · Fragments %d",
+					"Crédits %d  ·  Éclats %d  ·  Fragments %d",
 					profile.credits or 0,
 					profile.shards or 0,
 					profile.fragments or 0
@@ -350,21 +457,20 @@ function MetaHud.start()
 				y
 			)
 			y += 20
-			local formRarity = tostring(profile.equippedFormRarity or "")
-			local formLine = mkText(
+			local formRarity = tostring(profile.equippedFormRarity or "Common")
+			mkText(
 				content,
 				string.format(
-					"MMR %d (%s) · Forme %s",
+					"MMR %d (%s)  ·  Forme %s",
 					profile.mmr or 0,
 					profile.rank or "?",
-					profile.equippedFormId or "?"
+					formDisplayName(tostring(profile.equippedFormId or "?"))
 				),
 				13,
 				y
 			)
-			formLine.TextColor3 = Theme.Bone
 			y += 4
-			mkRarityBadge(content, formRarity ~= "" and formRarity or "Common", 12, y + 16)
+			mkRarityBadge(content, formRarity, 12, y + 16)
 			y += 40
 
 			local factionName = "—"
@@ -378,67 +484,140 @@ function MetaHud.start()
 			end
 			local fac = mkText(content, "Faction : " .. factionName, 13, y)
 			fac.TextColor3 = factionColor
-			y += 22
-			mkText(
-				content,
-				string.format(
-					"Pity Épique %d/%d · Légendaire %d/%d",
-					profile.pityEpic or 0,
-					profile.pityEpicAt or 40,
-					profile.pityLegendary or 0,
-					profile.pityLegendaryAt or 90
-				),
-				12,
-				y
-			).TextColor3 =
-				Theme.Muted
-			y += 26
+			y += 24
 		end
 
-		mkText(content, "Matchmaking", 15, y).Font = Theme.FontTitle
-		y += 22
+		-- Matchmaking + Fair Kit
+		y += mkSection(
+			content,
+			"Matchmaking",
+			"Casual = stats full · Ranked = " .. RankedConfig.FairKitBadge
+		)
 		mkButton(content, "Queue Casual", y, function()
 			metaRemotes.QueueMatch:FireServer({ mode = "Casual" })
 		end, Theme.InkSoft)
-		y += 36
+		y += 38
+
+		-- Callout Fair Kit
+		local fair = Instance.new("Frame")
+		fair.Size = UDim2.new(1, -24, 0, 68)
+		fair.Position = UDim2.new(0, 12, 0, y)
+		fair.BackgroundColor3 = Color3.fromRGB(22, 40, 38)
+		fair.BorderSizePixel = 0
+		fair.Parent = content
+		corner(fair, 8)
+		stroke(fair, Theme.Success, 1.2).Transparency = 0.25
+		local fairTitle = Instance.new("TextLabel")
+		fairTitle.BackgroundTransparency = 1
+		fairTitle.Size = UDim2.new(1, -16, 0, 18)
+		fairTitle.Position = UDim2.new(0, 10, 0, 6)
+		fairTitle.Font = Theme.FontTitle
+		fairTitle.TextSize = 13
+		fairTitle.TextXAlignment = Enum.TextXAlignment.Left
+		fairTitle.TextColor3 = Theme.Success
+		fairTitle.Text = RankedConfig.FairKitBadge .. "  ·  " .. RankedConfig.FairKitStatsLabel
+		fairTitle.Parent = fair
+		local fairBody = Instance.new("TextLabel")
+		fairBody.BackgroundTransparency = 1
+		fairBody.Size = UDim2.new(1, -16, 0, 36)
+		fairBody.Position = UDim2.new(0, 10, 0, 26)
+		fairBody.Font = Theme.FontBody
+		fairBody.TextSize = 11
+		fairBody.TextXAlignment = Enum.TextXAlignment.Left
+		fairBody.TextYAlignment = Enum.TextYAlignment.Top
+		fairBody.TextWrapped = true
+		fairBody.TextColor3 = Theme.Muted
+		fairBody.Text =
+			"En Ranked, les passifs stats sont plafonnés Rare. Épique / Légendaire restent cosmétiques (pas de P2W)."
+		fairBody.Parent = fair
+		y += 76
+
 		mkButton(content, "Queue Ranked (Fair Kit)", y, function()
 			metaRemotes.QueueMatch:FireServer({ mode = "Ranked" })
 		end, Color3.fromRGB(30, 50, 48))
-		y += 42
+		y += 44
 
-		mkText(content, "Formes — Banner", 15, y).Font = Theme.FontTitle
-		y += 22
-		mkButton(content, "Pull ×1 (300 Cr)", y, function()
+		-- Gacha
+		y += mkSection(content, "Gacha — Banner formes", "Pity soft · rates affichés · feedback pull")
+		if profile then
+			y += mkPityBar(
+				content,
+				"Pity Épique",
+				profile.pityEpic or 0,
+				profile.pityEpicAt or FormConfig.PityEpic,
+				Theme.RarityEpic,
+				y
+			)
+			y += mkPityBar(
+				content,
+				"Pity Légendaire",
+				profile.pityLegendary or 0,
+				profile.pityLegendaryAt or FormConfig.PityLegendary,
+				Theme.RarityLegendary,
+				y
+			)
+		end
+		local rates = mkText(
+			content,
+			string.format(
+				"Rates · C %.0f%%  R %.0f%%  E %.0f%%  L %.0f%%",
+				FormConfig.DropRates.Common * 100,
+				FormConfig.DropRates.Rare * 100,
+				FormConfig.DropRates.Epic * 100,
+				FormConfig.DropRates.Legendary * 100
+			),
+			11,
+			y
+		)
+		rates.TextColor3 = Theme.Muted
+		y += 20
+
+		if lastPullFlash then
+			local flash = mkText(content, "Dernier pull : " .. lastPullFlash, 12, y)
+			flash.TextColor3 = Theme.Perfect
+			y += 20
+		end
+
+		mkButton(content, "Pull ×1  —  300 Crédits", y, function()
+			lastPullFlash = "×1 soft…"
 			metaRemotes.GachaPull:FireServer({ count = 1, premium = false })
 		end)
-		y += 36
-		mkButton(content, "Pull ×10 premium (450 Éclats)", y, function()
+		y += 38
+		mkButton(content, "Pull ×10 premium  —  450 Éclats", y, function()
+			lastPullFlash = "×10 premium…"
 			metaRemotes.GachaPull:FireServer({ count = 10, premium = true })
 		end, Color3.fromRGB(48, 36, 70))
-		y += 36
+		y += 38
 		mkButton(content, "Ticket free ×10 / semaine", y, function()
+			lastPullFlash = "ticket free…"
 			metaRemotes.GachaPull:FireServer({ count = 10, premium = false })
 		end)
-		y += 42
+		y += 44
 
+		-- Formes
+		y += mkSection(content, "Formes possédées", "Équiper change les anims + passifs (Casual full)")
 		if profile and typeof(profile.ownedForms) == "table" then
-			mkText(content, "Équiper une forme", 14, y).Font = Theme.FontTitle
-			y += 22
+			local eqId = tostring(profile.equippedFormId or "")
+			local eqR = tostring(profile.equippedFormRarity or "")
 			for _, owned in profile.ownedForms do
 				local fid, rar = owned.formId, owned.rarity
-				y += mkFormRow(content, owned, y, function()
+				local isEq = tostring(fid) == eqId and tostring(rar) == eqR
+				y += mkFormRow(content, owned, y, isEq, function()
 					metaRemotes.EquipLoadout:FireServer({ formId = fid, rarity = rar })
 				end)
 			end
 			y += 8
+		else
+			mkText(content, "Aucune forme — lance un pull", 12, y).TextColor3 = Theme.Muted
+			y += 24
 		end
 
-		mkText(content, "Boutique (cosmétiques)", 15, y).Font = Theme.FontTitle
-		y += 22
+		-- Boutique
+		y += mkSection(content, "Boutique cosmétiques", "Couleurs lame, hilts, auras — pas de stats")
 		mkButton(content, "Stub +100 Éclats Focus", y, function()
 			metaRemotes.ShopPurchase:FireServer({ stubShards = true })
 		end)
-		y += 36
+		y += 38
 		if typeof(catalog) == "table" then
 			for _, item in catalog do
 				local id = item.id
@@ -450,8 +629,8 @@ function MetaHud.start()
 		end
 		y += 12
 
-		mkText(content, "Quêtes journalières", 15, y).Font = Theme.FontTitle
-		y += 22
+		-- Quêtes
+		y += mkSection(content, "Quêtes journalières", "Claim pour crédits / fragments")
 		if profile and typeof(profile.dailyQuests) == "table" then
 			for _, q in profile.dailyQuests do
 				local done = q.claimed == true
@@ -463,17 +642,17 @@ function MetaHud.start()
 				if done then
 					btn.TextColor3 = Theme.Success
 				end
-				y += 34
+				y += 36
 			end
 		end
 		y += 12
 
-		mkText(content, "Factions", 15, y).Font = Theme.FontTitle
-		y += 22
+		-- Factions
+		y += mkSection(content, "Factions", "Choix unique — Aube / Crépuscule")
 		mkButton(content, "Rejoindre Ordre de l'Aube", y, function()
 			metaRemotes.SelectFaction:FireServer({ factionId = "Dawn" })
 		end, Color3.fromRGB(60, 45, 28))
-		y += 36
+		y += 38
 		mkButton(content, "Rejoindre Voie du Crépuscule", y, function()
 			metaRemotes.SelectFaction:FireServer({ factionId = "Dusk" })
 		end, Color3.fromRGB(40, 28, 60))
@@ -492,6 +671,23 @@ function MetaHud.start()
 		end
 		if payload.catalog then
 			catalog = payload.catalog
+		end
+		-- Feedback pull gacha
+		if payload.kind == "GachaResult" or payload.pulls or payload.results then
+			local results = payload.results or payload.pulls
+			if typeof(results) == "table" and #results > 0 then
+				local names = {}
+				for i, r in results do
+					if i > 3 then
+						break
+					end
+					table.insert(names, string.format("%s/%s", tostring(r.formId or r.id), tostring(r.rarity or "?")))
+				end
+				lastPullFlash = table.concat(names, " · ")
+				if #results > 3 then
+					lastPullFlash ..= string.format(" (+%d)", #results - 3)
+				end
+			end
 		end
 		rebuild()
 	end)
