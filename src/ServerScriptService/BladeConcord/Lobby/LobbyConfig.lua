@@ -128,10 +128,11 @@ LobbyConfig.Tags = {
 	NeonStrip = "BC_NeonStrip",
 }
 
+-- Placeholders Audio only — IDs non-Audio (ex. 9114221256) provoquent erreur rouge Play.
 LobbyConfig.AmbientSoundIds = {
-	Hall = "rbxassetid://9114221256",
-	Forge = "rbxassetid://9113839759",
-	Fountain = "rbxassetid://9114221571",
+	Hall = "",
+	Forge = "",
+	Fountain = "",
 }
 
 LobbyConfig.FormsShowcase = {

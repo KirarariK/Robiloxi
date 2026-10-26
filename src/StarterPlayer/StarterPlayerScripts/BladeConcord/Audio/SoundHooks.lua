@@ -53,13 +53,14 @@ SoundHooks.AssetIds = {
 	Rematch = "rbxassetid://6895079853",
 	-- Amp-style electric hum ; si mute en playtest → remplacer via SoundHooks.AssetIds.Hum
 	Hum = "rbxassetid://9114323612",
-	-- Ambiance arènes (library publics — volume bas, loop)
-	AmbientObsidian = "rbxassetid://9113839759", -- fire / ember crackle style
-	AmbientSanctum = "rbxassetid://9114221256", -- soft wind
-	AmbientEclipse = "rbxassetid://9116395309", -- low drone / buzz
-	AmbientMirage = "rbxassetid://9114221571", -- water / breeze adjacent
-	-- Concord Hall (placeholder configurable — swap Creator Store libre)
-	AmbientLobby = "rbxassetid://9114221256",
+	-- Ambiance : IDs Creator Store précédents (9114221256 / 9113839759 / 9116395309 / 9114221571)
+	-- n'étaient PAS de type Audio → « Asset type does not match » rouge à chaque Play.
+	-- Vide = silence propre jusqu'à swap Creator Store Audio réel.
+	AmbientObsidian = "",
+	AmbientSanctum = "",
+	AmbientEclipse = "",
+	AmbientMirage = "",
+	AmbientLobby = "",
 }
 
 local AMBIENT_BY_ARENA: { [string]: string } = {
@@ -148,7 +149,8 @@ function SoundHooks.start()
 	for name, def in DEFS do
 		local s = Instance.new("Sound")
 		s.Name = "BC_" .. name
-		s.SoundId = SoundHooks.AssetIds[name] or ""
+		local id = SoundHooks.AssetIds[name] or ""
+		s.SoundId = id
 		s.Volume = def.vol
 		s.PlaybackSpeed = def.speed
 		s.Looped = def.loop == true
@@ -157,17 +159,22 @@ function SoundHooks.start()
 		s.RollOffMaxDistance = 80
 		s.Parent = SoundService
 		cache[name] = s
-		table.insert(toPreload, s)
+		-- Ne pas PreloadAsync les SoundId vides / non-Audio (spam Output Studio)
+		if id ~= "" then
+			table.insert(toPreload, s)
+		end
 		if name == "Hum" then
 			humSound = s
 		end
 	end
 
-	task.spawn(function()
-		pcall(function()
-			ContentProvider:PreloadAsync(toPreload)
+	if #toPreload > 0 then
+		task.spawn(function()
+			pcall(function()
+				ContentProvider:PreloadAsync(toPreload)
+			end)
 		end)
-	end)
+	end
 
 	local marker = Instance.new("StringValue")
 	marker.Name = "BC_AudioTheme"
