@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Orchestrateur duel : register, tick, broadcast CombatState, RoundEnded.
+	Orchestrateur duel P1–P2 : register, mobilité, Focus, tick, Match BO3.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,15 +16,20 @@ local AttackService = require(script.Parent:WaitForChild("AttackService"))
 local GuardService = require(script.Parent:WaitForChild("GuardService"))
 local HitService = require(script.Parent:WaitForChild("HitService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
+local DodgeService = require(script.Parent:WaitForChild("DodgeService"))
+local DashService = require(script.Parent:WaitForChild("DashService"))
+local FocusService = require(script.Parent:WaitForChild("FocusService"))
+local BotStub = require(script.Parent:WaitForChild("BotStub"))
+local MatchService = require(script.Parent.Parent.Match:WaitForChild("MatchService"))
 
 local CombatService = {}
 
 local remotes: RemotesMod.CombatRemotes
 local attackRate: { [Player]: { count: number, windowStart: number } } = {}
-local roundEnded = false
+local mobilityRate: { [Player]: { count: number, windowStart: number } } = {}
+local roundEndReported = false
 
 local function ensureBlade(character: Model): BasePart
-	local existing = nil
 	for _, inst in CollectionService:GetTagged(CombatConfig.Tags.SaberBlade) do
 		if inst:IsDescendantOf(character) and inst:IsA("BasePart") then
 			return inst
@@ -48,6 +53,24 @@ local function ensureBlade(character: Model): BasePart
 		handle.CFrame = rightHand.CFrame * CFrame.new(0, 0, -CombatConfig.Light.BladeLength * 0.5)
 	end
 	CollectionService:AddTag(handle, CombatConfig.Tags.SaberBlade)
+
+	-- Trail stub VFX
+	local att0 = Instance.new("Attachment")
+	att0.Name = "TrailA"
+	att0.Position = Vector3.new(0, 0, CombatConfig.Light.BladeLength * 0.45)
+	att0.Parent = handle
+	local att1 = Instance.new("Attachment")
+	att1.Name = "TrailB"
+	att1.Position = Vector3.new(0, 0, -CombatConfig.Light.BladeLength * 0.45)
+	att1.Parent = handle
+	local trail = Instance.new("Trail")
+	trail.Name = "SaberTrailStub"
+	trail.Attachment0 = att0
+	trail.Attachment1 = att1
+	trail.Lifetime = 0.15
+	trail.Enabled = false
+	trail.Parent = handle
+
 	return handle
 end
 
@@ -74,7 +97,6 @@ function CombatService.bindCharacter(fighter: FighterState.Fighter, character: M
 	fighter.walkSpeedBase = humanoid.WalkSpeed
 	humanoid.MaxHealth = CombatConfig.MaxHp
 	humanoid.Health = fighter.hp
-	-- Empêche le client de décider la mort hors FighterState
 	humanoid.BreakJointsOnDeath = false
 
 	task.defer(function()
@@ -92,7 +114,6 @@ function CombatService.register(player: Player): FighterState.Fighter
 	end
 	player.CharacterAdded:Connect(function(character)
 		CombatService.bindCharacter(fighter, character)
-		-- Respawn sur arène
 		local a, b = ArenaService.getSpawnCFrames()
 		local index = 1
 		for i, f in FighterState.getAll() do
@@ -120,40 +141,23 @@ function CombatService.broadcastState()
 	remotes.CombatState:FireAllClients({ fighters = snapshots, t = os.clock() })
 end
 
-function CombatService.endRound(winner: Player?)
-	if roundEnded then
-		return
+local function rateOk(bucketMap: { [Player]: { count: number, windowStart: number } }, player: Player, limit: number): boolean
+	local now = os.clock()
+	local bucket = bucketMap[player]
+	if not bucket or now - bucket.windowStart >= 1 then
+		bucketMap[player] = { count = 1, windowStart = now }
+		return true
 	end
-	roundEnded = true
-	remotes.RoundEnded:FireAllClients({
-		winnerUserId = if winner then winner.UserId else nil,
-	})
-end
-
-function CombatService.resetRound()
-	roundEnded = false
-	local a, b = ArenaService.getSpawnCFrames()
-	local fighters = FighterState.getAll()
-	for i, f in fighters do
-		FighterState.resetRound(f)
-		local character = f.character
-		if character then
-			local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			if hrp then
-				hrp.CFrame = if i % 2 == 1 then a else b
-			end
-			if humanoid then
-				humanoid.Health = CombatConfig.MaxHp
-			end
-		end
-	end
-	CombatService.broadcastState()
+	bucket.count += 1
+	return bucket.count <= limit
 end
 
 function CombatService.onAttackIntent(player: Player, payload: any)
+	if not MatchService.isFighting() then
+		return
+	end
 	local fighter = FighterState.get(player)
-	if not fighter or roundEnded then
+	if not fighter then
 		return
 	end
 	if typeof(payload) ~= "table" then
@@ -164,26 +168,19 @@ function CombatService.onAttackIntent(player: Player, payload: any)
 	if typeof(seq) ~= "number" then
 		return
 	end
-
-	-- Rate limit ~8/s
-	local now = os.clock()
-	local bucket = attackRate[player]
-	if not bucket or now - bucket.windowStart >= 1 then
-		attackRate[player] = { count = 1, windowStart = now }
-	else
-		bucket.count += 1
-		if bucket.count > CombatConfig.AntiCheat.AttackRateLimitPerSecond then
-			return
-		end
+	if not rateOk(attackRate, player, CombatConfig.AntiCheat.AttackRateLimitPerSecond) then
+		return
 	end
-
 	AttackService.tryStart(fighter, kind, seq)
 	CombatService.broadcastState()
 end
 
 function CombatService.onGuardIntent(player: Player, payload: any)
+	if not MatchService.isFighting() then
+		return
+	end
 	local fighter = FighterState.get(player)
-	if not fighter or roundEnded then
+	if not fighter then
 		return
 	end
 	if typeof(payload) ~= "table" then
@@ -191,6 +188,14 @@ function CombatService.onGuardIntent(player: Player, payload: any)
 	end
 	local holding = payload.holding == true
 	local seq = payload.seq
+	-- Feinte : pendant Startup Light, GuardIntent = feinte
+	if holding and fighter.actionId == CombatTypes.ActionId.Startup and fighter.attackKind == CombatTypes.AttackKind.Light then
+		if typeof(seq) == "number" then
+			AttackService.tryFeint(fighter, seq)
+		end
+		CombatService.broadcastState()
+		return
+	end
 	if typeof(seq) == "number" then
 		GuardService.setHolding(fighter, holding, seq)
 	else
@@ -199,27 +204,127 @@ function CombatService.onGuardIntent(player: Player, payload: any)
 	CombatService.broadcastState()
 end
 
-function CombatService.step(dt: number)
-	if roundEnded then
+function CombatService.onMobilityIntent(player: Player, payload: any)
+	if not MatchService.isFighting() then
 		return
 	end
+	local fighter = FighterState.get(player)
+	if not fighter or typeof(payload) ~= "table" then
+		return
+	end
+	local kind = payload.kind
+	local seq = payload.seq
+	if typeof(seq) ~= "number" or typeof(kind) ~= "string" then
+		return
+	end
+	if not rateOk(mobilityRate, player, CombatConfig.AntiCheat.MobilityRateLimitPerSecond) then
+		return
+	end
+
+	local dir: Vector3? = nil
+	if typeof(payload.dir) == "Vector3" then
+		dir = payload.dir
+	elseif typeof(payload.dir) == "table" and typeof(payload.dir.X) == "number" then
+		dir = Vector3.new(payload.dir.X, payload.dir.Y or 0, payload.dir.Z)
+	end
+
+	if kind == "Dodge" then
+		DodgeService.tryDodge(fighter, dir, seq)
+	elseif kind == "Dash" then
+		DashService.tryDash(fighter, dir, seq)
+	elseif kind == "Feint" then
+		AttackService.tryFeint(fighter, seq)
+	end
+	CombatService.broadcastState()
+end
+
+function CombatService.onFocusIntent(player: Player, payload: any)
+	if not MatchService.isFighting() then
+		return
+	end
+	local fighter = FighterState.get(player)
+	if not fighter or typeof(payload) ~= "table" then
+		return
+	end
+	local kind = payload.kind
+	local seq = payload.seq
+	if typeof(seq) ~= "number" or typeof(kind) ~= "string" then
+		return
+	end
+	local dir: Vector3? = nil
+	if typeof(payload.dir) == "Vector3" then
+		dir = payload.dir
+	elseif typeof(payload.dir) == "table" and typeof(payload.dir.X) == "number" then
+		dir = Vector3.new(payload.dir.X, payload.dir.Y or 0, payload.dir.Z)
+	end
+	if kind == "Push" then
+		FocusService.tryPush(fighter, seq)
+	elseif kind == "DashFocus" then
+		FocusService.tryDashFocus(fighter, dir, seq)
+	end
+	CombatService.broadcastState()
+end
+
+function CombatService.step(dt: number)
+	MatchService.step(dt)
+
+	-- Enable bot for solo practice on countdown/fight
+	if MatchService.isSoloPractice() then
+		local _, spawnB = ArenaService.getSpawnCFrames()
+		if MatchService.getPhase() == "Countdown" or MatchService.getPhase() == "Fighting" then
+			BotStub.enable(spawnB)
+		end
+	elseif BotStub.isEnabled() and #Players:GetPlayers() >= 2 then
+		BotStub.disable()
+	end
+
+	if MatchService.getPhase() == "Fighting" and roundEndReported then
+		-- stay locked until phase leaves Fighting (handled below)
+	elseif MatchService.getPhase() ~= "Fighting" then
+		roundEndReported = false
+	end
+
+	if not MatchService.isFighting() then
+		BotStub.step(dt, false)
+		return
+	end
+
 	for _, fighter in FighterState.getAll() do
 		if fighter.actionId ~= CombatTypes.ActionId.Dead then
-			AttackService.step(fighter, dt)
+			-- Bot AI stepped separately; still run stamina/mobility for all
+			if not BotStub.isEnabled() or fighter ~= BotStub.getFighter() then
+				AttackService.step(fighter, dt)
+			end
+			DodgeService.step(fighter, dt)
+			DashService.step(fighter, dt)
+			FocusService.step(fighter, dt)
 			StaminaService.step(fighter, dt)
 		end
 	end
+	BotStub.step(dt, true)
 	HitService.step(dt)
+	ArenaService.stepHazards(dt)
 
-	-- KO check
 	local alive = {}
 	for _, f in FighterState.getAll() do
 		if f.hp > 0 and f.actionId ~= CombatTypes.ActionId.Dead then
 			table.insert(alive, f)
 		end
 	end
-	if #FighterState.getAll() >= 2 and #alive <= 1 then
-		CombatService.endRound(if #alive == 1 then alive[1].player else nil)
+	if #FighterState.getAll() >= 2 and #alive <= 1 and not roundEndReported then
+		roundEndReported = true
+		if #alive == 1 then
+			local winnerFighter = alive[1]
+			if MatchService.isSoloPractice() and winnerFighter == BotStub.getFighter() then
+				MatchService.onRoundWinner(nil, -9001)
+			elseif typeof(winnerFighter.player) == "Instance" and (winnerFighter.player :: any):IsA("Player") then
+				MatchService.onRoundWinner(winnerFighter.player :: Player)
+			else
+				MatchService.onRoundWinner(nil)
+			end
+		else
+			MatchService.onRoundWinner(nil)
+		end
 	end
 
 	CombatService.broadcastState()
@@ -227,7 +332,8 @@ end
 
 function CombatService.start()
 	remotes = RemotesMod.get()
-	ArenaService.ensureObsidianPit()
+	ArenaService.ensureAll()
+	MatchService.start()
 
 	remotes.AttackIntent.OnServerEvent:Connect(function(player, payload)
 		CombatService.onAttackIntent(player, payload)
@@ -235,21 +341,32 @@ function CombatService.start()
 	remotes.GuardIntent.OnServerEvent:Connect(function(player, payload)
 		CombatService.onGuardIntent(player, payload)
 	end)
+	remotes.MobilityIntent.OnServerEvent:Connect(function(player, payload)
+		CombatService.onMobilityIntent(player, payload)
+	end)
+	remotes.FocusIntent.OnServerEvent:Connect(function(player, payload)
+		CombatService.onFocusIntent(player, payload)
+	end)
+
+	workspace:GetAttributeChangedSignal("BC_RoundStart"):Connect(function()
+		if BotStub.isEnabled() then
+			local _, spawnB = ArenaService.getSpawnCFrames()
+			BotStub.reset(spawnB)
+		end
+	end)
 
 	Players.PlayerAdded:Connect(function(player)
 		CombatService.register(player)
+		MatchService.enqueue(player, "Casual")
 	end)
 	for _, player in Players:GetPlayers() do
 		CombatService.register(player)
+		MatchService.enqueue(player, "Casual")
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		FighterState.remove(player)
 		attackRate[player] = nil
-	end)
-
-	-- Place spawns initiaux
-	task.defer(function()
-		CombatService.resetRound()
+		mobilityRate[player] = nil
 	end)
 end
 
