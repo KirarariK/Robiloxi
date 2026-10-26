@@ -1,6 +1,7 @@
 --!strict
 --[[
 	UI méta — panneau M clarifié : gacha/pity, formes, Fair Kit Ranked, boutique.
+	Vague 6 : premier choix faction Aube / Crépuscule (modal first-time).
 ]]
 
 local Players = game:GetService("Players")
@@ -20,6 +21,8 @@ local profile: any = nil
 local catalog: any = nil
 local lastPullFlash: string? = nil
 local open = false
+local factionPromptShown = false
+local factionOverlay: Frame? = nil
 
 local CATEGORY_COLOR: { [string]: Color3 } = {
 	BladeColor = Theme.Accent,
@@ -352,6 +355,105 @@ local function mkFormRow(parent: Instance, owned: any, y: number, equipped: bool
 	end
 
 	return 50
+end
+
+local function hideFactionPrompt()
+	if factionOverlay then
+		local ov = factionOverlay
+		factionOverlay = nil
+		TweenService:Create(ov, TweenInfo.new(0.22), { BackgroundTransparency = 1 }):Play()
+		task.delay(0.25, function()
+			ov:Destroy()
+		end)
+	end
+end
+
+local function showFactionPrompt(parentGui: ScreenGui)
+	if factionPromptShown or factionOverlay then
+		return
+	end
+	if profile and typeof(profile.faction) == "string" and profile.faction ~= "" then
+		return
+	end
+	factionPromptShown = true
+
+	local overlay = Instance.new("Frame")
+	overlay.Name = "FactionFirstPick"
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundColor3 = Theme.Ink
+	overlay.BackgroundTransparency = 0.35
+	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 80
+	overlay.Parent = parentGui
+	factionOverlay = overlay
+
+	local card = Instance.new("Frame")
+	card.Name = "Card"
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.Position = UDim2.fromScale(0.5, 0.48)
+	card.Size = UDim2.new(0, 420, 0, 280)
+	card.BackgroundColor3 = Theme.Panel
+	card.BackgroundTransparency = 0.05
+	card.BorderSizePixel = 0
+	card.ZIndex = 81
+	card.Parent = overlay
+	corner(card, 14)
+	stroke(card, Theme.Accent, 1.5)
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.new(0, 24, 0, 20)
+	title.Size = UDim2.new(1, -48, 0, 28)
+	title.Font = Theme.FontTitle
+	title.TextSize = 22
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextColor3 = Theme.Bone
+	title.Text = "Choisis ta faction"
+	title.ZIndex = 82
+	title.Parent = card
+
+	local sub = Instance.new("TextLabel")
+	sub.BackgroundTransparency = 1
+	sub.Position = UDim2.new(0, 24, 0, 52)
+	sub.Size = UDim2.new(1, -48, 0, 40)
+	sub.Font = Theme.FontBody
+	sub.TextSize = 13
+	sub.TextWrapped = true
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.TextYAlignment = Enum.TextYAlignment.Top
+	sub.TextColor3 = Theme.Muted
+	sub.Text = "Choix unique — Ordre de l'Aube ou Voie du Crépuscule. Modifie la vignette HUD."
+	sub.ZIndex = 82
+	sub.Parent = card
+
+	local function pick(factionId: string, label: string, color: Color3, y: number)
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(1, -48, 0, 52)
+		b.Position = UDim2.new(0, 24, 0, y)
+		b.BackgroundColor3 = color
+		b.BorderSizePixel = 0
+		b.Font = Theme.FontTitle
+		b.TextSize = 16
+		b.TextColor3 = Theme.Bone
+		b.Text = label
+		b.ZIndex = 82
+		b.Parent = card
+		corner(b, 10)
+		stroke(b, Theme.Bone, 1).Transparency = 0.55
+		b.MouseButton1Click:Connect(function()
+			b.Text = "…"
+			metaRemotes.SelectFaction:FireServer({ factionId = factionId })
+			hideFactionPrompt()
+		end)
+	end
+
+	pick("Dawn", "Ordre de l'Aube", Color3.fromRGB(70, 48, 28), 110)
+	pick("Dusk", "Voie du Crépuscule", Color3.fromRGB(42, 28, 68), 176)
+
+	card.Size = UDim2.new(0, 360, 0, 240)
+	TweenService:Create(card, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, 420, 0, 280),
+	}):Play()
 end
 
 function MetaHud.start()
@@ -702,6 +804,17 @@ function MetaHud.start()
 			else
 				lastPullFlash = lastPullFlash or "Pas de résultat"
 			end
+		end
+		if payload.kind == "Faction" and payload.ok == true then
+			hideFactionPrompt()
+		end
+		-- First-time : modal Aube / Crépuscule si pas encore de faction
+		if profile and (profile.faction == nil or profile.faction == "") then
+			task.defer(function()
+				showFactionPrompt(gui)
+			end)
+		elseif profile and typeof(profile.faction) == "string" then
+			hideFactionPrompt()
 		end
 		rebuild()
 	end)
