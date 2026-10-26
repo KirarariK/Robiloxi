@@ -320,7 +320,7 @@ function ProceduralPlayer.play(
 
 	local length = if clip then clip.lengthHint else 0.3
 	local priorityEnum = if clip then clip.priority else setDef.style.priority
-	local looped = if clip then clip.looped else (clipName == "Idle" or clipName == "Guard")
+	local looped = if clip then clip.looped else (clipName == "Idle" or clipName == "LobbyIdle" or clipName == "Guard")
 
 	local list = activeByChar[character]
 	if not list then

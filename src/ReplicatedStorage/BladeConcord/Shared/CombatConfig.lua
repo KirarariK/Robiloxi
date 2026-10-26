@@ -129,9 +129,10 @@ local CombatConfig = {
 		FirstTo = 2,
 		InterRoundDelay = 2.5,
 		LobbyCountdown = 3,
-		MatchEndDelay = 5, -- fenêtre bouton REVANCHE (auto fallback)
+		MatchEndDelay = 8, -- REVANCHE ou retour salon (auto → lobby)
 		RematchClientCooldown = 1.4,
 		RematchServerCooldown = 2.0,
+		SoloMatchmakingDelay = 1.6, -- après Jouer Amical solo → bot
 	},
 
 	Arena = {

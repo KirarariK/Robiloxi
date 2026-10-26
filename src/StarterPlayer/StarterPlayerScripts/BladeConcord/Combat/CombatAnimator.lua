@@ -32,6 +32,7 @@ local useAnimatorPath = false
 local feintArmed: { [number]: boolean } = {}
 -- Showcase (touche P) : ignore CombatState pour ne pas écraser le cycle démo
 local combatPaused = false
+local matchPhase = "Lobby"
 local catalogueBedStarted: { [Model]: boolean } = {}
 
 local function playLocalSfx(name: string, userId: number)
@@ -235,12 +236,17 @@ local function applyState(userId: number, snap: any)
 		feintArmed[userId] = false
 	end
 
+	local flags = if typeof(snap.flags) == "table" then table.clone(snap.flags) else {}
+	if matchPhase == "Lobby" and actionId == "Idle" then
+		flags.lobby = true
+	end
+
 	local setDef, clipName = AnimationSets.resolveForSnapshot({
 		actionId = actionId,
 		attackKind = attackKind,
 		formId = formId,
 		formRarity = formRarity,
-		flags = snap.flags,
+		flags = flags,
 	})
 
 	-- Heavy universal : si forme Common, Cross-blend HeavyCleaver sur Active/Startup Heavy
@@ -330,6 +336,17 @@ function CombatAnimator.start()
 	end
 
 	local remotes = Remotes.get()
+	remotes.MatchState.OnClientEvent:Connect(function(payload)
+		if typeof(payload) ~= "table" then
+			return
+		end
+		local prev = matchPhase
+		matchPhase = tostring(payload.phase or "Lobby")
+		if prev ~= matchPhase then
+			-- Force re-resolve Idle ↔ LobbyIdle
+			table.clear(lastKey)
+		end
+	end)
 	remotes.CombatState.OnClientEvent:Connect(function(payload)
 		if combatPaused then
 			return

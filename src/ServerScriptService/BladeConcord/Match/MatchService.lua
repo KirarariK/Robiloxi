@@ -1,6 +1,7 @@
 --!strict
 --[[
-	Lobby → duel BO3 (FT2) → rematch. Modes Casual / Ranked.
+	Salon → file → countdown → duel BO3 (FT2) → retour salon.
+	Modes Casual / Ranked. Bot uniquement après « Jouer » Amical solo.
 ]]
 
 local Players = game:GetService("Players")
@@ -28,9 +29,11 @@ local arenaRotationIndex = 1
 local queue: { Player } = {}
 local activePair: { Player } = {}
 local soloPractice = false
-local soloLobbyWait = 0
+local soloMatchmakingTimer = 0
+local pendingSoloPlayer: Player? = nil
 local onMatchEndHook: ((winner: Player?, loser: Player?, mode: CombatTypes.MatchMode) -> ())? = nil
 local onRoundEndHook: ((winner: Player?) -> ())? = nil
+local onLobbyHook: (() -> ())? = nil
 local lastRematchRequestAt: { [number]: number } = {} -- userId → clock
 
 local function pruneActivePair()
@@ -41,6 +44,20 @@ local function pruneActivePair()
 		end
 	end
 	activePair = kept
+end
+
+local function teleportPlayersToLobby(players: { Player })
+	local lobbyCf = ArenaService.getLobbyCFrame()
+	for i, p in players do
+		local character = p.Character
+		if character then
+			local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if hrp then
+				-- Léger offset pour éviter stack
+				hrp.CFrame = lobbyCf * CFrame.new((i - 1) * 4 - 2, 0, 0)
+			end
+		end
+	end
 end
 
 local function broadcast()
@@ -60,19 +77,29 @@ local function broadcast()
 	if soloPractice then
 		table.insert(fighters, { userId = -9001, name = "ConcordBot" })
 	end
+	local queuedIds = {}
+	for _, p in queue do
+		if p and p.Parent == Players then
+			table.insert(queuedIds, p.UserId)
+		end
+	end
 	remotes.MatchState:FireAllClients({
 		phase = phase,
 		mode = mode,
 		roundNumber = roundNumber,
 		firstTo = CombatConfig.Match.FirstTo,
+		bestOf = CombatConfig.Match.BestOf,
 		scores = scoreboard,
 		fighters = fighters,
-		arenaId = ArenaService.getActiveId(),
-		arenaName = ArenaService.getDisplayName(),
-		fairKit = mode == "Ranked",
+		arenaId = if phase == "Lobby" then "ConcordLobby" else ArenaService.getActiveId(),
+		arenaName = if phase == "Lobby" then "Salon Concord" else ArenaService.getDisplayName(),
+		fairKit = mode == "Ranked" and phase ~= "Lobby",
 		countdown = if phase == "Countdown" then phaseTimer else nil,
 		rematchIn = if phase == "MatchEnd" then phaseTimer else nil,
 		queueCount = #queue,
+		queuedUserIds = queuedIds,
+		soloMatchmaking = pendingSoloPlayer ~= nil,
+		inLobby = phase == "Lobby",
 	})
 end
 
@@ -82,6 +109,10 @@ end
 
 function MatchService.setRoundEndHook(hook: (winner: Player?) -> ())
 	onRoundEndHook = hook
+end
+
+function MatchService.setLobbyHook(hook: () -> ())
+	onLobbyHook = hook
 end
 
 function MatchService.getPhase(): MatchPhase
@@ -94,6 +125,19 @@ end
 
 function MatchService.isFighting(): boolean
 	return phase == "Fighting"
+end
+
+function MatchService.isInLobby(): boolean
+	return phase == "Lobby"
+end
+
+function MatchService.isPlayerQueued(player: Player): boolean
+	for _, p in queue do
+		if p == player then
+			return true
+		end
+	end
+	return pendingSoloPlayer == player
 end
 
 function MatchService.broadcast()
@@ -129,6 +173,8 @@ end
 function MatchService.beginCountdown()
 	phase = "Countdown"
 	phaseTimer = CombatConfig.Match.LobbyCountdown
+	pendingSoloPlayer = nil
+	soloMatchmakingTimer = 0
 	teleportToArena()
 	broadcast()
 end
@@ -143,7 +189,6 @@ function MatchService.beginRound()
 		end
 	end
 	teleportToArena()
-	-- Bot reset hook via attribute for CombatService
 	workspace:SetAttribute("BC_RoundStart", os.clock())
 	broadcast()
 end
@@ -181,7 +226,6 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 		end
 	end
 
-	-- Resolve loser for KO camera (player ou bot -9001)
 	local function resolveLoserUserId(winnerId: number?): number?
 		if not winnerId then
 			return nil
@@ -202,7 +246,7 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 
 	if matchWinnerId then
 		phase = "MatchEnd"
-		phaseTimer = CombatConfig.Match.MatchEndDelay or 5
+		phaseTimer = CombatConfig.Match.MatchEndDelay or 8
 		local loser: Player? = nil
 		for _, p in activePair do
 			if p.UserId ~= matchWinnerId then
@@ -214,7 +258,6 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 		elseif soloPractice and matchWinner and onMatchEndHook then
 			onMatchEndHook(matchWinner, nil, mode)
 		elseif soloPractice and matchWinnerId ~= nil and matchWinner == nil then
-			-- Bot won the match — still reward loss for human
 			if onMatchEndHook and activePair[1] then
 				onMatchEndHook(nil, activePair[1], mode)
 			end
@@ -259,6 +302,9 @@ end
 function MatchService.tryStartPair(p1: Player, p2: Player, matchMode: CombatTypes.MatchMode?)
 	mode = matchMode or "Casual"
 	activePair = { p1, p2 }
+	soloPractice = false
+	pendingSoloPlayer = nil
+	soloMatchmakingTimer = 0
 	resetScores(activePair)
 	for _, p in activePair do
 		local f = FighterState.get(p)
@@ -270,51 +316,104 @@ function MatchService.tryStartPair(p1: Player, p2: Player, matchMode: CombatType
 	MatchService.beginCountdown()
 end
 
-function MatchService.enqueue(player: Player, matchMode: CombatTypes.MatchMode?)
-	mode = matchMode or mode
-	for _, p in queue do
-		if p == player then
-			broadcast()
-			return
+function MatchService.leaveQueue(player: Player)
+	for i = #queue, 1, -1 do
+		if queue[i] == player then
+			table.remove(queue, i)
 		end
 	end
-	-- Si déjà 2 joueurs en serveur Studio, auto-start
+	if pendingSoloPlayer == player then
+		pendingSoloPlayer = nil
+		soloMatchmakingTimer = 0
+	end
+	broadcast()
+end
+
+function MatchService.enqueue(player: Player, matchMode: CombatTypes.MatchMode?)
+	if phase ~= "Lobby" then
+		-- Déjà en match : ignore (évite double file)
+		broadcast()
+		return
+	end
+	mode = matchMode or mode
+	MatchService.leaveQueue(player)
+
+	-- Deux joueurs déjà présents → démarrer immédiatement si les deux en queue / ou pair auto via file
 	table.insert(queue, player)
+
 	if #queue >= 2 then
 		local a = table.remove(queue, 1) :: Player
 		local b = table.remove(queue, 1) :: Player
+		pendingSoloPlayer = nil
+		soloMatchmakingTimer = 0
 		MatchService.tryStartPair(a, b, mode)
-	elseif #Players:GetPlayers() >= 2 and #activePair == 0 then
-		local all = Players:GetPlayers()
-		if #all >= 2 then
-			queue = {}
-			MatchService.tryStartPair(all[1], all[2], mode)
-		end
-	else
-		broadcast()
+		return
 	end
+
+	-- Solo Amical → court matchmaking puis bot
+	if mode == "Casual" and #Players:GetPlayers() == 1 then
+		pendingSoloPlayer = player
+		soloMatchmakingTimer = CombatConfig.Match.SoloMatchmakingDelay or 1.6
+		broadcast()
+		return
+	end
+
+	-- Classé solo ou Amical multi sans pair : reste en file
+	pendingSoloPlayer = nil
+	soloMatchmakingTimer = 0
+	broadcast()
+end
+
+function MatchService.returnToLobby()
+	pruneActivePair()
+	local toTeleport = {}
+	for _, p in activePair do
+		table.insert(toTeleport, p)
+	end
+	for _, p in Players:GetPlayers() do
+		local found = false
+		for _, t in toTeleport do
+			if t == p then
+				found = true
+				break
+			end
+		end
+		if not found then
+			table.insert(toTeleport, p)
+		end
+	end
+
+	soloPractice = false
+	pendingSoloPlayer = nil
+	soloMatchmakingTimer = 0
+	phase = "Lobby"
+	phaseTimer = 0
+	scores = {}
+	roundNumber = 0
+	activePair = {}
+	queue = {}
+	lastRematchRequestAt = {}
+	mode = "Casual"
+
+	teleportPlayersToLobby(toTeleport)
+	if onLobbyHook then
+		onLobbyHook()
+	end
+	broadcast()
 end
 
 function MatchService.rematch()
 	pruneActivePair()
 	if #activePair == 0 then
-		soloPractice = false
-		phase = "Lobby"
-		phaseTimer = 0
-		scores = {}
-		roundNumber = 0
-		lastRematchRequestAt = {}
-		broadcast()
+		MatchService.returnToLobby()
 		return
 	end
 	if not soloPractice and #activePair == 1 then
-		soloPractice = true
+		-- Adversaire parti → salon (pas de bot imposé en silence)
+		MatchService.returnToLobby()
+		return
 	elseif not soloPractice and #activePair < 2 then
-		phase = "Lobby"
-		phaseTimer = 0
-		activePair = {}
-		lastRematchRequestAt = {}
-		broadcast()
+		MatchService.returnToLobby()
 		return
 	end
 	resetScores(activePair)
@@ -335,11 +434,7 @@ function MatchService.rematch()
 end
 
 function MatchService.onPlayerRemoving(player: Player)
-	for i = #queue, 1, -1 do
-		if queue[i] == player then
-			table.remove(queue, i)
-		end
-	end
+	MatchService.leaveQueue(player)
 	lastRematchRequestAt[player.UserId] = nil
 	local wasActive = false
 	for i = #activePair, 1, -1 do
@@ -354,12 +449,7 @@ function MatchService.onPlayerRemoving(player: Player)
 	end
 	local remaining = activePair[1]
 	if not remaining then
-		soloPractice = false
-		phase = "Lobby"
-		phaseTimer = 0
-		scores = {}
-		roundNumber = 0
-		broadcast()
+		MatchService.returnToLobby()
 		return
 	end
 	if phase == "Fighting" or phase == "Countdown" or phase == "RoundEnd" then
@@ -409,6 +499,22 @@ function MatchService.requestRematch(player: Player): boolean
 	return true
 end
 
+function MatchService.requestReturnLobby(player: Player): boolean
+	if phase ~= "MatchEnd" and phase ~= "Lobby" then
+		-- Autoriser retour salon seulement hors combat actif
+		if phase == "Countdown" or phase == "Fighting" or phase == "RoundEnd" then
+			return false
+		end
+	end
+	if phase == "Lobby" then
+		MatchService.leaveQueue(player)
+		return true
+	end
+	-- MatchEnd : n'importe quel joueur du serveur peut forcer le retour salon
+	MatchService.returnToLobby()
+	return true
+end
+
 function MatchService.isSoloPractice(): boolean
 	return soloPractice
 end
@@ -416,6 +522,14 @@ end
 function MatchService.beginSoloPractice(player: Player)
 	soloPractice = true
 	mode = "Casual"
+	pendingSoloPlayer = nil
+	soloMatchmakingTimer = 0
+	-- Retirer de la file
+	for i = #queue, 1, -1 do
+		if queue[i] == player then
+			table.remove(queue, i)
+		end
+	end
 	activePair = { player }
 	resetScores(activePair)
 	scores[-9001] = 0 -- ConcordBot
@@ -444,29 +558,37 @@ function MatchService.step(dt: number)
 		phaseTimer -= dt
 		broadcast()
 		if phaseTimer <= 0 then
-			MatchService.rematch()
+			-- Auto → salon (pas revanches infinies sans consentement)
+			MatchService.returnToLobby()
 		end
 	elseif phase == "Lobby" then
-		if #Players:GetPlayers() >= 2 and #activePair == 0 then
-			soloPractice = false
-			local all = Players:GetPlayers()
-			MatchService.tryStartPair(all[1], all[2], mode)
-		elseif #Players:GetPlayers() == 1 and #activePair == 0 then
-			soloLobbyWait += dt
-			if soloLobbyWait >= 2 then
-				soloLobbyWait = 0
-				MatchService.beginSoloPractice(Players:GetPlayers()[1])
+		-- Matchmaking solo Amical → bot après délai
+		if pendingSoloPlayer and pendingSoloPlayer.Parent == Players then
+			soloMatchmakingTimer -= dt
+			if soloMatchmakingTimer <= 0 then
+				local p = pendingSoloPlayer
+				pendingSoloPlayer = nil
+				if p then
+					MatchService.beginSoloPractice(p)
+				end
+			else
+				broadcast()
 			end
 		else
-			soloLobbyWait = 0
+			pendingSoloPlayer = nil
 		end
 	end
+end
+
+function MatchService.teleportPlayerToLobby(player: Player)
+	teleportPlayersToLobby({ player })
 end
 
 function MatchService.start()
 	remotes = Remotes.get()
 	metaRemotes = Remotes.getMeta()
 	ArenaService.ensureAll()
+	ArenaService.ensureLobby()
 
 	metaRemotes.QueueMatch.OnServerEvent:Connect(function(player, payload)
 		if typeof(payload) ~= "table" then
@@ -479,8 +601,16 @@ function MatchService.start()
 		MatchService.enqueue(player, m)
 	end)
 
+	metaRemotes.LeaveQueue.OnServerEvent:Connect(function(player)
+		MatchService.leaveQueue(player)
+	end)
+
 	remotes.RequestRematch.OnServerEvent:Connect(function(player)
 		MatchService.requestRematch(player)
+	end)
+
+	remotes.RequestReturnLobby.OnServerEvent:Connect(function(player)
+		MatchService.requestReturnLobby(player)
 	end)
 
 	broadcast()

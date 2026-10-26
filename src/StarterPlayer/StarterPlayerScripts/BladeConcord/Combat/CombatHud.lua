@@ -45,7 +45,9 @@ local recapScore: TextLabel
 local recapSub: TextLabel
 local deathVeil: Frame
 local rematchButton: TextButton
+local lobbyButton: TextButton
 local rematchHint: TextLabel
+local combatChrome: Frame
 local lastCountdownCeil: number? = nil
 local playerFaction: string? = nil
 local lastPhase: string? = nil
@@ -212,15 +214,24 @@ local function setRematchVisible(visible: boolean)
 		return
 	end
 	rematchButton.Visible = visible
+	if lobbyButton then
+		lobbyButton.Visible = visible
+	end
 	rematchHint.Visible = visible
 	if visible then
 		rematchButton.TextTransparency = 0
 		rematchButton.BackgroundTransparency = 0.08
 		rematchHint.TextTransparency = 0.1
-		rematchButton.Size = UDim2.new(0, 200, 0, 44)
+		rematchButton.Size = UDim2.new(0, 180, 0, 44)
 		TweenService:Create(rematchButton, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Size = UDim2.new(0, 240, 0, 52),
+			Size = UDim2.new(0, 200, 0, 48),
 		}):Play()
+	end
+end
+
+local function setCombatChromeVisible(visible: boolean)
+	if combatChrome then
+		combatChrome.Visible = visible
 	end
 end
 
@@ -273,7 +284,9 @@ local function showRecap(opts: {
 	recapTitle.TextColor3 = opts.color
 	recapScore.Text = string.format("%d  —  %d", opts.myWins, opts.theirWins)
 	if opts.matchOver then
-		recapSub.Text = if opts.lost then "Match terminé · touche REVANCHE" else "Victoire · touche REVANCHE"
+		recapSub.Text = if opts.lost
+			then "Match terminé · Revanche ou Salon"
+			else "Victoire · Revanche ou Salon"
 	else
 		recapSub.Text = "Prochaine manche…"
 	end
@@ -344,6 +357,14 @@ function CombatHud.start()
 	root.Size = UDim2.fromScale(1, 1)
 	root.Parent = gui
 
+	-- Chrome combat (masqué au salon)
+	combatChrome = Instance.new("Frame")
+	combatChrome.Name = "CombatChrome"
+	combatChrome.BackgroundTransparency = 1
+	combatChrome.Size = UDim2.fromScale(1, 1)
+	combatChrome.Visible = false
+	combatChrome.Parent = root
+
 	-- Vignette douce (impacts)
 	vignette = Instance.new("Frame")
 	vignette.Name = "Vignette"
@@ -386,22 +407,22 @@ function CombatHud.start()
 	brand.Size = UDim2.new(0.4, 0, 0, 26)
 	brand.BackgroundTransparency = 1
 	brand.Font = Theme.FontTitle
-	brand.TextSize = 20
+	brand.TextSize = 18
 	brand.TextXAlignment = Enum.TextXAlignment.Left
 	brand.TextColor3 = Theme.Bone
 	brand.Text = Theme.Brand
-	brand.Parent = root
+	brand.Parent = combatChrome
 
 	local brandAccent = Instance.new("Frame")
-	brandAccent.Size = UDim2.new(0, 48, 0, 3)
-	brandAccent.Position = UDim2.new(0.02, 0, 0, 40)
+	brandAccent.Size = UDim2.new(0, 40, 0, 2)
+	brandAccent.Position = UDim2.new(0.02, 0, 0, 38)
 	brandAccent.BackgroundColor3 = Theme.Accent
 	brandAccent.BorderSizePixel = 0
-	brandAccent.Parent = root
+	brandAccent.Parent = combatChrome
 	corner(brandAccent, 2)
 
-	hpFill = makeBar(root, "VITALITÉ", 52, Theme.Danger)
-	staminaFill = makeBar(root, "ENDURANCE", 80, Theme.Stamina)
+	hpFill = makeBar(combatChrome, "VITALITÉ", 48, Theme.Danger)
+	staminaFill = makeBar(combatChrome, "ENDURANCE", 74, Theme.Stamina)
 
 	flashLabel = Instance.new("TextLabel")
 	flashLabel.Name = "Flash"
@@ -564,36 +585,55 @@ function CombatHud.start()
 	recapSub.ZIndex = 50
 	recapSub.Parent = recapPlate
 
-	-- Bouton REVANCHE (MatchEnd) — clair + cooldown client
+	-- Boutons MatchEnd : REVANCHE + RETOUR SALON
 	rematchButton = Instance.new("TextButton")
 	rematchButton.Name = "RematchButton"
-	rematchButton.AnchorPoint = Vector2.new(0.5, 0.5)
-	rematchButton.Position = UDim2.fromScale(0.5, 0.68)
-	rematchButton.Size = UDim2.new(0, 240, 0, 52)
+	rematchButton.AnchorPoint = Vector2.new(1, 0.5)
+	rematchButton.Position = UDim2.new(0.5, -8, 0.68, 0)
+	rematchButton.Size = UDim2.new(0, 200, 0, 48)
 	rematchButton.BackgroundColor3 = Theme.Accent
 	rematchButton.BackgroundTransparency = 0.08
 	rematchButton.BorderSizePixel = 0
 	rematchButton.Font = Theme.FontTitle
-	rematchButton.TextSize = 22
+	rematchButton.TextSize = 18
 	rematchButton.TextColor3 = Theme.Ink
 	rematchButton.Text = "REVANCHE"
 	rematchButton.Visible = false
 	rematchButton.AutoButtonColor = true
 	rematchButton.ZIndex = 55
 	rematchButton.Parent = root
-	corner(rematchButton, 12)
-	stroke(rematchButton, Theme.Bone, 1.6)
+	corner(rematchButton, 11)
+	stroke(rematchButton, Theme.Bone, 1.4)
+
+	lobbyButton = Instance.new("TextButton")
+	lobbyButton.Name = "LobbyButton"
+	lobbyButton.AnchorPoint = Vector2.new(0, 0.5)
+	lobbyButton.Position = UDim2.new(0.5, 8, 0.68, 0)
+	lobbyButton.Size = UDim2.new(0, 200, 0, 48)
+	lobbyButton.BackgroundColor3 = Theme.InkSoft
+	lobbyButton.BackgroundTransparency = 0.05
+	lobbyButton.BorderSizePixel = 0
+	lobbyButton.Font = Theme.FontTitle
+	lobbyButton.TextSize = 16
+	lobbyButton.TextColor3 = Theme.Bone
+	lobbyButton.Text = "RETOUR SALON"
+	lobbyButton.Visible = false
+	lobbyButton.AutoButtonColor = true
+	lobbyButton.ZIndex = 55
+	lobbyButton.Parent = root
+	corner(lobbyButton, 11)
+	stroke(lobbyButton, Theme.PanelEdge, 1.2)
 
 	rematchHint = Instance.new("TextLabel")
 	rematchHint.Name = "RematchHint"
 	rematchHint.AnchorPoint = Vector2.new(0.5, 0)
-	rematchHint.Position = UDim2.new(0.5, 0, 0.68, 32)
-	rematchHint.Size = UDim2.new(0, 280, 0, 18)
+	rematchHint.Position = UDim2.new(0.5, 0, 0.68, 30)
+	rematchHint.Size = UDim2.new(0, 360, 0, 18)
 	rematchHint.BackgroundTransparency = 1
 	rematchHint.Font = Theme.FontBody
 	rematchHint.TextSize = 12
 	rematchHint.TextColor3 = Theme.Muted
-	rematchHint.Text = "ou revanche auto sous peu"
+	rematchHint.Text = "sinon retour salon automatique"
 	rematchHint.Visible = false
 	rematchHint.ZIndex = 55
 	rematchHint.Parent = root
@@ -624,66 +664,74 @@ function CombatHud.start()
 				rematchButton.Text = "REVANCHE"
 				rematchButton.BackgroundColor3 = Theme.Accent
 				rematchButton.TextColor3 = Theme.Ink
-				rematchHint.Text = "ou revanche auto sous peu"
+				rematchHint.Text = "sinon retour salon automatique"
 				rematchHint.TextColor3 = Theme.Muted
 			end
 		end)
 	end)
 
+	lobbyButton.MouseButton1Click:Connect(function()
+		if lastPhase ~= "MatchEnd" then
+			return
+		end
+		lobbyButton.Text = "…"
+		remotes.RequestReturnLobby:FireServer()
+	end)
+
 	statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
-	statusLabel.Position = UDim2.new(0.02, 0, 0, 110)
-	statusLabel.Size = UDim2.new(0.48, 0, 0, 18)
+	statusLabel.Position = UDim2.new(0.02, 0, 0, 102)
+	statusLabel.Size = UDim2.new(0.42, 0, 0, 16)
 	statusLabel.BackgroundTransparency = 1
 	statusLabel.Font = Theme.FontMono
-	statusLabel.TextSize = 13
+	statusLabel.TextSize = 12
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statusLabel.TextColor3 = Theme.Muted
-	statusLabel.Text = Theme.Brand
-	statusLabel.Parent = root
+	statusLabel.Text = ""
+	statusLabel.Parent = combatChrome
 
 	cdLabel = Instance.new("TextLabel")
 	cdLabel.Name = "Cooldowns"
-	cdLabel.Position = UDim2.new(0.02, 0, 0, 130)
-	cdLabel.Size = UDim2.new(0.55, 0, 0, 16)
+	cdLabel.Position = UDim2.new(0.02, 0, 0, 120)
+	cdLabel.Size = UDim2.new(0.5, 0, 0, 14)
 	cdLabel.BackgroundTransparency = 1
 	cdLabel.Font = Theme.FontMono
 	cdLabel.TextSize = 11
 	cdLabel.TextXAlignment = Enum.TextXAlignment.Left
 	cdLabel.TextColor3 = Theme.Accent
 	cdLabel.Text = ""
-	cdLabel.Parent = root
+	cdLabel.Parent = combatChrome
 
 	local scorePlate = Instance.new("Frame")
 	scorePlate.Name = "ScorePlate"
 	scorePlate.AnchorPoint = Vector2.new(0.5, 0)
-	scorePlate.Position = UDim2.fromScale(0.5, 0.018)
-	scorePlate.Size = UDim2.new(0, 320, 0, 52)
+	scorePlate.Position = UDim2.fromScale(0.5, 0.016)
+	scorePlate.Size = UDim2.new(0, 300, 0, 50)
 	scorePlate.BackgroundColor3 = Theme.Panel
-	scorePlate.BackgroundTransparency = 0.2
+	scorePlate.BackgroundTransparency = 0.12
 	scorePlate.BorderSizePixel = 0
-	scorePlate.Parent = root
+	scorePlate.Parent = combatChrome
 	corner(scorePlate, 10)
-	stroke(scorePlate, Theme.PanelEdge, 1.2)
+	stroke(scorePlate, Theme.Accent, 1).Transparency = 0.55
 
 	scoreLabel = Instance.new("TextLabel")
 	scoreLabel.Name = "Score"
-	scoreLabel.Size = UDim2.new(1, 0, 0, 28)
+	scoreLabel.Size = UDim2.new(1, 0, 0, 26)
 	scoreLabel.Position = UDim2.new(0, 0, 0, 4)
 	scoreLabel.BackgroundTransparency = 1
 	scoreLabel.Font = Theme.FontTitle
-	scoreLabel.TextSize = 20
+	scoreLabel.TextSize = 18
 	scoreLabel.TextColor3 = Theme.Bone
-	scoreLabel.Text = "Amical · Manche 0 · 0 — 0 (FT2)"
+	scoreLabel.Text = "BO3 · 0 — 0 · Premier à 2"
 	scoreLabel.Parent = scorePlate
 
 	arenaLabel = Instance.new("TextLabel")
 	arenaLabel.Name = "Arena"
-	arenaLabel.Size = UDim2.new(1, 0, 0, 18)
+	arenaLabel.Size = UDim2.new(1, 0, 0, 16)
 	arenaLabel.Position = UDim2.new(0, 0, 0, 30)
 	arenaLabel.BackgroundTransparency = 1
 	arenaLabel.Font = Theme.FontBody
-	arenaLabel.TextSize = 12
+	arenaLabel.TextSize = 11
 	arenaLabel.TextColor3 = Theme.Muted
 	arenaLabel.Text = ""
 	arenaLabel.Parent = scorePlate
@@ -699,7 +747,7 @@ function CombatHud.start()
 	fairKitBadge.BorderSizePixel = 0
 	fairKitBadge.Visible = false
 	fairKitBadge.ZIndex = 25
-	fairKitBadge.Parent = root
+	fairKitBadge.Parent = combatChrome
 	corner(fairKitBadge, 8)
 	stroke(fairKitBadge, Theme.Success, 2)
 
@@ -829,7 +877,11 @@ function CombatHud.start()
 		local modeFr = if modeRaw == "Ranked" then "Classé" else "Amical"
 		local roundN = payload.roundNumber or 0
 		local ft = payload.firstTo or 2
-		scoreLabel.Text = string.format("%s · Manche %d · %d — %d (FT%d)", modeFr, roundN, myWins, theirWins, ft)
+		local bo = payload.bestOf or 3
+		scoreLabel.Text = string.format("%s · BO%d · %d — %d · Premier à %d", modeFr, bo, myWins, theirWins, ft)
+		if roundN > 0 then
+			scoreLabel.Text = string.format("%s · Manche %d · %d — %d · Premier à %d", modeFr, roundN, myWins, theirWins, ft)
+		end
 		arenaLabel.Text = tostring(payload.arenaName or payload.arenaId or "")
 		if payload.fairKit then
 			fairKitBadge.Visible = true
@@ -849,17 +901,8 @@ function CombatHud.start()
 
 		local phase = tostring(payload.phase)
 		local arenaBase = tostring(payload.arenaName or payload.arenaId or "")
+		setCombatChromeVisible(phase ~= "Lobby")
 		if phase == "Lobby" then
-			local q = payload.queueCount or 0
-			if q > 0 then
-				arenaLabel.Text = if arenaBase ~= ""
-					then string.format("%s · file d'attente · %d joueur%s", arenaBase, q, if q > 1 then "s" else "")
-					else string.format("Salon · file d'attente · %d", q)
-			else
-				arenaLabel.Text = if arenaBase ~= ""
-					then arenaBase .. " · salon · duel auto sous peu"
-					else "Salon Concord · en attente d'un adversaire"
-			end
 			if versusPlate.Visible then
 				hideVersus()
 			end
@@ -889,7 +932,6 @@ function CombatHud.start()
 				lastCountdownCeil = ceilN
 				pulseCountdown(ceilN)
 			end
-			-- Hide legacy flash during dedicated countdown (sauf bandeau REVANCHE)
 			if flashLabel.Text ~= "REVANCHE" then
 				flashLabel.TextTransparency = 1
 			end
@@ -922,13 +964,16 @@ function CombatHud.start()
 			end
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
-			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "match terminé · REVANCHE"
+			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "match terminé"
 			rematchAnnounced = true
 			rematchBusy = false
 			rematchButton.Text = "REVANCHE"
 			rematchButton.BackgroundColor3 = Theme.Accent
 			rematchButton.TextColor3 = Theme.Ink
-			rematchHint.Text = "ou revanche auto sous peu"
+			if lobbyButton then
+				lobbyButton.Text = "RETOUR SALON"
+			end
+			rematchHint.Text = "sinon retour salon automatique"
 			rematchHint.TextColor3 = Theme.Muted
 			setRematchVisible(true)
 		elseif phase ~= "Countdown" then

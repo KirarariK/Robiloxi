@@ -147,20 +147,26 @@ function CombatService.register(player: Player): FighterState.Fighter
 		-- Invalide lame précédente (respawn mid-round)
 		fighter.bladePart = nil :: any
 		CombatService.bindCharacter(fighter, character)
-		local a, b = ArenaService.getSpawnCFrames()
-		local index = 1
-		for i, f in FighterState.getAll() do
-			if f.player == player then
-				index = i
-				break
-			end
-		end
-		local cf = if index % 2 == 1 then a else b
 		task.defer(function()
 			local hrp = character:WaitForChild("HumanoidRootPart", 5) :: BasePart?
-			if hrp and character.Parent then
-				hrp.CFrame = cf
+			if not hrp or not character.Parent then
+				return
 			end
+			-- Salon par défaut ; arène seulement si déjà en match
+			local ph = MatchService.getPhase()
+			if ph == "Lobby" or ph == "MatchEnd" then
+				hrp.CFrame = ArenaService.getLobbyCFrame()
+				return
+			end
+			local a, b = ArenaService.getSpawnCFrames()
+			local index = 1
+			for i, f in FighterState.getAll() do
+				if f.player == player then
+					index = i
+					break
+				end
+			end
+			hrp.CFrame = if index % 2 == 1 then a else b
 		end)
 	end)
 	return fighter
@@ -301,15 +307,19 @@ end
 function CombatService.step(dt: number)
 	MatchService.step(dt)
 
-	-- Enable bot once for solo practice (ne pas reset chaque frame — bug QA)
-	if MatchService.isSoloPractice() then
+	-- Bot uniquement en solo practice pendant countdown/fight — jamais au salon
+	if MatchService.getPhase() == "Lobby" or MatchService.getPhase() == "MatchEnd" then
+		if BotStub.isEnabled() then
+			BotStub.disable()
+		end
+	elseif MatchService.isSoloPractice() then
 		local _, spawnB = ArenaService.getSpawnCFrames()
 		if MatchService.getPhase() == "Countdown" or MatchService.getPhase() == "Fighting" then
 			if not BotStub.isEnabled() then
 				BotStub.enable(spawnB)
 			end
 		end
-	elseif BotStub.isEnabled() and #Players:GetPlayers() >= 2 then
+	elseif BotStub.isEnabled() then
 		BotStub.disable()
 	end
 
@@ -397,14 +407,23 @@ function CombatService.start()
 		end
 	end)
 
+	MatchService.setLobbyHook(function()
+		if BotStub.isEnabled() then
+			BotStub.disable()
+		end
+	end)
+
 	Players.PlayerAdded:Connect(function(player)
+		-- Spawn salon — pas d'enqueue auto (Jouer depuis LobbyHud)
 		CombatService.register(player)
-		MatchService.enqueue(player, "Casual")
+		MatchService.teleportPlayerToLobby(player)
+		MatchService.broadcast()
 	end)
 	for _, player in Players:GetPlayers() do
 		CombatService.register(player)
-		MatchService.enqueue(player, "Casual")
+		MatchService.teleportPlayerToLobby(player)
 	end
+	MatchService.broadcast()
 	Players.PlayerRemoving:Connect(function(player)
 		MatchService.onPlayerRemoving(player)
 		FighterState.remove(player)

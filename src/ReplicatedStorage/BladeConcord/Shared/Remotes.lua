@@ -18,6 +18,7 @@ local COMBAT_REMOTE_NAMES = {
 	"MatchState",
 	"FxEvent",
 	"RequestRematch",
+	"RequestReturnLobby",
 }
 
 local META_REMOTE_NAMES = {
@@ -27,6 +28,7 @@ local META_REMOTE_NAMES = {
 	"EquipLoadout",
 	"SelectFaction",
 	"QueueMatch",
+	"LeaveQueue",
 	"ClaimQuest",
 }
 
@@ -41,6 +43,7 @@ export type CombatRemotes = {
 	MatchState: RemoteEvent,
 	FxEvent: RemoteEvent,
 	RequestRematch: RemoteEvent,
+	RequestReturnLobby: RemoteEvent,
 }
 
 export type MetaRemotes = {
@@ -50,6 +53,7 @@ export type MetaRemotes = {
 	EquipLoadout: RemoteEvent,
 	SelectFaction: RemoteEvent,
 	QueueMatch: RemoteEvent,
+	LeaveQueue: RemoteEvent,
 	ClaimQuest: RemoteEvent,
 }
 

@@ -8,6 +8,7 @@
 
 export type ClipName =
 	"Idle"
+	| "LobbyIdle"
 	| "StartupLight"
 	| "ActiveLight"
 	| "RecoveryLight"
@@ -776,6 +777,7 @@ local AnimationSets = {
 	Count = #SETS,
 	ClipNames = {
 		"Idle",
+		"LobbyIdle",
 		"StartupLight",
 		"ActiveLight",
 		"RecoveryLight",
@@ -813,7 +815,7 @@ function AnimationSets.resolveForSnapshot(snap: {
 	attackKind: string?,
 	formId: string?,
 	formRarity: string?,
-	flags: { riposteBuff: boolean?, stagger: boolean?, exhausted: boolean? }?,
+	flags: { riposteBuff: boolean?, stagger: boolean?, exhausted: boolean?, lobby: boolean? }?,
 }): (AnimationSetDef, ClipName)
 	local actionId = snap.actionId or "Idle"
 	local formSet = AnimationSets.getByForm(snap.formId, snap.formRarity)
@@ -897,6 +899,9 @@ function AnimationSets.resolveForSnapshot(snap: {
 		end
 		return formSet, "Guard"
 	elseif actionId == "Idle" then
+		if snap.flags and snap.flags.lobby then
+			return formSet, "LobbyIdle"
+		end
 		if snap.flags and snap.flags.exhausted then
 			local drift = byId.Concord_ExhaustDrift
 			if drift then

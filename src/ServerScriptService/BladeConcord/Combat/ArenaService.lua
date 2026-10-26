@@ -31,6 +31,8 @@ local activeId: ArenaId = "ObsidianPit"
 local arenasRoot: Folder? = nil
 local built: { [ArenaId]: Folder } = {}
 local hazardAccumulator = 0
+local lobbyBuilt: Folder? = nil
+local LOBBY_OFFSET = Vector3.new(-180, 0, 0)
 
 local function part(
 	name: string,
@@ -735,7 +737,14 @@ function ArenaService.ensureAll(): Folder
 		if child:IsA("Folder") then
 			local name = child.Name
 			local pass = child:GetAttribute("ArtPass")
-			if pass ~= ART_PASS then
+			if name == "ConcordLobby" then
+				if pass ~= ART_PASS then
+					lobbyBuilt = nil
+					child:Destroy()
+				elseif lobbyBuilt == nil then
+					lobbyBuilt = child
+				end
+			elseif pass ~= ART_PASS then
 				if built[name :: any] then
 					built[name :: any] = nil
 				end
@@ -758,6 +767,7 @@ function ArenaService.ensureAll(): Folder
 	if not built.QuaiMirage or not built.QuaiMirage.Parent then
 		built.QuaiMirage = buildMirage(root)
 	end
+	ArenaService.ensureLobby()
 	applyArenaLighting(activeId)
 	return root
 end
@@ -790,6 +800,104 @@ function ArenaService.getSpawnCFrames(): (CFrame, CFrame)
 	local a = CFrame.new(ox - 18, 4, 0) * CFrame.Angles(0, math.rad(90), 0)
 	local b = CFrame.new(ox + 18, 4, 0) * CFrame.Angles(0, math.rad(-90), 0)
 	return a, b
+end
+
+--[[ Hub Concord — spawn hors arène (pas de duel imposé). ]]
+local function buildLobbyHub(parent: Folder): Folder
+	local folder = Instance.new("Folder")
+	folder.Name = "ConcordLobby"
+	folder.Parent = parent
+	folder:SetAttribute("DisplayName", "Salon Concord")
+	folder:SetAttribute("OffsetX", LOBBY_OFFSET.X)
+	folder:SetAttribute("ArtPass", ART_PASS)
+
+	local offset = LOBBY_OFFSET
+	local floorCol = Color3.fromRGB(28, 34, 48)
+	local accent = Theme.Accent
+	local bone = Theme.Bone
+
+	local pad = part("LobbyFloor", Vector3.new(48, 2, 36), CFrame.new(offset), floorCol, folder, Enum.Material.Slate)
+	pad.Reflectance = 0.08
+	part("LobbyInlay", Vector3.new(22, 0.3, 16), CFrame.new(offset + Vector3.new(0, 1.12, 0)), Color3.fromRGB(40, 52, 72), folder, Enum.Material.Metal)
+
+	-- Anneau hub
+	local ring = part("HubRing", Vector3.new(18, 0.2, 18), CFrame.new(offset + Vector3.new(0, 1.2, 0)), accent, folder, Enum.Material.Neon)
+	ring.Transparency = 0.65
+	ring.CanCollide = false
+	neonGlow(ring, accent, 0.9, 16)
+
+	-- Murs bas / balustrades
+	for _, xz in {
+		Vector3.new(0, 0, -19),
+		Vector3.new(0, 0, 19),
+		Vector3.new(-25, 0, 0),
+		Vector3.new(25, 0, 0),
+	} do
+		local isX = math.abs(xz.X) > 1
+		part(
+			"Rail",
+			if isX then Vector3.new(2, 3, 34) else Vector3.new(46, 3, 2),
+			CFrame.new(offset + Vector3.new(xz.X, 2.5, xz.Z)),
+			CONCORD_STEEL,
+			folder,
+			Enum.Material.Metal
+		)
+	end
+
+	-- Pilier marque
+	local pillar = part("BrandPillar", Vector3.new(3, 10, 3), CFrame.new(offset + Vector3.new(0, 6, -14)), Color3.fromRGB(36, 44, 62), folder, Enum.Material.Metal)
+	local orb = part("BrandOrb", Vector3.new(2.2, 2.2, 2.2), CFrame.new(offset + Vector3.new(0, 12, -14)), accent, folder, Enum.Material.Neon)
+	orb.Shape = Enum.PartType.Ball
+	orb.CanCollide = false
+	neonGlow(orb, accent, 2.2, 22)
+	pillar.Reflectance = 0.12
+
+	arenaTitle(folder, offset, "Salon Concord", bone)
+	coherenceKit(folder, offset, accent)
+	fogBank(folder, offset, Color3.fromRGB(50, 70, 100), 3)
+	driftField(folder, offset, Color3.fromRGB(120, 180, 255), Color3.fromRGB(60, 90, 140), 8, 0.4, "LobbyMist")
+
+	-- SpawnLocation Roblox natif (priorité join)
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "LobbySpawn"
+	spawn.Size = Vector3.new(8, 1, 8)
+	spawn.CFrame = CFrame.new(offset + Vector3.new(0, 2, 4))
+	spawn.Anchored = true
+	spawn.Transparency = 1
+	spawn.CanCollide = false
+	spawn.Duration = 0
+	spawn.Neutral = true
+	spawn.Parent = folder
+
+	local marker = part("LobbyPad", Vector3.new(6, 0.35, 6), CFrame.new(offset + Vector3.new(0, 1.25, 4)), accent, folder, Enum.Material.Neon)
+	marker.Transparency = 0.55
+	marker.CanCollide = false
+	neonGlow(marker, accent, 1.1, 12)
+
+	applyArenaLighting("SanctumAstres")
+	return folder
+end
+
+function ArenaService.ensureLobby(): Folder
+	local root = getArenasRoot()
+	if lobbyBuilt and lobbyBuilt.Parent then
+		return lobbyBuilt
+	end
+	local existing = root:FindFirstChild("ConcordLobby")
+	if existing and existing:IsA("Folder") and existing:GetAttribute("ArtPass") == ART_PASS then
+		lobbyBuilt = existing
+		return existing
+	end
+	if existing then
+		existing:Destroy()
+	end
+	lobbyBuilt = buildLobbyHub(root)
+	return lobbyBuilt
+end
+
+function ArenaService.getLobbyCFrame(): CFrame
+	ArenaService.ensureLobby()
+	return CFrame.new(LOBBY_OFFSET + Vector3.new(0, 4, 4))
 end
 
 function ArenaService.getDisplayName(): string

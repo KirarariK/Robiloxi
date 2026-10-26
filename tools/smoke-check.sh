@@ -51,6 +51,7 @@ check "ProceduralPlayer" "src/ReplicatedStorage/BladeConcord/Animation/Procedura
 check "CombatFx" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/FX/CombatFx.lua"
 check "CombatHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/Combat/CombatHud.lua"
 check "MetaHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/MetaHud.lua"
+check "LobbyHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/LobbyHud.lua"
 check "TutorialTips" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/TutorialTips.lua"
 check "SoundHooks" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/Audio/SoundHooks.lua"
 

@@ -19,12 +19,12 @@ local SHOW_DELAY = 1.8
 
 local TIPS = {
 	{
-		title = "Combat",
-		body = "LMB attaquer · RMB parer (hold)",
+		title = "Salon",
+		body = "Amical ou Classé · puis Jouer",
 	},
 	{
-		title = "Menus",
-		body = "P showcase anim · M panneau méta",
+		title = "Combat",
+		body = "LMB attaquer · RMB parer · M méta",
 	},
 }
 

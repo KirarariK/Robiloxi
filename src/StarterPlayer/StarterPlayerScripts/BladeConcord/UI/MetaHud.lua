@@ -470,33 +470,33 @@ function MetaHud.start()
 	local toggle = Instance.new("TextButton")
 	toggle.Name = "ToggleMeta"
 	toggle.AnchorPoint = Vector2.new(1, 1)
-	toggle.Position = UDim2.new(1, -16, 1, -16)
-	toggle.Size = UDim2.new(0, 132, 0, 40)
+	toggle.Position = UDim2.new(1, -20, 1, -20)
+	toggle.Size = UDim2.new(0, 118, 0, 36)
 	toggle.BackgroundColor3 = Theme.Panel
 	toggle.BorderSizePixel = 0
 	toggle.Font = Theme.FontTitle
-	toggle.TextSize = 14
+	toggle.TextSize = 13
 	toggle.TextColor3 = Theme.Bone
 	toggle.Text = "MÉTA  [M]"
 	toggle.Parent = gui
-	corner(toggle, 10)
-	stroke(toggle, Theme.Accent, 1.5)
+	corner(toggle, 9)
+	stroke(toggle, Theme.Accent, 1.25)
 
 	local panel = Instance.new("ScrollingFrame")
 	panel.Name = "Panel"
 	panel.AnchorPoint = Vector2.new(1, 1)
-	panel.Position = UDim2.new(1, -16, 1, -64)
-	panel.Size = UDim2.new(0, 400, 0, 500)
+	panel.Position = UDim2.new(1, -20, 1, -64)
+	panel.Size = UDim2.new(0, 380, 0, 520)
 	panel.BackgroundColor3 = Theme.Ink
-	panel.BackgroundTransparency = 0.05
+	panel.BackgroundTransparency = 0.04
 	panel.BorderSizePixel = 0
 	panel.Visible = false
-	panel.ScrollBarThickness = 3
+	panel.ScrollBarThickness = 4
 	panel.ScrollBarImageColor3 = Theme.Accent
 	panel.CanvasSize = UDim2.new(0, 0, 0, 900)
 	panel.Parent = gui
-	corner(panel, 14)
-	stroke(panel, Theme.PanelEdge, 1.5)
+	corner(panel, 12)
+	stroke(panel, Theme.PanelEdge, 1.25)
 
 	local header = Instance.new("Frame")
 	header.Size = UDim2.new(1, 0, 0, 4)
@@ -590,39 +590,29 @@ function MetaHud.start()
 			y += 24
 		end
 
-		-- Matchmaking + Fair Kit
-		y += mkSection(
-			content,
-			"Matchmaking",
-			"Amical = stats full · Classé = " .. RankedConfig.FairKitBadge
-		)
-		mkButton(content, "File Amical", y, function()
-			metaRemotes.QueueMatch:FireServer({ mode = "Casual" })
-		end, Theme.InkSoft)
-		y += 38
-
-		-- Callout Fair Kit
+		-- Rappel matchmaking (primaire = panneau Salon)
+		y += mkSection(content, "Duel", "Utilise Jouer dans le Salon · Classé = " .. RankedConfig.FairKitBadge)
 		local fair = Instance.new("Frame")
-		fair.Size = UDim2.new(1, -24, 0, 68)
+		fair.Size = UDim2.new(1, -24, 0, 56)
 		fair.Position = UDim2.new(0, 12, 0, y)
 		fair.BackgroundColor3 = Color3.fromRGB(22, 40, 38)
 		fair.BorderSizePixel = 0
 		fair.Parent = content
 		corner(fair, 8)
-		stroke(fair, Theme.Success, 1.2).Transparency = 0.25
+		stroke(fair, Theme.Success, 1.1).Transparency = 0.3
 		local fairTitle = Instance.new("TextLabel")
 		fairTitle.BackgroundTransparency = 1
 		fairTitle.Size = UDim2.new(1, -16, 0, 18)
 		fairTitle.Position = UDim2.new(0, 10, 0, 6)
 		fairTitle.Font = Theme.FontTitle
-		fairTitle.TextSize = 13
+		fairTitle.TextSize = 12
 		fairTitle.TextXAlignment = Enum.TextXAlignment.Left
 		fairTitle.TextColor3 = Theme.Success
 		fairTitle.Text = RankedConfig.FairKitBadge .. "  ·  " .. RankedConfig.FairKitStatsLabel
 		fairTitle.Parent = fair
 		local fairBody = Instance.new("TextLabel")
 		fairBody.BackgroundTransparency = 1
-		fairBody.Size = UDim2.new(1, -16, 0, 36)
+		fairBody.Size = UDim2.new(1, -16, 0, 26)
 		fairBody.Position = UDim2.new(0, 10, 0, 26)
 		fairBody.Font = Theme.FontBody
 		fairBody.TextSize = 11
@@ -630,15 +620,9 @@ function MetaHud.start()
 		fairBody.TextYAlignment = Enum.TextYAlignment.Top
 		fairBody.TextWrapped = true
 		fairBody.TextColor3 = Theme.Muted
-		fairBody.Text =
-			"En Classé, les passifs stats sont plafonnés Rare. Épique / Légendaire restent cosmétiques (pas de P2W)."
+		fairBody.Text = "Classé : passifs plafonnés Rare. Cosmétiques Épique+ sans stats."
 		fairBody.Parent = fair
-		y += 76
-
-		mkButton(content, "File Classé (Fair Kit)", y, function()
-			metaRemotes.QueueMatch:FireServer({ mode = "Ranked" })
-		end, Color3.fromRGB(30, 50, 48))
-		y += 44
+		y += 68
 
 		-- Gacha
 		y += mkSection(content, "Gacha — Banner formes", "Pity soft · rates affichés · feedback pull")
