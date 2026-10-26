@@ -94,6 +94,14 @@ local EconomyConfig = {
 
 	BannerTenPullPremium = 450,
 	BannerFreeTicketPerWeek = 1,
+
+	-- Runtime visuals (SaberBuilder) — map itemId → couleur / aura
+	CosmeticVisuals = {
+		blade_azure = { kind = "blade", color = Color3.fromRGB(90, 190, 255) },
+		blade_ember = { kind = "blade", color = Color3.fromRGB(255, 110, 45) },
+		aura_eclipse = { kind = "aura", color = Color3.fromRGB(140, 90, 255) },
+		hilt_ironwood = { kind = "hilt", wrapColor = Color3.fromRGB(72, 52, 36), ringColor = Color3.fromRGB(180, 150, 90) },
+	} :: { [string]: { [string]: any } },
 }
 
 return EconomyConfig

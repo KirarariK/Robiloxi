@@ -38,6 +38,28 @@ local Theme = {
 	FontTitle = Enum.Font.GothamBlack,
 	FontBody = Enum.Font.GothamMedium,
 	FontMono = Enum.Font.Gotham,
+
+	-- Rareté (MetaHud badges)
+	RarityCommon = Color3.fromRGB(160, 170, 185),
+	RarityRare = Color3.fromRGB(70, 140, 255),
+	RarityEpic = Color3.fromRGB(168, 100, 255),
+	RarityLegendary = Color3.fromRGB(255, 180, 60),
+
+	-- Cosmétiques lame
+	CosmeticAzure = Color3.fromRGB(90, 190, 255),
+	CosmeticEmber = Color3.fromRGB(255, 110, 45),
+	AuraEclipse = Color3.fromRGB(140, 90, 255),
 }
+
+function Theme.rarityColor(rarity: string): Color3
+	if rarity == "Legendary" then
+		return Theme.RarityLegendary
+	elseif rarity == "Epic" then
+		return Theme.RarityEpic
+	elseif rarity == "Rare" then
+		return Theme.RarityRare
+	end
+	return Theme.RarityCommon
+end
 
 return Theme

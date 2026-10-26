@@ -57,21 +57,118 @@ local function neonGlow(parent: BasePart, color: Color3, brightness: number, ran
 	return light
 end
 
-local function ashEmitter(parent: BasePart)
+local function ashEmitter(parent: BasePart, rate: number?, colorA: Color3?, colorB: Color3?)
 	local att = Instance.new("Attachment")
 	att.Parent = parent
 	local pe = Instance.new("ParticleEmitter")
 	pe.Name = "Ash"
-	pe.Rate = 12
+	pe.Rate = rate or 12
 	pe.Lifetime = NumberRange.new(2, 4)
 	pe.Speed = NumberRange.new(0.5, 2)
 	pe.SpreadAngle = Vector2.new(40, 40)
 	pe.Acceleration = Vector3.new(0, 1.5, 0)
 	pe.Size = NumberSequence.new(0.15, 0.05)
 	pe.Transparency = NumberSequence.new(0.3, 1)
-	pe.Color = ColorSequence.new(Color3.fromRGB(80, 70, 60), Color3.fromRGB(40, 35, 30))
+	pe.Color = ColorSequence.new(colorA or Color3.fromRGB(80, 70, 60), colorB or Color3.fromRGB(40, 35, 30))
 	pe.LockedToPart = false
 	pe.Parent = att
+end
+
+--[[ Fog volumétrique léger (Parts ForceField semi-transparentes). ]]
+local function fogBank(folder: Folder, offset: Vector3, color: Color3, count: number)
+	for i = 1, count do
+		local fog = part(
+			"FogBank" .. i,
+			Vector3.new(10 + (i % 3) * 4, 3 + (i % 2), 8 + (i % 4) * 2),
+			CFrame.new(offset + Vector3.new(((i * 17) % 40) - 20, 2 + (i % 3), ((i * 13) % 36) - 18)),
+			color,
+			folder,
+			Enum.Material.ForceField
+		)
+		fog.Transparency = 0.82
+		fog.CanCollide = false
+		fog.CastShadow = false
+	end
+end
+
+--[[ Debris scatter au sol (lisibilité arène). ]]
+local function scatterDebris(folder: Folder, offset: Vector3, color: Color3, material: Enum.Material, n: number)
+	for i = 1, n do
+		local sx = 0.6 + (i % 4) * 0.35
+		local sz = 0.5 + (i % 3) * 0.4
+		local px = ((i * 23) % 50) - 25
+		local pz = ((i * 31) % 48) - 24
+		-- Évite le centre de duel
+		if math.abs(px) < 6 and math.abs(pz) < 6 then
+			px += 10
+		end
+		local d = part(
+			"Debris" .. i,
+			Vector3.new(sx, 0.35 + (i % 3) * 0.15, sz),
+			CFrame.new(offset + Vector3.new(px, 1.25, pz)) * CFrame.Angles(0, math.rad(i * 37), math.rad((i % 5) * 8)),
+			color,
+			folder,
+			material
+		)
+		d.CanCollide = false
+	end
+end
+
+--[[ Hazard label Billboard lisible (pas de lexique SW). ]]
+local function hazardLabel(host: BasePart, text: string, color: Color3)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "HazardLabel"
+	gui.Size = UDim2.fromOffset(140, 28)
+	gui.StudsOffset = Vector3.new(0, host.Size.Y * 0.55 + 1.5, 0)
+	gui.AlwaysOnTop = false
+	gui.MaxDistance = 90
+	gui.Parent = host
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
+	label.BackgroundTransparency = 0.35
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 14
+	label.TextColor3 = color
+	label.Text = text
+	label.Parent = gui
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 4)
+	c.Parent = label
+end
+
+local function applyArenaSky(id: ArenaId)
+	local sky = Lighting:FindFirstChild("BC_ArenaSky")
+	if not sky then
+		sky = Instance.new("Sky")
+		sky.Name = "BC_ArenaSky"
+		sky.Parent = Lighting
+	end
+	local s = sky :: Sky
+	-- SkyboxIds vides = teintes Sky via CelestialBodies / Atmosphere seulement
+	-- (pas d'assets skybox custom — distinct via Sun/Moon + atmo)
+	s.CelestialBodiesShown = true
+	if id == "ObsidianPit" then
+		s.StarCount = 800
+		s.MoonAngularSize = 4
+		s.SunAngularSize = 8
+		Lighting.GeographicLatitude = 55
+	elseif id == "SanctumAstres" then
+		s.StarCount = 3000
+		s.MoonAngularSize = 14
+		s.SunAngularSize = 16
+		Lighting.GeographicLatitude = 20
+	elseif id == "TroneEclipse" then
+		s.StarCount = 5000
+		s.MoonAngularSize = 22
+		s.SunAngularSize = 2
+		Lighting.GeographicLatitude = 70
+	else
+		s.StarCount = 1200
+		s.MoonAngularSize = 8
+		s.SunAngularSize = 21
+		Lighting.GeographicLatitude = 10
+	end
 end
 
 local function applyArenaLighting(id: ArenaId)
@@ -98,75 +195,81 @@ local function applyArenaLighting(id: ArenaId)
 	Lighting.GlobalShadows = true
 	Lighting.EnvironmentDiffuseScale = 0.6
 	Lighting.EnvironmentSpecularScale = 0.5
+	applyArenaSky(id)
 
 	if id == "ObsidianPit" then
 		Lighting.ClockTime = 21.5
-		Lighting.Brightness = 1.4
-		Lighting.Ambient = Color3.fromRGB(40, 22, 18)
-		Lighting.OutdoorAmbient = Color3.fromRGB(55, 30, 22)
-		Lighting.FogColor = Color3.fromRGB(40, 18, 12)
-		Lighting.FogEnd = 220
-		atmo.Density = 0.38
-		atmo.Color = Color3.fromRGB(90, 40, 25)
-		atmo.Decay = Color3.fromRGB(30, 10, 8)
-		atmo.Glare = 0.2
-		atmo.Haze = 1.5
-		bloomFx.Intensity = 0.7
-		bloomFx.Size = 28
-		bloomFx.Threshold = 0.75
-		ccFx.TintColor = Color3.fromRGB(255, 220, 200)
-		ccFx.Contrast = 0.08
-		ccFx.Saturation = 0.05
+		Lighting.Brightness = 1.35
+		Lighting.Ambient = Color3.fromRGB(42, 20, 16)
+		Lighting.OutdoorAmbient = Color3.fromRGB(58, 28, 20)
+		Lighting.FogColor = Color3.fromRGB(48, 16, 10)
+		Lighting.FogStart = 40
+		Lighting.FogEnd = 200
+		atmo.Density = 0.42
+		atmo.Color = Color3.fromRGB(100, 35, 20)
+		atmo.Decay = Color3.fromRGB(35, 8, 6)
+		atmo.Glare = 0.25
+		atmo.Haze = 1.8
+		bloomFx.Intensity = 0.75
+		bloomFx.Size = 30
+		bloomFx.Threshold = 0.72
+		ccFx.TintColor = Color3.fromRGB(255, 210, 190)
+		ccFx.Contrast = 0.1
+		ccFx.Saturation = 0.08
 	elseif id == "SanctumAstres" then
 		Lighting.ClockTime = 17.2
-		Lighting.Brightness = 2.2
-		Lighting.Ambient = Color3.fromRGB(70, 75, 95)
-		Lighting.OutdoorAmbient = Color3.fromRGB(120, 130, 150)
-		Lighting.FogEnd = 400
-		atmo.Density = 0.22
-		atmo.Color = Color3.fromRGB(180, 190, 220)
-		atmo.Decay = Color3.fromRGB(90, 100, 140)
-		atmo.Glare = 0.8
-		atmo.Haze = 0.6
-		bloomFx.Intensity = 0.45
-		bloomFx.Threshold = 0.9
-		ccFx.TintColor = Color3.fromRGB(230, 235, 255)
-		ccFx.Contrast = 0.05
-		ccFx.Saturation = 0.1
-	elseif id == "TroneEclipse" then
-		Lighting.ClockTime = 23
-		Lighting.Brightness = 1.1
-		Lighting.Ambient = Color3.fromRGB(28, 22, 45)
-		Lighting.OutdoorAmbient = Color3.fromRGB(40, 30, 60)
-		Lighting.FogColor = Color3.fromRGB(20, 12, 35)
-		Lighting.FogEnd = 180
-		atmo.Density = 0.42
-		atmo.Color = Color3.fromRGB(50, 35, 80)
-		atmo.Decay = Color3.fromRGB(15, 8, 30)
-		atmo.Glare = 0.1
-		atmo.Haze = 2
-		bloomFx.Intensity = 0.55
-		bloomFx.Threshold = 0.7
-		ccFx.TintColor = Color3.fromRGB(210, 190, 255)
-		ccFx.Contrast = 0.12
-		ccFx.Saturation = -0.05
-	else -- QuaiMirage
-		Lighting.ClockTime = 7.5
-		Lighting.Brightness = 2.4
-		Lighting.Ambient = Color3.fromRGB(50, 80, 90)
-		Lighting.OutdoorAmbient = Color3.fromRGB(100, 140, 150)
-		Lighting.FogColor = Color3.fromRGB(120, 170, 180)
-		Lighting.FogEnd = 280
-		atmo.Density = 0.28
-		atmo.Color = Color3.fromRGB(140, 190, 200)
-		atmo.Decay = Color3.fromRGB(60, 100, 110)
-		atmo.Glare = 1.2
-		atmo.Haze = 1.4
+		Lighting.Brightness = 2.35
+		Lighting.Ambient = Color3.fromRGB(75, 80, 105)
+		Lighting.OutdoorAmbient = Color3.fromRGB(130, 140, 165)
+		Lighting.FogColor = Color3.fromRGB(170, 185, 220)
+		Lighting.FogStart = 80
+		Lighting.FogEnd = 420
+		atmo.Density = 0.18
+		atmo.Color = Color3.fromRGB(190, 200, 235)
+		atmo.Decay = Color3.fromRGB(85, 95, 150)
+		atmo.Glare = 1.0
+		atmo.Haze = 0.45
 		bloomFx.Intensity = 0.5
-		bloomFx.Threshold = 0.85
-		ccFx.TintColor = Color3.fromRGB(210, 245, 250)
+		bloomFx.Threshold = 0.88
+		ccFx.TintColor = Color3.fromRGB(235, 238, 255)
 		ccFx.Contrast = 0.06
 		ccFx.Saturation = 0.12
+	elseif id == "TroneEclipse" then
+		Lighting.ClockTime = 23.2
+		Lighting.Brightness = 1.0
+		Lighting.Ambient = Color3.fromRGB(24, 18, 42)
+		Lighting.OutdoorAmbient = Color3.fromRGB(36, 26, 58)
+		Lighting.FogColor = Color3.fromRGB(16, 8, 32)
+		Lighting.FogStart = 25
+		Lighting.FogEnd = 160
+		atmo.Density = 0.48
+		atmo.Color = Color3.fromRGB(45, 30, 85)
+		atmo.Decay = Color3.fromRGB(12, 6, 28)
+		atmo.Glare = 0.08
+		atmo.Haze = 2.4
+		bloomFx.Intensity = 0.6
+		bloomFx.Threshold = 0.65
+		ccFx.TintColor = Color3.fromRGB(200, 180, 255)
+		ccFx.Contrast = 0.14
+		ccFx.Saturation = -0.08
+	else -- QuaiMirage
+		Lighting.ClockTime = 7.2
+		Lighting.Brightness = 2.55
+		Lighting.Ambient = Color3.fromRGB(55, 90, 100)
+		Lighting.OutdoorAmbient = Color3.fromRGB(110, 155, 165)
+		Lighting.FogColor = Color3.fromRGB(130, 185, 195)
+		Lighting.FogStart = 50
+		Lighting.FogEnd = 260
+		atmo.Density = 0.32
+		atmo.Color = Color3.fromRGB(150, 205, 215)
+		atmo.Decay = Color3.fromRGB(55, 110, 120)
+		atmo.Glare = 1.4
+		atmo.Haze = 1.6
+		bloomFx.Intensity = 0.55
+		bloomFx.Threshold = 0.82
+		ccFx.TintColor = Color3.fromRGB(205, 248, 255)
+		ccFx.Contrast = 0.07
+		ccFx.Saturation = 0.15
 	end
 end
 
@@ -204,7 +307,7 @@ local function buildObsidianPit(parent: Folder): Folder
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Obsidian Pit — Creuset de Lave")
 	folder:SetAttribute("OffsetX", 0)
-	folder:SetAttribute("ArtPass", 2)
+	folder:SetAttribute("ArtPass", 3)
 
 	local offset = Vector3.new(0, 0, 0)
 	local basalt = Color3.fromRGB(42, 40, 48)
@@ -246,12 +349,17 @@ local function buildObsidianPit(parent: Folder): Folder
 	lavaPart:SetAttribute("HazardKind", "Lava")
 	CollectionService:AddTag(lavaPart, CombatConfig.Tags.KillPlane)
 	CollectionService:AddTag(lavaPart, CombatConfig.Tags.Hazard)
+	hazardLabel(lavaPart, "LAVE — mortelle", ember)
 
 	-- Lave intérieure (anneau visible au bord plateforme)
 	local lavaInner = part("LavaLip", Vector3.new(size.X + 4, 0.6, size.Z + 4), CFrame.new(offset + Vector3.new(0, 0.2, 0)), ember, folder, Enum.Material.Neon)
 	lavaInner.Transparency = 0.45
 	lavaInner.CanCollide = false
 	neonGlow(lavaInner, ember, 1.2, 20)
+	ashEmitter(lavaInner, 18, Color3.fromRGB(255, 120, 40), Color3.fromRGB(80, 40, 20))
+
+	scatterDebris(folder, offset, Color3.fromRGB(55, 48, 42), Enum.Material.Rock, 14)
+	fogBank(folder, offset, Color3.fromRGB(80, 35, 20), 5)
 
 	buildSpawns(folder, offset)
 	return folder
@@ -262,7 +370,7 @@ local function buildSanctum(parent: Folder): Folder
 	folder.Name = "SanctumAstres"
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Sanctum des Deux Astres")
-	folder:SetAttribute("ArtPass", 2)
+	folder:SetAttribute("ArtPass", 3)
 	local ox = 120
 	folder:SetAttribute("OffsetX", ox)
 	local offset = Vector3.new(ox, 0, 0)
@@ -310,8 +418,9 @@ local function buildSanctum(parent: Folder): Folder
 	windL:SetAttribute("HazardKind", "Wind")
 	windL:SetAttribute("WindDir", Vector3.new(1, 0, 0))
 	CollectionService:AddTag(windL, CombatConfig.Tags.Hazard)
-	neonGlow(windL, sky, 0.6, 16)
-	ashEmitter(windL) -- particules vent (réutilise emitter)
+	neonGlow(windL, sky, 0.9, 18)
+	ashEmitter(windL, 22, Color3.fromRGB(180, 210, 255), Color3.fromRGB(120, 160, 220))
+	hazardLabel(windL, "VENT — poussée", sky)
 
 	local windR = part("WindEast", Vector3.new(8, 6, 40), CFrame.new(offset + Vector3.new(22, 4, 0)), sky, folder, Enum.Material.ForceField)
 	windR.Transparency = 0.55
@@ -319,7 +428,12 @@ local function buildSanctum(parent: Folder): Folder
 	windR:SetAttribute("HazardKind", "Wind")
 	windR:SetAttribute("WindDir", Vector3.new(-1, 0, 0))
 	CollectionService:AddTag(windR, CombatConfig.Tags.Hazard)
-	neonGlow(windR, sky, 0.6, 16)
+	neonGlow(windR, sky, 0.9, 18)
+	ashEmitter(windR, 22, Color3.fromRGB(180, 210, 255), Color3.fromRGB(120, 160, 220))
+	hazardLabel(windR, "VENT — poussée", sky)
+
+	scatterDebris(folder, offset, Color3.fromRGB(190, 185, 170), Enum.Material.Marble, 10)
+	fogBank(folder, offset, Color3.fromRGB(170, 190, 230), 4)
 
 	buildSpawns(folder, offset)
 	return folder
@@ -330,7 +444,7 @@ local function buildThrone(parent: Folder): Folder
 	folder.Name = "TroneEclipse"
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Trône d'Éclipse")
-	folder:SetAttribute("ArtPass", 2)
+	folder:SetAttribute("ArtPass", 3)
 	local ox = 240
 	folder:SetAttribute("OffsetX", ox)
 	local offset = Vector3.new(ox, 0, 0)
@@ -348,7 +462,9 @@ local function buildThrone(parent: Folder): Folder
 	dais:SetAttribute("HazardKind", "ThronePressure")
 	dais:SetAttribute("Dps", CombatConfig.Arena.ThronePressureDps)
 	CollectionService:AddTag(dais, CombatConfig.Tags.Hazard)
-	neonGlow(dais, violet, 1.8, 22)
+	neonGlow(dais, violet, 2.2, 26)
+	hazardLabel(dais, "PRESSION — DPS", Color3.fromRGB(200, 140, 255))
+	ashEmitter(dais, 10, Color3.fromRGB(120, 80, 200), Color3.fromRGB(40, 20, 60))
 
 	-- Trône Constructible
 	local seat = part("ThroneSeat", Vector3.new(5, 1.2, 4), CFrame.new(offset + Vector3.new(0, 5.2, -1)), void, folder, Enum.Material.Metal)
@@ -370,6 +486,9 @@ local function buildThrone(parent: Folder): Folder
 		ob.Material = Enum.Material.Basalt
 	end
 
+	scatterDebris(folder, offset, Color3.fromRGB(40, 32, 55), Enum.Material.Slate, 12)
+	fogBank(folder, offset, Color3.fromRGB(50, 30, 80), 6)
+
 	buildSpawns(folder, offset)
 	return folder
 end
@@ -379,7 +498,7 @@ local function buildMirage(parent: Folder): Folder
 	folder.Name = "QuaiMirage"
 	folder.Parent = parent
 	folder:SetAttribute("DisplayName", "Quai Mirage")
-	folder:SetAttribute("ArtPass", 2)
+	folder:SetAttribute("ArtPass", 3)
 	local ox = 360
 	folder:SetAttribute("OffsetX", ox)
 	local offset = Vector3.new(ox, 0, 0)
@@ -425,7 +544,8 @@ local function buildMirage(parent: Folder): Folder
 		panel:SetAttribute("HazardKind", "MiragePanel")
 		panel:SetAttribute("PanelIndex", i)
 		CollectionService:AddTag(panel, CombatConfig.Tags.Hazard)
-		neonGlow(panel, mirage, 1.2, 14)
+		neonGlow(panel, mirage, 1.5, 16)
+		hazardLabel(panel, "MIRAGE — phase", mirage)
 		-- Cadre
 		local frame = part(
 			"Frame" .. i,
@@ -438,18 +558,21 @@ local function buildMirage(parent: Folder): Folder
 		frame.CanCollide = false
 	end
 
+	scatterDebris(folder, offset, Color3.fromRGB(100, 90, 70), Enum.Material.Sand, 11)
+	fogBank(folder, offset, Color3.fromRGB(120, 180, 190), 5)
+
 	buildSpawns(folder, offset)
 	return folder
 end
 
 function ArenaService.ensureAll(): Folder
 	local root = getArenasRoot()
-	-- Purge greybox / art pass < 2
+	-- Purge greybox / art pass < 3
 	for _, child in root:GetChildren() do
 		if child:IsA("Folder") then
 			local name = child.Name
 			local pass = child:GetAttribute("ArtPass")
-			if pass ~= 2 then
+			if pass ~= 3 then
 				if built[name :: any] then
 					built[name :: any] = nil
 				end
@@ -578,11 +701,23 @@ function ArenaService.stepHazards(dt: number)
 			elseif kind == "MiragePanel" then
 				local idx = (inst:GetAttribute("PanelIndex") :: number?) or 1
 				local phase = (os.clock() / CombatConfig.Arena.MiragePanelLifetime + idx * 0.3) % 1
-				inst.CanCollide = phase < 0.55
-				inst.Transparency = if phase < 0.55 then 0.2 else 0.85
+				local solid = phase < 0.55
+				inst.CanCollide = solid
+				-- Solide = opaque + glow fort ; fantôme = presque invisible
+				inst.Transparency = if solid then 0.12 else 0.88
+				inst.Material = if solid then Enum.Material.Neon else Enum.Material.ForceField
 				local light = inst:FindFirstChildOfClass("PointLight")
 				if light then
-					light.Brightness = if phase < 0.55 then 1.2 else 0.2
+					light.Brightness = if solid then 2.0 else 0.15
+					light.Range = if solid then 18 else 8
+				end
+				local labelGui = inst:FindFirstChild("HazardLabel")
+				if labelGui and labelGui:IsA("BillboardGui") then
+					local lbl = labelGui:FindFirstChildOfClass("TextLabel")
+					if lbl then
+						lbl.Text = if solid then "MIRAGE — SOLIDE" else "MIRAGE — fantôme"
+						lbl.TextColor3 = if solid then Color3.fromRGB(255, 220, 120) else Color3.fromRGB(140, 200, 210)
+					end
 				end
 			end
 		end

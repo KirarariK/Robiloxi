@@ -23,6 +23,7 @@ local DashService = require(script.Parent:WaitForChild("DashService"))
 local FocusService = require(script.Parent:WaitForChild("FocusService"))
 local BotStub = require(script.Parent:WaitForChild("BotStub"))
 local MatchService = require(script.Parent.Parent.Match:WaitForChild("MatchService"))
+local PlayerDataService = require(script.Parent.Parent.Data:WaitForChild("PlayerDataService"))
 
 local CombatService = {}
 
@@ -31,13 +32,20 @@ local attackRate: { [Player]: { count: number, windowStart: number } } = {}
 local mobilityRate: { [Player]: { count: number, windowStart: number } } = {}
 local roundEndReported = false
 
-local function ensureBlade(character: Model): BasePart
+local function ensureBlade(character: Model, player: Player?): BasePart
+	local profile = if player then PlayerDataService.get(player) else nil
 	for _, inst in CollectionService:GetTagged(CombatConfig.Tags.SaberBlade) do
 		if inst:IsDescendantOf(character) and inst:IsA("BasePart") then
+			if profile then
+				SaberBuilder.applyCosmeticsFromModel(character, profile.equippedCosmetics)
+			end
 			return inst
 		end
 	end
 	local build = SaberBuilder.attach(character)
+	if profile then
+		SaberBuilder.applyCosmetics(build, profile.equippedCosmetics)
+	end
 	return build.blade
 end
 
@@ -68,7 +76,7 @@ function CombatService.bindCharacter(fighter: FighterState.Fighter, character: M
 
 	task.defer(function()
 		if character.Parent then
-			fighter.bladePart = ensureBlade(character)
+			fighter.bladePart = ensureBlade(character, fighter.player)
 			fighter.hurtboxes = ensureHurtboxes(character)
 		end
 	end)
