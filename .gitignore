@@ -13,3 +13,10 @@ Thumbs.db
 
 # npm (skills CLI cache if any)
 node_modules/
+
+# Local tool checkouts (hooks point at absolute clone on each machine)
+tools/ponytail/
+tools/
+
+# Graphify generated graph (rebuild with /graphify .)
+graphify-out/

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "node \"/workspace/tools/ponytail/hooks/ponytail-activate.js\"",
+        "timeout": 15
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "node \"/workspace/tools/ponytail/hooks/ponytail-mode-tracker.js\"",
+        "timeout": 15
+      }
+    ]
+  },
+  "version": 1
+}
