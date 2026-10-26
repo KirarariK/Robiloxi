@@ -1,13 +1,14 @@
 --!strict
 --[[
-	Construit des KeyframeSequence R15 (+ HiltGrip + jambes) à partir des StyleParams.
-	Pass fluidité : densification Active/Startup/Recovery, ease curves, shoulder roll,
-	weight shift LowerTorso, ancrage RightUpperLeg/LeftUpperLeg (Dodge/Dash/Heavy).
-	Pass continue : Idle breathing, Guard enter/exit densifiés, Feint 8 KF,
-	Track Length = CombatConfig Light/Heavy (frame data).
-	Pass quality : amplitudes R15 réalistes (clamp angles), smoothstep partout,
-	pas d'hyper-extension bras / poignet.
-	Sources : docs Pose / KeyframeSequence / KeyframeSequenceProvider.
+	Refonte qualité — KeyframeSequence R15 corps entier (torse, hanches, bras ×2,
+	jambes upper+lower, tête, HiltGrip) pour feeling combat sabre compétitif.
+
+	Courbes : easeInOutCubic / easeOutCubic / easeInCubic / easeOutBack (overshoot
+	contrôlé). Active Light/Heavy ≥11 keyframes :
+	Anticipation → weight shift → coupe → follow-through → settle.
+
+	ProceduralPlayer.samplePose suit la même timeline.
+	Sources : Pose / KeyframeSequence / KeyframeSequenceProvider + skill roblox-animation-vfx.
 ]]
 
 local Shared = script.Parent.Parent:WaitForChild("Shared")
@@ -18,7 +19,7 @@ export type JointMap = { [string]: CFrame }
 
 local KeyframeFactory = {}
 
--- Limites Euler relatives (°) — R15 combat sabre, évite bras cassés / hyper-extension
+-- Limites Euler relatives (°) — enveloppe R15 combat sabre
 local LIM = {
 	UpperArm = { p = { -82, 55 }, y = { -72, 68 }, r = { -42, 42 } },
 	LowerArm = { p = { -82, 8 }, y = { -28, 28 }, r = { -18, 18 } },
@@ -26,10 +27,10 @@ local LIM = {
 	Hilt = { p = { -48, 48 }, y = { -55, 55 }, r = { -35, 35 } },
 	Torso = { p = { -22, 22 }, y = { -32, 32 }, r = { -22, 22 } },
 	Head = { p = { -28, 32 }, y = { -28, 28 }, r = { -18, 18 } },
-	Leg = { p = { -22, 22 }, y = { -18, 18 }, r = { -16, 16 } },
+	Leg = { p = { -28, 28 }, y = { -18, 18 }, r = { -16, 16 } },
+	LowerLeg = { p = { -8, 42 }, y = { -10, 10 }, r = { -8, 8 } },
 }
 
--- Durées attaque = frame data serveur (tempo n'étire plus Startup/Active/Recovery)
 local function attackPhaseDuration(clipName: string): number
 	local heavy = string.find(clipName, "Heavy") ~= nil
 	local cfg = if heavy then CombatConfig.Heavy else CombatConfig.Light
@@ -60,33 +61,43 @@ local function angLim(
 	return ang(clampDeg(xDeg, lim.p[1], lim.p[2]), clampDeg(yDeg, lim.y[1], lim.y[2]), clampDeg(zDeg, lim.r[1], lim.r[2]))
 end
 
--- Smoothstep Hermite (canonical) — Pass quality : partout pour les alphas de phase
+---------------------------------------------------------------------------
+-- Courbes (pas un seul smoothstep) — overshoot contrôlé pour la coupe
+---------------------------------------------------------------------------
+
 local function smoothstep(t: number): number
 	local x = math.clamp(t, 0, 1)
 	return x * x * (3 - 2 * x)
 end
 
--- Alias historiques → smoothstep (évite cuts linéaires, courbe unique)
-local function easeInOut(t: number): number
-	return smoothstep(t)
+local function easeInCubic(t: number): number
+	local x = math.clamp(t, 0, 1)
+	return x * x * x
 end
 
 local function easeOutCubic(t: number): number
-	return smoothstep(t)
+	local x = math.clamp(t, 0, 1)
+	local u = 1 - x
+	return 1 - u * u * u
 end
 
-local function easeInCubic(t: number): number
-	return smoothstep(t)
+local function easeInOutCubic(t: number): number
+	local x = math.clamp(t, 0, 1)
+	if x < 0.5 then
+		return 4 * x * x * x
+	end
+	local u = -2 * x + 2
+	return 1 - (u * u * u) / 2
 end
 
-local function easeOutQuad(t: number): number
-	return smoothstep(t)
+-- Overshoot léger (s ≈ 1.15) — follow-through épée, pas un snap
+local function easeOutBack(t: number): number
+	local x = math.clamp(t, 0, 1)
+	local s = 1.15
+	local u = x - 1
+	return 1 + (s + 1) * (u * u * u) + s * (u * u)
 end
 
---[[
-	Clamp StyleParams avant sample — garde la distinction visuelle sans hyper-extension.
-	swingArc/anticipation plafonnés ; heavyMul reste soft (1.12).
-]]
 local function sanitizeStyle(style: AnimationSets.StyleParams): AnimationSets.StyleParams
 	return {
 		anticipation = clampDeg(style.anticipation, 0.2, 1.05),
@@ -104,7 +115,7 @@ local function sanitizeStyle(style: AnimationSets.StyleParams): AnimationSets.St
 end
 
 --[[
-	Pose hierarchy R15 + HiltGrip + UpperLegs (Motor6D SaberMotor RightHand→HiltGrip).
+	Pose hierarchy R15 + HiltGrip + UpperLegs + LowerLegs.
 	CFrames = Transform relatifs (identité = rest pose).
 ]]
 local function buildPoseTree(joints: JointMap): Pose
@@ -167,18 +178,35 @@ local function buildPoseTree(joints: JointMap): Pose
 	lla.CFrame = joints.LeftLowerArm or CFrame.new()
 	lua_:AddSubPose(lla)
 
-	-- Ancrage corporel R15 (Dodge / Dash / Heavy)
+	local lh = Instance.new("Pose")
+	lh.Name = "LeftHand"
+	lh.Weight = 1
+	lh.CFrame = joints.LeftHand or CFrame.new()
+	lla:AddSubPose(lh)
+
 	local rul = Instance.new("Pose")
 	rul.Name = "RightUpperLeg"
 	rul.Weight = 1
 	rul.CFrame = joints.RightUpperLeg or CFrame.new()
 	lower:AddSubPose(rul)
 
+	local rll = Instance.new("Pose")
+	rll.Name = "RightLowerLeg"
+	rll.Weight = 1
+	rll.CFrame = joints.RightLowerLeg or CFrame.new()
+	rul:AddSubPose(rll)
+
 	local lul = Instance.new("Pose")
 	lul.Name = "LeftUpperLeg"
 	lul.Weight = 1
 	lul.CFrame = joints.LeftUpperLeg or CFrame.new()
 	lower:AddSubPose(lul)
+
+	local lll = Instance.new("Pose")
+	lll.Name = "LeftLowerLeg"
+	lll.Weight = 1
+	lll.CFrame = joints.LeftLowerLeg or CFrame.new()
+	lul:AddSubPose(lll)
 
 	return root
 end
@@ -216,8 +244,9 @@ local function lerpJoints(a: JointMap, b: JointMap, alpha: number): JointMap
 end
 
 --[[
-	Calcule les Transforms joints pour une phase normalisée.
-	phaseKind : Idle | Guard | Antici | Contact | Follow | Dodge | Dash | Focus | Stagger | Dead | Feint | Riposte
+	phaseKind :
+	Idle | Guard | Antici | WeightShift | Contact | Follow | Dodge | Dash |
+	Focus | Stagger | Dead | Feint | Riposte
 ]]
 local function sampleJoints(
 	style: AnimationSets.StyleParams,
@@ -227,17 +256,15 @@ local function sampleJoints(
 ): JointMap
 	local s = sanitizeStyle(style)
 	local a = math.clamp(alpha, 0, 1)
-	-- Heavy soft : +12 % max (évite bras cassés sur swingArc déjà haut)
 	local heavyMul = if heavy then 1.12 else 1.0
 	local ant = math.min(s.anticipation * heavyMul, 1.08)
 	local arc = math.min(s.swingArc * heavyMul, 1.45)
-	local plane = s.planeBias -- 0 horiz, 1 vert
+	local plane = s.planeBias
 	local twist = s.torsoTwist
 	local off = s.offhand
 	local lean = s.idleLean
-	-- Shoulder roll + weight-shift hips (Pass fluidité) — roll plafonné
 	local shoulderRoll = clampDeg(lerpNumber(14, -18, plane) * arc, -28, 28)
-	local hipShift = (if heavy then 1.05 else 0.8) * twist
+	local hipShift = (if heavy then 1.12 else 0.88) * twist
 
 	local pitch = lerpNumber(0, -78, plane)
 	local yaw = lerpNumber(-95, -18, 1 - plane)
@@ -246,213 +273,249 @@ local function sampleJoints(
 	local joints: JointMap = {}
 
 	if phaseKind == "Idle" then
-		-- Dual channel : breath (UpperTorso) + micro-sway (phase décalée) — Animation Editor feel
+		-- Combat idle vivant : breath + micro-sway épée (phases décalées)
 		local bob = math.sin(a * math.pi * 2)
-		local bobEase = smoothstep((bob + 1) * 0.5) * 2 - 1
-		local breath = math.sin(a * math.pi * 2) -- inhale → exhale sur la boucle
-		local breathEase = smoothstep((breath + 1) * 0.5) * 2 - 1
+		local bobE = smoothstep((bob + 1) * 0.5) * 2 - 1
+		local breath = math.sin(a * math.pi * 2)
+		local breathE = easeInOutCubic((breath + 1) * 0.5) * 2 - 1
 		local sway = math.sin(a * math.pi * 2 + 1.15)
-		local swayEase = smoothstep((sway + 1) * 0.5) * 2 - 1
-		joints.LowerTorso = angLim(2 + lean * 18 + breathEase * 0.8, lean * 12 + swayEase * 1.2, bobEase * 1.2, LIM.Torso)
-			* CFrame.new(lean * 0.02 + swayEase * 0.008, 0.008 + breathEase * 0.014, swayEase * 0.004)
-		joints.UpperTorso = angLim(-3 + breathEase * 3.2 + bobEase * 1.2, lean * 10 + swayEase * 2.5, bobEase * 3 + swayEase * 2, LIM.Torso)
-		joints.Head = angLim(-4 + breathEase * 1.5, lean * -8 + swayEase * -1.5, bobEase * 1.5, LIM.Head)
-		joints.RightUpperArm = angLim(-25 + bobEase * 4 + breathEase * 1.5, -15 + swayEase * 2, 20 + lean * 18 + bobEase * 2.5, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-35, 10, bobEase * 1.5, LIM.LowerArm)
-		joints.RightHand = angLim(0, 0, 8 + bobEase * 1.5, LIM.Hand)
-		joints.HiltGrip = angLim(bobEase * 4 + breathEase * 2, bobEase * 3 + swayEase * 2, bobEase * 1.5, LIM.Hilt)
-		joints.LeftUpperArm = angLim(-15 + breathEase * 1.2, 20 + swayEase * 2, -off * 22, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-40, -10, 0, LIM.LowerArm)
-		joints.RightUpperLeg = angLim(bobEase * 1.2 + breathEase * 0.4, swayEase * 0.8, lean * 4, LIM.Leg)
-		joints.LeftUpperLeg = angLim(-bobEase * 1.2 - breathEase * 0.4, -swayEase * 0.8, -lean * 4, LIM.Leg)
+		local swayE = easeInOutCubic((sway + 1) * 0.5) * 2 - 1
+		local tip = math.sin(a * math.pi * 2 + 2.4)
+		local tipE = smoothstep((tip + 1) * 0.5) * 2 - 1
+
+		joints.LowerTorso = angLim(2 + lean * 18 + breathE * 1.0, lean * 12 + swayE * 1.4, bobE * 1.4, LIM.Torso)
+			* CFrame.new(lean * 0.022 + swayE * 0.01, 0.01 + breathE * 0.016, swayE * 0.005)
+		joints.UpperTorso = angLim(-3.5 + breathE * 3.6 + bobE * 1.4, lean * 10 + swayE * 2.8, bobE * 3.2 + swayE * 2.2, LIM.Torso)
+		joints.Head = angLim(-4 + breathE * 1.8, lean * -8 + swayE * -1.8, bobE * 1.6, LIM.Head)
+		joints.RightUpperArm = angLim(-26 + bobE * 4.5 + breathE * 1.8, -16 + swayE * 2.5, 20 + lean * 18 + bobE * 2.8, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-36 + tipE * 1.5, 10, bobE * 1.8, LIM.LowerArm)
+		joints.RightHand = angLim(tipE * 2, tipE * 1.5, 8 + bobE * 1.8, LIM.Hand)
+		joints.HiltGrip = angLim(bobE * 5 + breathE * 2.5 + tipE * 3, bobE * 3.5 + swayE * 2.5, bobE * 2 + tipE * 2, LIM.Hilt)
+		joints.LeftUpperArm = angLim(-16 + breathE * 1.4, 22 + swayE * 2.5, -off * 24, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-42, -10, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, -4, LIM.Hand)
+		joints.RightUpperLeg = angLim(bobE * 1.4 + breathE * 0.5, swayE * 1.0, lean * 4, LIM.Leg)
+		joints.RightLowerLeg = angLim(2 + bobE * 0.8, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(-bobE * 1.4 - breathE * 0.5, -swayE * 1.0, -lean * 4, LIM.Leg)
+		joints.LeftLowerLeg = angLim(2 - bobE * 0.8, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Guard" then
-		-- a : 0 = enter (depuis Idle-ish), 1 = hold ; micro-breath en fin de boucle
-		local g = smoothstep(a)
-		local holdBreath = math.sin(a * math.pi * 2) * 0.35 * smoothstep(math.clamp((a - 0.55) / 0.45, 0, 1))
+		-- Garde haute lisible + micro-breath hold (distinct Idle)
+		local g = easeOutCubic(a)
+		local holdBreath = math.sin(a * math.pi * 2) * 0.4 * smoothstep(math.clamp((a - 0.5) / 0.5, 0, 1))
 		local guardArmPitch = clampDeg(s.guardPitch * 58 - 18, -78, 20)
-		joints.LowerTorso = angLim(4 + g * 1.2 + holdBreath * 0.6, -twist * 18 * g, hipShift * 4 * g, LIM.Torso)
-			* CFrame.new(-hipShift * 0.03 * g, holdBreath * 0.008, 0)
-		joints.UpperTorso = angLim(-6 * g - holdBreath * 1.2, twist * 22 * g, -shoulderRoll * 0.12 * g + holdBreath * 1.5, LIM.Torso)
-		joints.Head = angLim(-8 * g, -twist * 10 * g, holdBreath * 0.8, LIM.Head)
+		joints.LowerTorso = angLim(5 + g * 1.5 + holdBreath * 0.7, -twist * 20 * g, hipShift * 5 * g, LIM.Torso)
+			* CFrame.new(-hipShift * 0.035 * g, holdBreath * 0.01, 0.01 * g)
+		joints.UpperTorso = angLim(-8 * g - holdBreath * 1.4, twist * 24 * g, -shoulderRoll * 0.14 * g + holdBreath * 1.6, LIM.Torso)
+		joints.Head = angLim(-10 * g, -twist * 12 * g, holdBreath * 0.9, LIM.Head)
 		joints.RightUpperArm = angLim(
-			lerpNumber(-25, guardArmPitch, g) + holdBreath * 2,
-			lerpNumber(-15, -48, g),
-			lerpNumber(20, 32 + shoulderRoll * 0.2, g),
+			lerpNumber(-25, guardArmPitch, g) + holdBreath * 2.2,
+			lerpNumber(-15, -52, g),
+			lerpNumber(20, 34 + shoulderRoll * 0.22, g),
 			LIM.UpperArm
 		)
-		joints.RightLowerArm = angLim(lerpNumber(-35, -68, g), lerpNumber(10, 22, g), 8 * g, LIM.LowerArm)
-		joints.RightHand = angLim(10 * g, 0, lerpNumber(8, -15, g), LIM.Hand)
-		joints.HiltGrip = angLim(lerpNumber(0, -22, g), lerpNumber(0, 18, g), lerpNumber(0, -10, g), LIM.Hilt)
-		joints.LeftUpperArm = angLim(lerpNumber(-15, -38, g), lerpNumber(20, 45, g), -off * 35 * g, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(lerpNumber(-40, -52, g), 0, 0, LIM.LowerArm)
-		joints.RightUpperLeg = angLim(3 * g, 4 * g, 2 * g, LIM.Leg)
-		joints.LeftUpperLeg = angLim(2 * g, -6 * g, -3 * g, LIM.Leg)
+		joints.RightLowerArm = angLim(lerpNumber(-35, -70, g), lerpNumber(10, 24, g), 10 * g, LIM.LowerArm)
+		joints.RightHand = angLim(12 * g, 0, lerpNumber(8, -18, g), LIM.Hand)
+		joints.HiltGrip = angLim(lerpNumber(0, -26, g), lerpNumber(0, 22, g), lerpNumber(0, -12, g), LIM.Hilt)
+		joints.LeftUpperArm = angLim(lerpNumber(-15, -42, g), lerpNumber(20, 48, g), -off * 38 * g, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(lerpNumber(-40, -55, g), 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(4 * g, 0, -6 * g, LIM.Hand)
+		joints.RightUpperLeg = angLim(4 * g, 5 * g, 3 * g, LIM.Leg)
+		joints.RightLowerLeg = angLim(6 * g, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(3 * g, -7 * g, -4 * g, LIM.Leg)
+		joints.LeftLowerLeg = angLim(8 * g, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Antici" then
-		local e = smoothstep(a)
-		-- Chambre réaliste : pitch ≥ -78°, yaw ≥ -68° (plus de -123° cassé)
+		-- Chambre : ease-in (charge) — poids arrière
+		local e = easeInCubic(a)
 		local chamberPitch = clampDeg(-48 - ant * 28 * plane, -78, -20)
 		local chamberYaw = clampDeg(-32 - ant * 26 * (1 - plane), -68, -10)
-		-- Weight shift arrière + shoulder roll chambre
-		joints.LowerTorso = angLim(-3.5 * ant * e, -twist * 24 * ant * e, hipShift * 5 * e, LIM.Torso)
-			* CFrame.new(hipShift * 0.035 * e, 0.018 * e, 0.025 * e)
-		joints.UpperTorso = angLim(-6 * ant * e, -twist * 32 * ant * e, 4 * ant * e + shoulderRoll * 0.15 * e, LIM.Torso)
-		joints.Head = angLim(5 * ant * e, twist * 12 * ant * e, 0, LIM.Head)
+		joints.LowerTorso = angLim(-4.5 * ant * e, -twist * 26 * ant * e, hipShift * 6 * e, LIM.Torso)
+			* CFrame.new(hipShift * 0.04 * e, 0.022 * e, 0.032 * e)
+		joints.UpperTorso = angLim(-7.5 * ant * e, -twist * 34 * ant * e, 5 * ant * e + shoulderRoll * 0.18 * e, LIM.Torso)
+		joints.Head = angLim(6 * ant * e, twist * 14 * ant * e, 0, LIM.Head)
 		joints.RightUpperArm = angLim(
 			chamberPitch * e + (-25) * (1 - e),
 			chamberYaw * e + (-15) * (1 - e),
-			22 + ant * 12 * e + shoulderRoll * 0.28 * e,
+			22 + ant * 14 * e + shoulderRoll * 0.32 * e,
 			LIM.UpperArm
 		)
-		joints.RightLowerArm = angLim(-18 - ant * 22 * e, 12, 5 * e, LIM.LowerArm)
-		joints.RightHand = angLim(-8 * e, -12 * e, 8 + shoulderRoll * 0.15 * e, LIM.Hand)
-		joints.HiltGrip = angLim(-32 * ant * e, -24 * ant * e, 12 * ant * e, LIM.Hilt)
-		joints.LeftUpperArm = angLim(-22, 28 + off * 16, -off * 26, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-42, 0, 0, LIM.LowerArm)
-		if heavy then
-			joints.RightUpperLeg = angLim(-5 * e, 4 * e, 3 * e, LIM.Leg)
-			joints.LeftUpperLeg = angLim(7 * e, -3 * e, -5 * e, LIM.Leg)
-		else
-			joints.RightUpperLeg = angLim(-2 * e, 2 * e, 1 * e, LIM.Leg)
-			joints.LeftUpperLeg = angLim(3 * e, -1 * e, -2 * e, LIM.Leg)
-		end
+		joints.RightLowerArm = angLim(-18 - ant * 24 * e, 12, 6 * e, LIM.LowerArm)
+		joints.RightHand = angLim(-10 * e, -14 * e, 8 + shoulderRoll * 0.18 * e, LIM.Hand)
+		joints.HiltGrip = angLim(-36 * ant * e, -28 * ant * e, 14 * ant * e, LIM.Hilt)
+		joints.LeftUpperArm = angLim(-24 - off * 6 * e, 30 + off * 18 * e, -off * 28 - off * 8 * e, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-44, -4 * e, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(-4 * e, 0, -6 * e, LIM.Hand)
+		local legMul = if heavy then 1.15 else 0.7
+		joints.RightUpperLeg = angLim(-6 * e * legMul, 5 * e, 4 * e, LIM.Leg)
+		joints.RightLowerLeg = angLim(8 * e * legMul, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(9 * e * legMul, -4 * e, -6 * e, LIM.Leg)
+		joints.LeftLowerLeg = angLim(4 * e, 0, 0, LIM.LowerLeg)
+	elseif phaseKind == "WeightShift" then
+		-- Commit hanches avant le tranchant — pont Antici → Contact
+		local e = easeInOutCubic(a)
+		local antPose = sampleJoints(style, "Antici", 1, heavy)
+		local earlyContact = sampleJoints(style, "Contact", 0.18, heavy)
+		return lerpJoints(antPose, earlyContact, e)
 	elseif phaseKind == "Contact" then
-		local pMul = smoothstep(a)
-		local swingPitch = clampDeg(pitch * arc * 0.35 + 22 * arc * pMul, -78, 50)
-		local swingYaw = clampDeg(yaw * arc * 0.3 + 72 * arc * (1 - plane) * pMul * 0.45, -70, 65)
-		local swingRoll = clampDeg(roll * arc * 0.25 + shoulderRoll * 0.45 * pMul - 12, -40, 38)
-		-- Transfert poids avant / hanches
-		joints.LowerTorso = angLim(5 * math.min(arc, 1.2) * pMul, twist * 36 * pMul, -hipShift * 6 * pMul, LIM.Torso)
-			* CFrame.new(-hipShift * 0.04 * pMul, -0.018 * pMul, -0.035 * pMul)
-		joints.UpperTorso = angLim(3.5 * math.min(arc, 1.2) * pMul, twist * 42 * pMul, -6 * pMul + shoulderRoll * 0.18 * pMul, LIM.Torso)
-		joints.Head = angLim(-5, -twist * 16 * pMul, 0, LIM.Head)
+		-- Coupe : ease-out rapide vers l'impact (lisible à distance)
+		local pMul = easeOutCubic(a)
+		local swingPitch = clampDeg(pitch * arc * 0.35 + 24 * arc * pMul, -78, 52)
+		local swingYaw = clampDeg(yaw * arc * 0.3 + 76 * arc * (1 - plane) * pMul * 0.48, -70, 65)
+		local swingRoll = clampDeg(roll * arc * 0.25 + shoulderRoll * 0.5 * pMul - 14, -40, 38)
+		joints.LowerTorso = angLim(6.5 * math.min(arc, 1.25) * pMul, twist * 38 * pMul, -hipShift * 7 * pMul, LIM.Torso)
+			* CFrame.new(-hipShift * 0.048 * pMul, -0.022 * pMul, -0.042 * pMul)
+		joints.UpperTorso = angLim(4.5 * math.min(arc, 1.25) * pMul, twist * 46 * pMul, -7 * pMul + shoulderRoll * 0.22 * pMul, LIM.Torso)
+		-- Tête suit la lame (yaw / pitch opposés au twist)
+		joints.Head = angLim(-6 - 2 * pMul, -twist * 18 * pMul, shoulderRoll * 0.08 * pMul, LIM.Head)
 		joints.RightUpperArm = angLim(swingPitch, swingYaw, swingRoll, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-12 + 35 * pMul, -16, -5 * pMul, LIM.LowerArm)
-		joints.RightHand = angLim(12 * pMul, 20 * pMul, -16 + shoulderRoll * 0.22 * pMul, LIM.Hand)
-		-- Poignet : yaw plafonné (plus de 126° hyper-rotation)
-		joints.HiltGrip = angLim(24 * math.min(arc, 1.25) * pMul, 48 * math.min(arc, 1.25) * pMul * (1 - plane * 0.5), -12, LIM.Hilt)
-		joints.LeftUpperArm = angLim(-28 - off * 16, 36, -off * 38 * pMul, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-48, 8, 0, LIM.LowerArm)
-		if heavy then
-			joints.RightUpperLeg = angLim(9 * pMul, -5 * pMul, 4 * pMul, LIM.Leg)
-			joints.LeftUpperLeg = angLim(-3 * pMul, 6 * pMul, -3 * pMul, LIM.Leg)
-		else
-			joints.RightUpperLeg = angLim(4 * pMul, -2 * pMul, 2 * pMul, LIM.Leg)
-			joints.LeftUpperLeg = angLim(-1 * pMul, 3 * pMul, -1 * pMul, LIM.Leg)
-		end
+		joints.RightLowerArm = angLim(-10 + 38 * pMul, -18, -6 * pMul, LIM.LowerArm)
+		joints.RightHand = angLim(14 * pMul, 22 * pMul, -18 + shoulderRoll * 0.25 * pMul, LIM.Hand)
+		joints.HiltGrip = angLim(28 * math.min(arc, 1.28) * pMul, 50 * math.min(arc, 1.28) * pMul * (1 - plane * 0.5), -14, LIM.Hilt)
+		-- Contrebalancement bras gauche lisible
+		joints.LeftUpperArm = angLim(-30 - off * 18 * pMul, 38 + 6 * pMul, -off * 42 * pMul, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-50, 10, 4 * pMul, LIM.LowerArm)
+		joints.LeftHand = angLim(6 * pMul, 0, -8 * pMul, LIM.Hand)
+		local legMul = if heavy then 1.2 else 0.75
+		joints.RightUpperLeg = angLim(11 * pMul * legMul, -6 * pMul, 5 * pMul, LIM.Leg)
+		joints.RightLowerLeg = angLim(14 * pMul * legMul, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(-4 * pMul * legMul, 7 * pMul, -4 * pMul, LIM.Leg)
+		joints.LeftLowerLeg = angLim(6 * pMul, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Follow" then
+		-- Follow-through + settle (easeOutBack sur le début pour overshoot tip)
 		local f = s.followThrough
-		local settle = smoothstep(a)
-		joints.LowerTorso = angLim(2.5 * f * (1 - settle), twist * 20 * f * (1 - settle), hipShift * 2.5 * (1 - settle), LIM.Torso)
-			* CFrame.new(0, 0, -0.018 * f * (1 - settle))
-		joints.UpperTorso = angLim(2 * (1 - settle), twist * 16 * (1 - settle), -3.5 * (1 - settle) + shoulderRoll * 0.08 * (1 - settle), LIM.Torso)
-		joints.Head = angLim(-3, 0, 0, LIM.Head)
+		local overshoot = math.clamp(easeOutBack(math.min(a * 1.35, 1)) - 1, 0, 0.18) -- pic tip ~0..0.18
+		local settle = easeInOutCubic(a)
+		local live = 1 - settle
+		joints.LowerTorso = angLim(3 * f * live, twist * 22 * f * live, hipShift * 3 * live, LIM.Torso)
+			* CFrame.new(0, 0, -0.02 * f * live)
+		joints.UpperTorso = angLim(2.5 * live + overshoot * 4, twist * 18 * live, -4 * live + shoulderRoll * 0.1 * live, LIM.Torso)
+		joints.Head = angLim(-3.5 * live, -twist * 6 * live, 0, LIM.Head)
 		joints.RightUpperArm = angLim(
-			12 * f * (1 - settle) - 8 * settle,
-			32 * f * (1 - settle) + 8 * settle,
-			-8 + shoulderRoll * 0.12 * (1 - settle),
+			14 * f * live + overshoot * 10 - 10 * settle,
+			34 * f * live + overshoot * 8 + 6 * settle,
+			-10 + shoulderRoll * 0.14 * live,
 			LIM.UpperArm
 		)
-		joints.RightLowerArm = angLim(-24, 5, 0, LIM.LowerArm)
-		joints.RightHand = angLim(5, 8, 0, LIM.Hand)
-		joints.HiltGrip = angLim(6 * f * (1 - settle), 16 * f * (1 - settle), 0, LIM.Hilt)
-		joints.LeftUpperArm = angLim(-18, 22, -off * 18, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-22 - overshoot * 6, 6, 0, LIM.LowerArm)
+		joints.RightHand = angLim(6 + overshoot * 4, 10, 0, LIM.Hand)
+		joints.HiltGrip = angLim(8 * f * live + overshoot * 12, 18 * f * live + overshoot * 10, -overshoot * 6, LIM.Hilt)
+		joints.LeftUpperArm = angLim(-18 + 4 * settle, 24 - 4 * settle, -off * 20 * live, LIM.UpperArm)
 		joints.LeftLowerArm = angLim(-38, 0, 0, LIM.LowerArm)
-		if heavy then
-			joints.RightUpperLeg = angLim(4 * (1 - settle), -2 * (1 - settle), 2 * (1 - settle), LIM.Leg)
-			joints.LeftUpperLeg = angLim(2 * (1 - settle), 3 * (1 - settle), -2 * (1 - settle), LIM.Leg)
-		else
-			joints.RightUpperLeg = angLim(1 * (1 - settle), 0, 0, LIM.Leg)
-			joints.LeftUpperLeg = angLim(1 * (1 - settle), 0, 0, LIM.Leg)
-		end
+		joints.LeftHand = angLim(0, 0, -4, LIM.Hand)
+		joints.RightUpperLeg = angLim(5 * live * (if heavy then 1.1 else 0.6), -2 * live, 2 * live, LIM.Leg)
+		joints.RightLowerLeg = angLim(6 * live, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(2 * live, 3 * live, -2 * live, LIM.Leg)
+		joints.LeftLowerLeg = angLim(3 * live, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Dodge" then
-		local d = smoothstep(a)
-		joints.LowerTorso = angLim(-7 * d, lean * 55 * d, lean * 28 * d, LIM.Torso) * CFrame.new(lean * 0.07 * d, 0.018 * d, 0)
-		joints.UpperTorso = angLim(-8 * d, lean * 42 * d, lean * 22 * d, LIM.Torso)
-		joints.Head = angLim(4 * d, -lean * 28 * d, 0, LIM.Head)
-		joints.RightUpperArm = angLim(-45, 52, -32 + shoulderRoll * 0.15, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-38, 0, 0, LIM.LowerArm)
-		joints.HiltGrip = angLim(-18, 32, -20, LIM.Hilt)
-		joints.LeftUpperArm = angLim(-35, -26, 16, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-32, 0, 0, LIM.LowerArm)
-		-- Jambes : ancrage latéral lisible
-		joints.RightUpperLeg = angLim(-10 * d * math.sign(lean + 0.001), lean * 18 * d, lean * 14 * d, LIM.Leg)
-		joints.LeftUpperLeg = angLim(7 * d, -lean * 16 * d, -lean * 12 * d, LIM.Leg)
+		-- Esquive latérale : lean + jambes croisées, lame haute
+		local d = easeOutCubic(a)
+		local side = math.sign(lean + 0.001)
+		joints.LowerTorso = angLim(-9 * d, lean * 58 * d, lean * 30 * d, LIM.Torso) * CFrame.new(lean * 0.08 * d, 0.022 * d, 0)
+		joints.UpperTorso = angLim(-10 * d, lean * 46 * d, lean * 24 * d, LIM.Torso)
+		joints.Head = angLim(5 * d, -lean * 32 * d, -lean * 6 * d, LIM.Head)
+		joints.RightUpperArm = angLim(-48, 55, -34 + shoulderRoll * 0.18, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-40, 0, 0, LIM.LowerArm)
+		joints.RightHand = angLim(-6, 8, -10, LIM.Hand)
+		joints.HiltGrip = angLim(-20, 36, -22, LIM.Hilt)
+		joints.LeftUpperArm = angLim(-38, -28, 18, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-34, 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, 6, LIM.Hand)
+		joints.RightUpperLeg = angLim(-12 * d * side, lean * 20 * d, lean * 16 * d, LIM.Leg)
+		joints.RightLowerLeg = angLim(18 * d, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(9 * d, -lean * 18 * d, -lean * 14 * d, LIM.Leg)
+		joints.LeftLowerLeg = angLim(10 * d, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Dash" then
-		local d = smoothstep(a)
-		joints.LowerTorso = angLim(7 * d, 0, 0, LIM.Torso) * CFrame.new(0, -0.018 * d, -0.05 * d)
-		joints.UpperTorso = angLim(10 * d, 0, 0, LIM.Torso)
-		joints.Head = angLim(-8 * d, 0, 0, LIM.Head)
-		joints.RightUpperArm = angLim(8, -22, 8, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-28, 0, 0, LIM.LowerArm)
-		joints.HiltGrip = angLim(4, -12, 0, LIM.Hilt)
-		joints.LeftUpperArm = angLim(4, 18, -8, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-22, 0, 0, LIM.LowerArm)
-		-- Fente avant légère
-		joints.RightUpperLeg = angLim(12 * d, -3 * d, 2 * d, LIM.Leg)
-		joints.LeftUpperLeg = angLim(-7 * d, 3 * d, -2 * d, LIM.Leg)
-	elseif phaseKind == "Focus" then
-		local d = smoothstep(a)
-		joints.LowerTorso = angLim(8 * d, 0, 0, LIM.Torso) * CFrame.new(0, 0, -0.04 * d)
+		-- Fente avant : torse penché, jambe avant pliée
+		local d = easeOutCubic(a)
+		joints.LowerTorso = angLim(9 * d, 0, 0, LIM.Torso) * CFrame.new(0, -0.024 * d, -0.06 * d)
 		joints.UpperTorso = angLim(12 * d, 0, 0, LIM.Torso)
 		joints.Head = angLim(-10 * d, 0, 0, LIM.Head)
-		joints.RightUpperArm = angLim(-18, 0, shoulderRoll * 0.08, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-10, 0, 0, LIM.LowerArm)
-		joints.HiltGrip = angLim(0, 0, 0, LIM.Hilt) * CFrame.new(0, 0, -0.12 * d)
-		joints.LeftUpperArm = angLim(-22, 36, -off * 40, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-28, 0, 0, LIM.LowerArm)
-		joints.RightUpperLeg = angLim(5 * d, 0, 0, LIM.Leg)
-		joints.LeftUpperLeg = angLim(-3 * d, 0, 0, LIM.Leg)
+		joints.RightUpperArm = angLim(10, -24, 10, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-30, 0, 0, LIM.LowerArm)
+		joints.RightHand = angLim(4, -6, 0, LIM.Hand)
+		joints.HiltGrip = angLim(6, -14, 0, LIM.Hilt)
+		joints.LeftUpperArm = angLim(6, 20, -10, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-24, 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, -4, LIM.Hand)
+		joints.RightUpperLeg = angLim(16 * d, -4 * d, 3 * d, LIM.Leg)
+		joints.RightLowerLeg = angLim(22 * d, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(-10 * d, 4 * d, -3 * d, LIM.Leg)
+		joints.LeftLowerLeg = angLim(8 * d, 0, 0, LIM.LowerLeg)
+	elseif phaseKind == "Focus" then
+		-- Estoc Focus : lame avant, corps compact (≠ Dash)
+		local d = easeInOutCubic(a)
+		joints.LowerTorso = angLim(6 * d, 0, 0, LIM.Torso) * CFrame.new(0, 0.008 * d, -0.05 * d)
+		joints.UpperTorso = angLim(10 * d, 0, 0, LIM.Torso)
+		joints.Head = angLim(-12 * d, 0, 0, LIM.Head)
+		joints.RightUpperArm = angLim(-22, -4, shoulderRoll * 0.1, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-8 + 20 * d, 0, 0, LIM.LowerArm)
+		joints.RightHand = angLim(0, 0, 0, LIM.Hand)
+		joints.HiltGrip = angLim(0, 0, 0, LIM.Hilt) * CFrame.new(0, 0, -0.16 * d)
+		joints.LeftUpperArm = angLim(-26, 40, -off * 44, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-30, 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, -8, LIM.Hand)
+		joints.RightUpperLeg = angLim(7 * d, 0, 0, LIM.Leg)
+		joints.RightLowerLeg = angLim(10 * d, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(-4 * d, 0, 0, LIM.Leg)
+		joints.LeftLowerLeg = angLim(4 * d, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Stagger" then
-		local d = smoothstep(a)
-		joints.LowerTorso = angLim(-10 * d, -20 * d, 12 * d, LIM.Torso)
-		joints.UpperTorso = angLim(-12 * d, -24 * d, 16 * d, LIM.Torso)
-		joints.Head = angLim(18 * d, 12 * d, 8 * d, LIM.Head)
-		joints.RightUpperArm = angLim(35 * d, -35 * d, 28 * d, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-18, 0, 0, LIM.LowerArm)
-		joints.HiltGrip = angLim(24 * d, -16 * d, 20 * d, LIM.Hilt)
-		joints.LeftUpperArm = angLim(16 * d, 26 * d, -16 * d, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-14, 0, 0, LIM.LowerArm)
-		joints.RightUpperLeg = angLim(-7 * d, 8 * d, 5 * d, LIM.Leg)
-		joints.LeftUpperLeg = angLim(5 * d, -7 * d, -4 * d, LIM.Leg)
+		local d = easeOutCubic(a)
+		joints.LowerTorso = angLim(-12 * d, -22 * d, 14 * d, LIM.Torso)
+		joints.UpperTorso = angLim(-14 * d, -26 * d, 18 * d, LIM.Torso)
+		joints.Head = angLim(20 * d, 14 * d, 10 * d, LIM.Head)
+		joints.RightUpperArm = angLim(38 * d, -38 * d, 30 * d, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-20, 0, 0, LIM.LowerArm)
+		joints.RightHand = angLim(8 * d, -6 * d, 8 * d, LIM.Hand)
+		joints.HiltGrip = angLim(26 * d, -18 * d, 22 * d, LIM.Hilt)
+		joints.LeftUpperArm = angLim(18 * d, 28 * d, -18 * d, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-16, 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, 0, LIM.Hand)
+		joints.RightUpperLeg = angLim(-9 * d, 9 * d, 6 * d, LIM.Leg)
+		joints.RightLowerLeg = angLim(12 * d, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(6 * d, -8 * d, -5 * d, LIM.Leg)
+		joints.LeftLowerLeg = angLim(8 * d, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Dead" then
-		local d = smoothstep(a)
-		-- Collapse lisible mais plafonné (pas d'épaule 70°+ non clampée)
-		joints.LowerTorso = angLim(-18 * d, 8 * d, 16 * d, LIM.Torso)
-		joints.UpperTorso = angLim(-20 * d, 12 * d, 18 * d, LIM.Torso)
-		joints.Head = angLim(28 * d, 0, 12 * d, LIM.Head)
-		joints.RightUpperArm = angLim(52 * d, -16 * d, 32 * d, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-10, 0, 0, LIM.LowerArm)
-		joints.HiltGrip = angLim(40 * d, 0, 24 * d, LIM.Hilt)
-		joints.LeftUpperArm = angLim(32 * d, 20 * d, -12 * d, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-5, 0, 0, LIM.LowerArm)
-		joints.RightUpperLeg = angLim(-12 * d, 6 * d, 8 * d, LIM.Leg)
-		joints.LeftUpperLeg = angLim(-8 * d, -5 * d, -6 * d, LIM.Leg)
+		local d = easeInOutCubic(a)
+		joints.LowerTorso = angLim(-20 * d, 10 * d, 18 * d, LIM.Torso)
+		joints.UpperTorso = angLim(-22 * d, 14 * d, 20 * d, LIM.Torso)
+		joints.Head = angLim(30 * d, 0, 14 * d, LIM.Head)
+		joints.RightUpperArm = angLim(54 * d, -18 * d, 34 * d, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-12, 0, 0, LIM.LowerArm)
+		joints.RightHand = angLim(10 * d, 0, 8 * d, LIM.Hand)
+		joints.HiltGrip = angLim(42 * d, 0, 26 * d, LIM.Hilt)
+		joints.LeftUpperArm = angLim(34 * d, 22 * d, -14 * d, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-6, 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, 0, LIM.Hand)
+		joints.RightUpperLeg = angLim(-14 * d, 7 * d, 9 * d, LIM.Leg)
+		joints.RightLowerLeg = angLim(20 * d, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(-10 * d, -6 * d, -7 * d, LIM.Leg)
+		joints.LeftLowerLeg = angLim(16 * d, 0, 0, LIM.LowerLeg)
 	elseif phaseKind == "Feint" then
-		-- Chambre → fake peak → abort → snap Guard (plus de KF lisibles)
 		if a < 0.38 then
-			return sampleJoints(style, "Antici", smoothstep(a / 0.38), false)
+			return sampleJoints(style, "Antici", easeInCubic(a / 0.38), false)
 		elseif a < 0.48 then
-			-- Hold fake au pic anticipation
 			return sampleJoints(style, "Antici", 1, false)
 		elseif a < 0.62 then
 			local antPose = sampleJoints(style, "Antici", 1, false)
 			local mid = sampleJoints(style, "Guard", 0.35, false)
-			return lerpJoints(antPose, mid, smoothstep((a - 0.48) / 0.14))
+			return lerpJoints(antPose, mid, easeOutCubic((a - 0.48) / 0.14))
 		end
-		return sampleJoints(style, "Guard", smoothstep((a - 0.62) / 0.38), false)
+		return sampleJoints(style, "Guard", easeOutCubic((a - 0.62) / 0.38), false)
 	elseif phaseKind == "Riposte" then
-		local e = smoothstep(a)
-		joints.LowerTorso = angLim(5 * e, 0, 0, LIM.Torso) * CFrame.new(0, 0, -0.035 * e)
-		joints.UpperTorso = angLim(8 * e, 0, 0, LIM.Torso)
-		joints.Head = angLim(-6 * e, 0, 0, LIM.Head)
-		joints.RightUpperArm = angLim(-14 + 4 * e, -5, 4 + shoulderRoll * 0.08, LIM.UpperArm)
-		joints.RightLowerArm = angLim(-5 + 36 * e, 0, 0, LIM.LowerArm)
+		local e = easeOutCubic(a)
+		joints.LowerTorso = angLim(6 * e, 0, 0, LIM.Torso) * CFrame.new(0, 0, -0.04 * e)
+		joints.UpperTorso = angLim(9 * e, 0, 0, LIM.Torso)
+		joints.Head = angLim(-8 * e, 0, 0, LIM.Head)
+		joints.RightUpperArm = angLim(-16 + 6 * e, -6, 5 + shoulderRoll * 0.1, LIM.UpperArm)
+		joints.RightLowerArm = angLim(-4 + 40 * e, 0, 0, LIM.LowerArm)
 		joints.RightHand = angLim(0, 0, 0, LIM.Hand)
-		joints.HiltGrip = CFrame.new(0, 0, -0.2 * e)
-		joints.LeftUpperArm = angLim(-18, 22, -12, LIM.UpperArm)
-		joints.LeftLowerArm = angLim(-32, 0, 0, LIM.LowerArm)
-		joints.RightUpperLeg = angLim(7 * e, 0, 0, LIM.Leg)
-		joints.LeftUpperLeg = angLim(-3 * e, 0, 0, LIM.Leg)
+		joints.HiltGrip = CFrame.new(0, 0, -0.22 * e)
+		joints.LeftUpperArm = angLim(-20, 24, -14, LIM.UpperArm)
+		joints.LeftLowerArm = angLim(-34, 0, 0, LIM.LowerArm)
+		joints.LeftHand = angLim(0, 0, -4, LIM.Hand)
+		joints.RightUpperLeg = angLim(9 * e, 0, 0, LIM.Leg)
+		joints.RightLowerLeg = angLim(12 * e, 0, 0, LIM.LowerLeg)
+		joints.LeftUpperLeg = angLim(-4 * e, 0, 0, LIM.Leg)
+		joints.LeftLowerLeg = angLim(4 * e, 0, 0, LIM.LowerLeg)
 	else
 		joints.RightUpperArm = CFrame.new()
 	end
@@ -480,18 +543,17 @@ function KeyframeFactory.buildClip(
 
 	if clipName == "Idle" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Idle, true)
-		local dur = 1.6 / tempo -- cycle breath un peu plus lent = lisible
-		-- 12 segments + close — breathing UpperTorso + micro-sway
-		for i = 0, 11 do
-			local u = i / 12
+		local dur = 1.75 / tempo
+		for i = 0, 13 do
+			local u = i / 14
 			local name: string? = nil
 			if i == 0 then
 				name = "Idle0"
 			elseif i == 3 then
 				name = "IdleInhale"
-			elseif i == 6 then
+			elseif i == 7 then
 				name = "IdleMid"
-			elseif i == 9 then
+			elseif i == 10 then
 				name = "IdleExhale"
 			end
 			addKeyframe(seq, dur * u, sampleJoints(style, "Idle", u, false), name)
@@ -502,16 +564,10 @@ function KeyframeFactory.buildClip(
 
 	if clipName == "Guard" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action, true)
-		local dur = 1.05 / tempo
-		--[[
-			Boucle seamless (KF0 ≈ KF end) : hold + micro-breath densifié.
-			Enter / exit = fadeIn 0.16 / fadeOut 0.18 (CombatAnimator) depuis/vers Idle —
-			évite un pop Raise→Hold à chaque loop.
-		]]
+		local dur = 1.1 / tempo
 		local function guardBreath(phase: number): JointMap
-			-- phase 0..1 → alpha hold 0.88..1.0 avec oscillation
 			local wave = math.sin(phase * math.pi * 2)
-			local alpha = 0.9 + 0.1 * smoothstep((wave + 1) * 0.5)
+			local alpha = 0.88 + 0.12 * easeInOutCubic((wave + 1) * 0.5)
 			return sampleJoints(style, "Guard", alpha, false)
 		end
 		addKeyframe(seq, 0, guardBreath(0), "GuardHoldA")
@@ -522,68 +578,74 @@ function KeyframeFactory.buildClip(
 		addKeyframe(seq, dur * 0.62, guardBreath(0.62), "GuardMicro3")
 		addKeyframe(seq, dur * 0.75, guardBreath(0.75), "GuardBreathOut")
 		addKeyframe(seq, dur * 0.88, guardBreath(0.88), "GuardMicro4")
-		addKeyframe(seq, dur, guardBreath(1), "GuardHoldB") -- ≈ GuardHoldA
+		addKeyframe(seq, dur, guardBreath(1), "GuardHoldB")
 		return seq
 	end
 
-
 	if clipName == "Dodge" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Movement, false)
-		local dur = 0.28 / tempo
+		local dur = 0.3 / tempo
 		addKeyframe(seq, 0, sampleJoints(style, "Idle", 0, false), "DodgeFrom")
-		addKeyframe(seq, dur * 0.15, sampleJoints(style, "Dodge", 0.25, false), "DodgeWind")
-		addKeyframe(seq, dur * 0.4, sampleJoints(style, "Dodge", 0.85, false), "DodgePeak")
-		addKeyframe(seq, dur * 0.7, sampleJoints(style, "Dodge", 0.45, false), "DodgeFall")
-		addKeyframe(seq, dur, sampleJoints(style, "Idle", 0.2, false), "DodgeOut")
+		addKeyframe(seq, dur * 0.12, sampleJoints(style, "Dodge", 0.2, false), "DodgeWind")
+		addKeyframe(seq, dur * 0.32, sampleJoints(style, "Dodge", 0.7, false), "DodgeCommit")
+		addKeyframe(seq, dur * 0.5, sampleJoints(style, "Dodge", 1.0, false), "DodgePeak")
+		addKeyframe(seq, dur * 0.7, sampleJoints(style, "Dodge", 0.55, false), "DodgeFall")
+		addKeyframe(seq, dur * 0.88, sampleJoints(style, "Idle", 0.25, false), "DodgeRecover")
+		addKeyframe(seq, dur, sampleJoints(style, "Idle", 0.15, false), "DodgeOut")
 		return seq
 	end
 
 	if clipName == "Dash" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Movement, false)
-		local dur = 0.22 / tempo
+		local dur = 0.24 / tempo
 		addKeyframe(seq, 0, sampleJoints(style, "Idle", 0, false), "DashFrom")
-		addKeyframe(seq, dur * 0.2, sampleJoints(style, "Dash", 0.4, false), "DashPush")
-		addKeyframe(seq, dur * 0.45, sampleJoints(style, "Dash", 1, false), "DashPeak")
-		addKeyframe(seq, dur * 0.75, sampleJoints(style, "Dash", 0.5, false), "DashCoast")
-		addKeyframe(seq, dur, sampleJoints(style, "Idle", 0.1, false), "DashOut")
+		addKeyframe(seq, dur * 0.14, sampleJoints(style, "Dash", 0.3, false), "DashCoil")
+		addKeyframe(seq, dur * 0.35, sampleJoints(style, "Dash", 0.85, false), "DashPush")
+		addKeyframe(seq, dur * 0.52, sampleJoints(style, "Dash", 1, false), "DashPeak")
+		addKeyframe(seq, dur * 0.72, sampleJoints(style, "Dash", 0.45, false), "DashCoast")
+		addKeyframe(seq, dur * 0.9, sampleJoints(style, "Idle", 0.15, false), "DashSettle")
+		addKeyframe(seq, dur, sampleJoints(style, "Idle", 0.08, false), "DashOut")
 		return seq
 	end
 
 	if clipName == "FocusPush" or clipName == "FocusDash" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action2, false)
-		local dur = (if clipName == "FocusPush" then 0.35 else 0.28) / tempo
-		addKeyframe(seq, 0, sampleJoints(style, "Antici", 0.4, false), "FocusWind")
-		addKeyframe(seq, dur * 0.25, sampleJoints(style, "Focus", 0.5, false))
-		addKeyframe(seq, dur * 0.5, sampleJoints(style, "Focus", 1, false), "FocusPeak")
-		addKeyframe(seq, dur * 0.75, sampleJoints(style, "Follow", 0.35, false))
-		addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.6, false), "FocusOut")
+		local dur = (if clipName == "FocusPush" then 0.36 else 0.28) / tempo
+		addKeyframe(seq, 0, sampleJoints(style, "Antici", 0.35, false), "FocusWind")
+		addKeyframe(seq, dur * 0.18, sampleJoints(style, "Antici", 0.7, false), "FocusChamber")
+		addKeyframe(seq, dur * 0.36, sampleJoints(style, "Focus", 0.45, false), "FocusCommit")
+		addKeyframe(seq, dur * 0.52, sampleJoints(style, "Focus", 1, false), "FocusPeak")
+		addKeyframe(seq, dur * 0.7, sampleJoints(style, "Follow", 0.25, false), "FocusThrough")
+		addKeyframe(seq, dur * 0.88, sampleJoints(style, "Follow", 0.5, false), "FocusSettle")
+		addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.65, false), "FocusOut")
 		return seq
 	end
 
 	if clipName == "Stagger" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action4, false)
-		local dur = 0.45 / tempo
+		local dur = 0.48 / tempo
 		addKeyframe(seq, 0, sampleJoints(style, "Idle", 0, false))
-		addKeyframe(seq, dur * 0.15, sampleJoints(style, "Stagger", 0.4, false))
-		addKeyframe(seq, dur * 0.35, sampleJoints(style, "Stagger", 1, false), "StaggerHit")
-		addKeyframe(seq, dur * 0.7, sampleJoints(style, "Stagger", 0.85, false))
-		addKeyframe(seq, dur, sampleJoints(style, "Stagger", 0.7, false))
+		addKeyframe(seq, dur * 0.12, sampleJoints(style, "Stagger", 0.35, false))
+		addKeyframe(seq, dur * 0.32, sampleJoints(style, "Stagger", 1, false), "StaggerHit")
+		addKeyframe(seq, dur * 0.55, sampleJoints(style, "Stagger", 0.9, false))
+		addKeyframe(seq, dur * 0.78, sampleJoints(style, "Stagger", 0.75, false))
+		addKeyframe(seq, dur, sampleJoints(style, "Stagger", 0.65, false))
 		return seq
 	end
 
 	if clipName == "Dead" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action4, false)
-		local dur = 0.7 / tempo
+		local dur = 0.72 / tempo
 		addKeyframe(seq, 0, sampleJoints(style, "Stagger", 0.5, false))
-		addKeyframe(seq, dur * 0.25, sampleJoints(style, "Dead", 0.35, false))
-		addKeyframe(seq, dur * 0.55, sampleJoints(style, "Dead", 0.85, false), "KO")
+		addKeyframe(seq, dur * 0.2, sampleJoints(style, "Dead", 0.3, false))
+		addKeyframe(seq, dur * 0.45, sampleJoints(style, "Dead", 0.7, false))
+		addKeyframe(seq, dur * 0.7, sampleJoints(style, "Dead", 0.92, false), "KO")
 		addKeyframe(seq, dur, sampleJoints(style, "Dead", 1, false))
 		return seq
 	end
 
 	if clipName == "Feint" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action2, false)
-		-- Aligné fenêtre feinte (cancel Startup Light avant Active ≈ CombatConfig.Light.Startup)
 		local dur = math.max(0.22, CombatConfig.Light.Startup * 0.95) / math.max(0.85, math.min(tempo, 1.35))
 		addKeyframe(seq, 0, sampleJoints(style, "Feint", 0, false), "FeintStart")
 		addKeyframe(seq, dur * 0.12, sampleJoints(style, "Feint", 0.18, false), "FeintWind")
@@ -596,85 +658,94 @@ function KeyframeFactory.buildClip(
 		return seq
 	end
 
-
 	if clipName == "Riposte" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action3, false)
-		local dur = 0.3 / tempo
-		addKeyframe(seq, 0, sampleJoints(style, "Guard", 0.5, false), "RiposteFrom")
-		addKeyframe(seq, dur * 0.18, sampleJoints(style, "Riposte", 0.2, false), "RiposteWind")
-		addKeyframe(seq, dur * 0.4, sampleJoints(style, "Riposte", 0.65, false))
-		addKeyframe(seq, dur * 0.58, sampleJoints(style, "Riposte", 1, false), "RiposteHit")
-		addKeyframe(seq, dur * 0.8, sampleJoints(style, "Follow", 0.35, false))
-		addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.5, false), "RiposteOut")
+		local dur = 0.32 / tempo
+		addKeyframe(seq, 0, sampleJoints(style, "Guard", 0.55, false), "RiposteFrom")
+		addKeyframe(seq, dur * 0.14, sampleJoints(style, "Riposte", 0.15, false), "RiposteWind")
+		addKeyframe(seq, dur * 0.32, sampleJoints(style, "Riposte", 0.5, false))
+		addKeyframe(seq, dur * 0.5, sampleJoints(style, "Riposte", 1, false), "RiposteHit")
+		addKeyframe(seq, dur * 0.7, sampleJoints(style, "Follow", 0.3, false))
+		addKeyframe(seq, dur * 0.88, sampleJoints(style, "Follow", 0.5, false))
+		addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.6, false), "RiposteOut")
 		return seq
 	end
 
-	-- Startup / Active / Recovery (Light|Heavy) — densifiés Pass fluidité
 	local isStartup = string.sub(clipName, 1, 7) == "Startup"
 	local isActive = string.sub(clipName, 1, 6) == "Active"
 	local isRecovery = string.sub(clipName, 1, 8) == "Recovery"
 
 	if isStartup then
 		local seq = emptySequence(seqName, priority, false)
-		local dur = attackPhaseDuration(clipName) -- = CombatConfig Light/Heavy.Startup
-		-- Idle → Antici avec ease : pas de cut (6–7 KFs)
+		local dur = attackPhaseDuration(clipName)
 		local idle0 = sampleJoints(style, "Idle", 0, heavy)
-		local ant025 = sampleJoints(style, "Antici", 0.25, heavy)
-		local ant05 = sampleJoints(style, "Antici", 0.5, heavy)
-		local ant075 = sampleJoints(style, "Antici", 0.75, heavy)
-		local ant09 = sampleJoints(style, "Antici", 0.9, heavy)
+		local ant02 = sampleJoints(style, "Antici", 0.2, heavy)
+		local ant04 = sampleJoints(style, "Antici", 0.4, heavy)
+		local ant06 = sampleJoints(style, "Antici", 0.6, heavy)
+		local ant08 = sampleJoints(style, "Antici", 0.8, heavy)
+		local ant095 = sampleJoints(style, "Antici", 0.95, heavy)
 		local ant1 = sampleJoints(style, "Antici", 1.0, heavy)
+		local wshift = sampleJoints(style, "WeightShift", 0.35, heavy)
 		addKeyframe(seq, 0, idle0, "StartFromIdle")
-		addKeyframe(seq, dur * 0.12, lerpJoints(idle0, ant025, smoothstep(0.55)), "StartBlend")
-		addKeyframe(seq, dur * 0.28, ant025, "AnticiEarly")
-		addKeyframe(seq, dur * 0.48, ant05, "AnticiMid")
-		addKeyframe(seq, dur * 0.68, ant075, "AnticiPeak")
-		addKeyframe(seq, dur * 0.85, ant09, "AnticiHold")
+		addKeyframe(seq, dur * 0.1, lerpJoints(idle0, ant02, easeInOutCubic(0.6)), "StartBlend")
+		addKeyframe(seq, dur * 0.22, ant02, "AnticiEarly")
+		addKeyframe(seq, dur * 0.38, ant04, "AnticiMid")
+		addKeyframe(seq, dur * 0.55, ant06, "AnticiLoad")
+		addKeyframe(seq, dur * 0.7, ant08, "AnticiPeak")
+		addKeyframe(seq, dur * 0.82, ant095, "AnticiHold")
+		addKeyframe(seq, dur * 0.92, wshift, "WeightPrep")
 		addKeyframe(seq, dur, ant1, "AnticiReady")
 		return seq
 	end
 
 	if isActive then
 		local seq = emptySequence(seqName, priority, false)
-		local dur = attackPhaseDuration(clipName) -- = CombatConfig Light/Heavy.Active
+		local dur = attackPhaseDuration(clipName)
+		-- ≥11 KF : release → weight → arc → impact → overshoot → settle
 		addKeyframe(seq, 0, sampleJoints(style, "Antici", 1.0, heavy), "SwingRelease")
 		if style.doubleBeat then
-			addKeyframe(seq, dur * 0.12, sampleJoints(style, "Contact", 0.35, heavy), "Beat1In")
-			addKeyframe(seq, dur * 0.26, sampleJoints(style, "Contact", 0.9, heavy), "Beat1")
-			addKeyframe(seq, dur * 0.38, sampleJoints(style, "Contact", 0.4, heavy), "Valley")
+			addKeyframe(seq, dur * 0.08, sampleJoints(style, "WeightShift", 0.6, heavy), "WeightCommit")
+			addKeyframe(seq, dur * 0.16, sampleJoints(style, "Contact", 0.3, heavy), "Beat1In")
+			addKeyframe(seq, dur * 0.26, sampleJoints(style, "Contact", 0.85, heavy), "Beat1")
+			addKeyframe(seq, dur * 0.34, sampleJoints(style, "Contact", 0.95, heavy), "Beat1Tip")
+			addKeyframe(seq, dur * 0.42, sampleJoints(style, "Contact", 0.4, heavy), "Valley")
 			addKeyframe(seq, dur * 0.52, sampleJoints(style, "Contact", 0.55, heavy), "Beat2In")
-			addKeyframe(seq, dur * 0.68, sampleJoints(style, "Contact", 1.0, heavy), "Beat2")
-			addKeyframe(seq, dur * 0.85, sampleJoints(style, "Follow", 0.2, heavy), "Through")
-			addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.4, heavy), "ActiveEnd")
+			addKeyframe(seq, dur * 0.64, sampleJoints(style, "Contact", 1.0, heavy), "Beat2")
+			addKeyframe(seq, dur * 0.74, sampleJoints(style, "Follow", 0.12, heavy), "Overshoot")
+			addKeyframe(seq, dur * 0.86, sampleJoints(style, "Follow", 0.35, heavy), "Through")
+			addKeyframe(seq, dur * 0.94, sampleJoints(style, "Follow", 0.55, heavy), "SettleIn")
+			addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.65, heavy), "ActiveEnd")
 		else
-			-- 7 KFs : release → arc → impact → overshoot → follow
-			addKeyframe(seq, dur * 0.12, sampleJoints(style, "Contact", 0.2, heavy), "ArcTip")
-			addKeyframe(seq, dur * 0.28, sampleJoints(style, "Contact", 0.5, heavy), "ArcIn")
-			addKeyframe(seq, dur * 0.48, sampleJoints(style, "Contact", 0.85, heavy), "PreImpact")
-			addKeyframe(seq, dur * 0.58, sampleJoints(style, "Contact", 1.0, heavy), "Impact")
-			addKeyframe(seq, dur * 0.72, sampleJoints(style, "Follow", 0.15, heavy), "Overshoot")
-			addKeyframe(seq, dur * 0.88, sampleJoints(style, "Follow", 0.35, heavy), "Through")
-			addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.5, heavy), "ActiveEnd")
+			addKeyframe(seq, dur * 0.07, sampleJoints(style, "WeightShift", 0.55, heavy), "WeightCommit")
+			addKeyframe(seq, dur * 0.14, sampleJoints(style, "Contact", 0.15, heavy), "ArcStart")
+			addKeyframe(seq, dur * 0.24, sampleJoints(style, "Contact", 0.38, heavy), "ArcMid")
+			addKeyframe(seq, dur * 0.36, sampleJoints(style, "Contact", 0.62, heavy), "ArcTip")
+			addKeyframe(seq, dur * 0.46, sampleJoints(style, "Contact", 0.82, heavy), "PreImpact")
+			addKeyframe(seq, dur * 0.55, sampleJoints(style, "Contact", 1.0, heavy), "Impact")
+			addKeyframe(seq, dur * 0.64, sampleJoints(style, "Follow", 0.08, heavy), "Overshoot")
+			addKeyframe(seq, dur * 0.76, sampleJoints(style, "Follow", 0.28, heavy), "Through")
+			addKeyframe(seq, dur * 0.88, sampleJoints(style, "Follow", 0.5, heavy), "SettleIn")
+			addKeyframe(seq, dur, sampleJoints(style, "Follow", 0.62, heavy), "ActiveEnd")
 		end
 		return seq
 	end
 
 	if isRecovery then
 		local seq = emptySequence(seqName, priority, false)
-		local dur = attackPhaseDuration(clipName) -- = CombatConfig Light/Heavy.Recovery
-		local follow0 = sampleJoints(style, "Follow", 0.5, heavy)
-		local followMid = sampleJoints(style, "Follow", 0.8, heavy)
-		local idleBlend = sampleJoints(style, "Idle", 0.35, heavy)
+		local dur = attackPhaseDuration(clipName)
+		local follow0 = sampleJoints(style, "Follow", 0.6, heavy)
+		local followMid = sampleJoints(style, "Follow", 0.82, heavy)
+		local idleBlend = sampleJoints(style, "Idle", 0.4, heavy)
 		local idle0 = sampleJoints(style, "Idle", 0, heavy)
 		addKeyframe(seq, 0, follow0, "RecStart")
-		addKeyframe(seq, dur * 0.18, followMid, "RecCoast")
-		addKeyframe(seq, dur * 0.4, lerpJoints(followMid, idleBlend, smoothstep(0.4)), "RecEase")
-		addKeyframe(seq, dur * 0.58, idleBlend, "RecSettle")
-		addKeyframe(seq, dur * 0.78, lerpJoints(idleBlend, idle0, smoothstep(0.55)), "RecSoft")
+		addKeyframe(seq, dur * 0.14, followMid, "RecCoast")
+		addKeyframe(seq, dur * 0.32, lerpJoints(followMid, idleBlend, easeInOutCubic(0.35)), "RecEase")
+		addKeyframe(seq, dur * 0.5, idleBlend, "RecSettle")
+		addKeyframe(seq, dur * 0.7, lerpJoints(idleBlend, idle0, easeOutCubic(0.5)), "RecSoft")
+		addKeyframe(seq, dur * 0.88, lerpJoints(idleBlend, idle0, easeOutCubic(0.85)), "RecAlmost")
 		addKeyframe(seq, dur, idle0, "RecIdle")
 		return seq
 	end
-
 
 	local seq = emptySequence(seqName, Enum.AnimationPriority.Idle, true)
 	addKeyframe(seq, 0, sampleJoints(style, "Idle", 0, false))
@@ -683,8 +754,7 @@ function KeyframeFactory.buildClip(
 end
 
 --[[
-	Expose sample pour ProceduralTrackPlayer (mêmes courbes sans Animator).
-	Suit les phases densifiées + ease pour coller aux KeyframeSequences.
+	Sample pour ProceduralPlayer — même timeline densifiée que buildClip.
 ]]
 function KeyframeFactory.samplePose(
 	setDef: AnimationSets.AnimationSetDef,
@@ -698,77 +768,83 @@ function KeyframeFactory.samplePose(
 	if clipName == "Idle" then
 		return sampleJoints(style, "Idle", n, false)
 	elseif clipName == "Guard" then
-		-- Hold + micro-breath (enter/exit via fade CombatAnimator)
 		local wave = math.sin(n * math.pi * 2)
-		local alpha = 0.9 + 0.1 * smoothstep((wave + 1) * 0.5)
+		local alpha = 0.88 + 0.12 * easeInOutCubic((wave + 1) * 0.5)
 		return sampleJoints(style, "Guard", alpha, false)
 	elseif clipName == "Dodge" then
-		if n < 0.4 then
-			return sampleJoints(style, "Dodge", smoothstep(n / 0.4), false)
+		if n < 0.5 then
+			return sampleJoints(style, "Dodge", easeOutCubic(n / 0.5), false)
 		end
-		local idle = sampleJoints(style, "Idle", 0.2, false)
-		local dodge = sampleJoints(style, "Dodge", 0.85, false)
-		return lerpJoints(dodge, idle, smoothstep((n - 0.4) / 0.6))
+		local idle = sampleJoints(style, "Idle", 0.15, false)
+		local dodge = sampleJoints(style, "Dodge", 1, false)
+		return lerpJoints(dodge, idle, easeInOutCubic((n - 0.5) / 0.5))
 	elseif clipName == "Dash" then
-		if n < 0.45 then
-			return sampleJoints(style, "Dash", smoothstep(n / 0.45), false)
+		if n < 0.52 then
+			return sampleJoints(style, "Dash", easeOutCubic(n / 0.52), false)
 		end
-		local idle = sampleJoints(style, "Idle", 0.1, false)
+		local idle = sampleJoints(style, "Idle", 0.08, false)
 		local dash = sampleJoints(style, "Dash", 1, false)
-		return lerpJoints(dash, idle, smoothstep((n - 0.45) / 0.55))
+		return lerpJoints(dash, idle, easeInOutCubic((n - 0.52) / 0.48))
 	elseif clipName == "FocusPush" or clipName == "FocusDash" then
-		if n < 0.25 then
-			return sampleJoints(style, "Antici", smoothstep(n / 0.25) * 0.4, false)
+		if n < 0.2 then
+			return sampleJoints(style, "Antici", easeInCubic(n / 0.2) * 0.7, false)
 		elseif n < 0.55 then
-			return sampleJoints(style, "Focus", smoothstep((n - 0.25) / 0.3), false)
+			return sampleJoints(style, "Focus", easeOutCubic((n - 0.2) / 0.35), false)
 		end
-		return sampleJoints(style, "Follow", 0.35 + smoothstep((n - 0.55) / 0.45) * 0.25, false)
+		return sampleJoints(style, "Follow", 0.25 + easeInOutCubic((n - 0.55) / 0.45) * 0.4, false)
 	elseif clipName == "Stagger" then
-		return sampleJoints(style, "Stagger", math.min(1, smoothstep(n) * 1.1), false)
+		return sampleJoints(style, "Stagger", math.min(1, easeOutCubic(n) * 1.05), false)
 	elseif clipName == "Dead" then
-		return sampleJoints(style, "Dead", smoothstep(n), false)
+		return sampleJoints(style, "Dead", easeInOutCubic(n), false)
 	elseif clipName == "Feint" then
-		-- Courbe densifiée (fake hold + abort) — sampleJoints Feint gère les seuils
 		return sampleJoints(style, "Feint", n, false)
 	elseif clipName == "Riposte" then
-		if n < 0.18 then
-			return sampleJoints(style, "Guard", 0.5, false)
-		elseif n < 0.58 then
-			return sampleJoints(style, "Riposte", smoothstep((n - 0.18) / 0.4), false)
+		if n < 0.14 then
+			return sampleJoints(style, "Guard", 0.55, false)
+		elseif n < 0.5 then
+			return sampleJoints(style, "Riposte", easeOutCubic((n - 0.14) / 0.36), false)
 		end
-		return sampleJoints(style, "Follow", 0.35 + smoothstep((n - 0.58) / 0.42) * 0.15, false)
+		return sampleJoints(style, "Follow", 0.3 + easeInOutCubic((n - 0.5) / 0.5) * 0.3, false)
 	elseif string.sub(clipName, 1, 7) == "Startup" then
-		-- Blend Idle→Antici (évite cut)
-		if n < 0.15 then
+		if n < 0.12 then
 			local idle = sampleJoints(style, "Idle", 0, heavy)
 			local ant = sampleJoints(style, "Antici", 0.2, heavy)
-			return lerpJoints(idle, ant, smoothstep(n / 0.15))
+			return lerpJoints(idle, ant, easeInOutCubic(n / 0.12))
+		elseif n < 0.9 then
+			return sampleJoints(style, "Antici", easeInCubic((n - 0.12) / 0.78), heavy)
 		end
-		return sampleJoints(style, "Antici", smoothstep((n - 0.15) / 0.85), heavy)
+		local ant = sampleJoints(style, "Antici", 1, heavy)
+		local ws = sampleJoints(style, "WeightShift", 0.4, heavy)
+		return lerpJoints(ant, ws, easeInOutCubic((n - 0.9) / 0.1))
 	elseif string.sub(clipName, 1, 6) == "Active" then
 		if style.doubleBeat then
-			if n < 0.28 then
-				return sampleJoints(style, "Contact", smoothstep(n / 0.28), heavy)
+			if n < 0.08 then
+				return sampleJoints(style, "WeightShift", easeInOutCubic(n / 0.08) * 0.6, heavy)
+			elseif n < 0.28 then
+				return sampleJoints(style, "Contact", easeOutCubic((n - 0.08) / 0.2) * 0.9, heavy)
 			elseif n < 0.42 then
-				local hi = sampleJoints(style, "Contact", 0.9, heavy)
+				local hi = sampleJoints(style, "Contact", 0.95, heavy)
 				local lo = sampleJoints(style, "Contact", 0.4, heavy)
-				return lerpJoints(hi, lo, smoothstep((n - 0.28) / 0.14))
-			elseif n < 0.7 then
-				return sampleJoints(style, "Contact", 0.4 + smoothstep((n - 0.42) / 0.28) * 0.6, heavy)
+				return lerpJoints(hi, lo, easeInOutCubic((n - 0.28) / 0.14))
+			elseif n < 0.68 then
+				return sampleJoints(style, "Contact", 0.4 + easeOutCubic((n - 0.42) / 0.26) * 0.6, heavy)
 			end
-			return sampleJoints(style, "Follow", smoothstep((n - 0.7) / 0.3) * 0.4, heavy)
+			return sampleJoints(style, "Follow", easeInOutCubic((n - 0.68) / 0.32) * 0.65, heavy)
 		end
-		if n < 0.55 then
-			return sampleJoints(style, "Contact", smoothstep(n / 0.55), heavy)
+		-- Simple coupe : weight → contact → overshoot follow
+		if n < 0.1 then
+			return sampleJoints(style, "WeightShift", easeInOutCubic(n / 0.1), heavy)
+		elseif n < 0.55 then
+			return sampleJoints(style, "Contact", easeOutCubic((n - 0.1) / 0.45), heavy)
 		end
-		return sampleJoints(style, "Follow", smoothstep((n - 0.55) / 0.45) * 0.5, heavy)
+		return sampleJoints(style, "Follow", easeInOutCubic((n - 0.55) / 0.45) * 0.62, heavy)
 	elseif string.sub(clipName, 1, 8) == "Recovery" then
-		if n < 0.45 then
-			return sampleJoints(style, "Follow", 0.5 + smoothstep(n / 0.45) * 0.35, heavy)
+		if n < 0.4 then
+			return sampleJoints(style, "Follow", 0.6 + easeOutCubic(n / 0.4) * 0.25, heavy)
 		end
 		local follow = sampleJoints(style, "Follow", 0.85, heavy)
 		local idle = sampleJoints(style, "Idle", 0, heavy)
-		return lerpJoints(follow, idle, smoothstep((n - 0.45) / 0.55))
+		return lerpJoints(follow, idle, easeInOutCubic((n - 0.4) / 0.6))
 	end
 	return sampleJoints(style, "Idle", 0, false)
 end

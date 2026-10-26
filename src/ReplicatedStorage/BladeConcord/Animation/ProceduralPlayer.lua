@@ -1,9 +1,9 @@
 --!strict
 --[[
 	Applique les mêmes courbes KeyframeFactory via Motor6D.Transform
-	quand RegisterKeyframeSequence / AnimationId n'est pas dispo (live sans upload).
-	Compatible R15 + HiltGrip + UpperLegs (SaberMotor).
-	Pass fluidité : fade-out croisé (blend previous→new) pour éviter cut Idle↔Startup.
+	quand RegisterKeyframeSequence / AnimationId n'est pas dispo.
+	Refonte qualité : corps entier (LowerLegs + LeftHand), fades easeInOutCubic,
+	crossfade previous→new — même feeling qu'un swing KeyframeSequence.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -25,7 +25,6 @@ export type PlayHandle = {
 	weight: number,
 	stopped: boolean,
 	stopClock: number?,
-	-- Pose figée au moment du stop pour crossfade
 	frozenJoints: { [string]: CFrame }?,
 }
 
@@ -41,8 +40,11 @@ local JOINT_PARTS = {
 	"HiltGrip",
 	"LeftUpperArm",
 	"LeftLowerArm",
+	"LeftHand",
 	"RightUpperLeg",
+	"RightLowerLeg",
 	"LeftUpperLeg",
+	"LeftLowerLeg",
 }
 
 local PRIORITY_RANK: { [Enum.AnimationPriority]: number } = {
@@ -59,6 +61,15 @@ local activeByChar: { [Model]: { PlayHandle } } = {}
 local motorCache: { [Model]: { [string]: Motor6D } } = {}
 local lastApplied: { [Model]: { [string]: CFrame } } = {}
 local bound = false
+
+local function easeInOutCubic(t: number): number
+	local x = math.clamp(t, 0, 1)
+	if x < 0.5 then
+		return 4 * x * x * x
+	end
+	local u = -2 * x + 2
+	return 1 - (u * u * u) / 2
+end
 
 local function findMotors(character: Model): { [string]: Motor6D }
 	local cached = motorCache[character]
@@ -94,29 +105,29 @@ end
 local function applyJoints(character: Model, joints: { [string]: CFrame }, weight: number)
 	local motors = findMotors(character)
 	local w = math.clamp(weight, 0, 1)
+	-- Courbe de poids : évite lerp linéaire robotique pendant fade
+	local wEase = if w >= 0.99 or w <= 0.01 then w else easeInOutCubic(w)
 	local applied: { [string]: CFrame } = {}
 	for _, partName in JOINT_PARTS do
 		local cf = joints[partName]
 		local motor = motors[partName]
 		if cf and motor then
 			local final: CFrame
-			if w >= 0.99 then
+			if wEase >= 0.99 then
 				final = cf
 			else
-				-- Crossfade depuis dernière pose appliquée (évite pop identity)
 				local from = (lastApplied[character] and lastApplied[character][partName]) or CFrame.new()
-				final = from:Lerp(cf, w)
+				final = from:Lerp(cf, wEase)
 			end
 			motor.Transform = final
 			applied[partName] = final
 		elseif motor and lastApplied[character] and lastApplied[character][partName] then
-			-- Soft release joints absents du clip
 			local from = lastApplied[character][partName]
-			motor.Transform = from:Lerp(CFrame.new(), 1 - w)
+			motor.Transform = from:Lerp(CFrame.new(), 1 - wEase)
 			applied[partName] = motor.Transform
 		end
 	end
-	if w >= 0.99 then
+	if wEase >= 0.99 then
 		lastApplied[character] = applied
 	elseif next(applied) ~= nil then
 		lastApplied[character] = applied
@@ -130,7 +141,8 @@ local function sampleHandle(h: PlayHandle, now: number): ({ [string]: CFrame }?,
 		if fadeOut > 0 then
 			local age = now - stopAt
 			if age < fadeOut then
-				return h.frozenJoints, 1 - (age / fadeOut)
+				local u = 1 - (age / fadeOut)
+				return h.frozenJoints, easeInOutCubic(u)
 			end
 		end
 		return nil, 0
@@ -142,7 +154,6 @@ local function sampleHandle(h: PlayHandle, now: number): ({ [string]: CFrame }?,
 	local elapsed = now - h.startClock
 	local n = if h.length > 0 then elapsed / h.length else 1
 	if not h.looped and n >= 1 then
-		-- Fin naturelle : figer pour fade éventuel
 		local setDef = AnimationSets.get(h.setId)
 		if setDef then
 			h.frozenJoints = KeyframeFactory.samplePose(setDef, h.clipName :: AnimationSets.ClipName, 1)
@@ -163,9 +174,7 @@ local function sampleHandle(h: PlayHandle, now: number): ({ [string]: CFrame }?,
 
 	local fadeW = 1
 	if h.fadeIn > 0 and elapsed < h.fadeIn then
-		-- Smoothstep fade-in
-		local u = elapsed / h.fadeIn
-		fadeW = u * u * (3 - 2 * u)
+		fadeW = easeInOutCubic(elapsed / h.fadeIn)
 	end
 
 	local setDef = AnimationSets.get(h.setId)
@@ -190,7 +199,6 @@ local function bindHeartbeat()
 				continue
 			end
 
-			-- Accumuler contributions : best priority + fading-out lower layers
 			local best: PlayHandle? = nil
 			local bestJoints: { [string]: CFrame }? = nil
 			local bestW = 0
@@ -213,7 +221,6 @@ local function bindHeartbeat()
 				end
 			end
 
-			-- Purge handles fully faded
 			local alive = {}
 			for _, h in handles do
 				if not h.stopped then
@@ -225,7 +232,6 @@ local function bindHeartbeat()
 			activeByChar[character] = alive
 
 			if not bestJoints then
-				-- Peut encore y avoir un fade-out seul
 				if #fading > 0 then
 					local top = fading[1]
 					for i = 2, #fading do
@@ -240,7 +246,6 @@ local function bindHeartbeat()
 				continue
 			end
 
-			-- Crossfade : si un ancien clip fade encore, lerp depuis sa pose
 			local outJoints = bestJoints
 			local outW = bestW
 			if #fading > 0 and bestW < 0.99 then
@@ -259,7 +264,7 @@ local function bindHeartbeat()
 					keys[k] = true
 				end
 				local alpha = bestW / math.max(bestW + top.w * 0.85, 0.001)
-				alpha = math.clamp(alpha, 0, 1)
+				alpha = easeInOutCubic(math.clamp(alpha, 0, 1))
 				for k in keys do
 					local a = top.joints[k] or CFrame.new()
 					local b = bestJoints[k] or CFrame.new()
@@ -326,7 +331,6 @@ function ProceduralPlayer.play(
 	local fadeIn = fadeTime or 0.08
 	local fadeOut = fadeOutTime or fadeIn
 
-	-- Crossfade : figer les concurrents au lieu d'un cut
 	for _, h in list do
 		if h.stopped then
 			continue

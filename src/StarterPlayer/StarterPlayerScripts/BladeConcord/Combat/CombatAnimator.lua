@@ -5,6 +5,7 @@
 	Branche sur CombatState (Idle/Startup/Active/Recovery/Guard/Dodge/Dash/Focus/KO).
 	Pass continue : fades Guard enter/exit, sync speed ↔ CombatConfig, nil-safe Animator.
 	Pass quality : AnimDebugOverlay (F8 / BC_AnimDebug) liste set+clip.
+	Refonte qualité : fades anti-snap + CatalogueBed Core (Knight/Ninja idle).
 ]]
 
 local Players = game:GetService("Players")
@@ -17,6 +18,7 @@ local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local AnimationSets = require(Blade:WaitForChild("Animation"):WaitForChild("AnimationSets"))
 local AnimationRegistry = require(Blade:WaitForChild("Animation"):WaitForChild("AnimationRegistry"))
 local ProceduralPlayer = require(Blade:WaitForChild("Animation"):WaitForChild("ProceduralPlayer"))
+local CatalogueBed = require(Blade:WaitForChild("Animation"):WaitForChild("CatalogueBed"))
 
 local SaberPose = require(script.Parent:WaitForChild("SaberPose"))
 local AnimDebugOverlay = require(script.Parent:WaitForChild("AnimDebugOverlay"))
@@ -30,6 +32,7 @@ local useAnimatorPath = false
 local feintArmed: { [number]: boolean } = {}
 -- Showcase (touche P) : ignore CombatState pour ne pas écraser le cycle démo
 local combatPaused = false
+local catalogueBedStarted: { [Model]: boolean } = {}
 
 local function playLocalSfx(name: string, userId: number)
 	local lp = Players.LocalPlayer
@@ -84,23 +87,38 @@ local function getOrLoadTrack(character: Model, setId: string, clipName: string)
 end
 
 local function fadeTimesFor(clipName: string, actionId: string): (number, number)
-	-- fadeIn, fadeOut — Idle↔Startup / Guard enter-exit plus longs
+	-- fadeIn, fadeOut — Idle↔Startup / Guard ; Active un peu plus doux (anti-snap)
 	if actionId == "Active" then
-		return 0.05, 0.1
+		return 0.06, 0.12
 	elseif actionId == "Startup" then
-		return 0.14, 0.12 -- crossfade depuis Idle
+		return 0.16, 0.14
 	elseif actionId == "Recovery" then
-		return 0.1, 0.14
+		return 0.12, 0.16
 	elseif actionId == "Guard" or actionId == "RiposteLock" then
-		return 0.16, 0.18 -- enter / exit Guard densifiés
+		return 0.16, 0.18
 	elseif actionId == "Idle" then
-		return 0.18, 0.14 -- settle doux depuis Guard/Recovery
+		return 0.2, 0.16
 	elseif actionId == "Dodge" or actionId == "Dash" then
-		return 0.06, 0.1
+		return 0.07, 0.12
 	elseif clipName == "Feint" then
 		return 0.08, 0.12
 	end
 	return 0.1, 0.12
+end
+
+local function ensureCatalogueBed(character: Model)
+	if catalogueBedStarted[character] then
+		return
+	end
+	catalogueBedStarted[character] = true
+	character.Destroying:Once(function()
+		catalogueBedStarted[character] = nil
+	end)
+	task.defer(function()
+		if character.Parent then
+			CatalogueBed.ensureCombatIdle(character)
+		end
+	end)
 end
 
 --[[
@@ -148,6 +166,7 @@ local function playClip(character: Model, setId: string, clipName: string, actio
 	if not character:FindFirstChildOfClass("Humanoid") then
 		return false
 	end
+	ensureCatalogueBed(character)
 	local fadeIn, fadeOut = fadeTimesFor(clipName, actionId)
 	local track = getOrLoadTrack(character, setId, clipName)
 	if track then
