@@ -245,10 +245,11 @@ function FormService.start()
 		local count = payload.count or 1
 		local usePremium = payload.premium == true
 		local result = FormService.pull(player, count, usePremium)
+		local profile = PlayerDataService.get(player)
 		meta.MetaState:FireClient(player, {
 			kind = "GachaResult",
 			data = result,
-			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player) :: any),
+			profile = if profile then PlayerDataService.toClientSnapshot(profile) else nil,
 		})
 	end)
 
@@ -259,9 +260,13 @@ function FormService.start()
 		if payload.formId and payload.rarity then
 			FormService.equip(player, tostring(payload.formId), tostring(payload.rarity))
 		end
+		local profile = PlayerDataService.get(player)
+		if not profile then
+			return
+		end
 		meta.MetaState:FireClient(player, {
 			kind = "Profile",
-			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player) :: any),
+			profile = PlayerDataService.toClientSnapshot(profile),
 		})
 	end)
 end

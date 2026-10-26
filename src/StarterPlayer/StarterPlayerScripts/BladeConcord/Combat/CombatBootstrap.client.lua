@@ -31,7 +31,7 @@ SoundHooks.startHum()
 
 print(
 	string.format(
-		"[BladeConcord] Client ready — %d anim sets · LMB/RMB · Q/E esquive · Shift dash · F/G Focus · M méta · P showcase",
+		"[BladeConcord] Client ready — %d anim sets · LMB/RMB · Q/E · Shift · F/G · M méta · P showcase · F8 debug",
 		CombatAnimator.getSetCount()
 	)
 )

@@ -88,7 +88,12 @@ local function ensureRemote(folder: Folder, name: string): RemoteEvent
 		return existing
 	end
 	if RunService:IsClient() then
-		return folder:WaitForChild(name) :: RemoteEvent
+		-- Timeout évite hang infini si bootstrap serveur raté (Studio / hot-reload)
+		local remote = folder:WaitForChild(name, 30)
+		if remote and remote:IsA("RemoteEvent") then
+			return remote
+		end
+		error(string.format("[BladeConcord] Remotes: client timeout waiting for %s/%s", folder:GetFullName(), name))
 	end
 	if existing then
 		existing:Destroy()

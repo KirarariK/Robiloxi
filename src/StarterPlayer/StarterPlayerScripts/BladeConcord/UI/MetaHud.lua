@@ -673,23 +673,34 @@ function MetaHud.start()
 			catalog = payload.catalog
 		end
 		-- Feedback pull gacha (FormService: kind=GachaResult, data.results)
+		-- Défensif : aussi payload.results top-level (anciens payloads / outils)
 		if payload.kind == "GachaResult" then
-			local data = payload.data
+			local data = if typeof(payload.data) == "table" then payload.data else payload
 			local results = if typeof(data) == "table" then data.results else nil
+			if typeof(results) ~= "table" and typeof(payload.results) == "table" then
+				results = payload.results
+			end
 			if typeof(results) == "table" and #results > 0 then
 				local names = {}
 				for i, r in results do
 					if i > 3 then
 						break
 					end
-					table.insert(names, string.format("%s/%s", tostring(r.formId or r.id), tostring(r.rarity or "?")))
+					if typeof(r) == "table" then
+						table.insert(names, string.format("%s/%s", tostring(r.formId or r.id), tostring(r.rarity or "?")))
+					end
 				end
-				lastPullFlash = table.concat(names, " · ")
+				lastPullFlash = if #names > 0 then table.concat(names, " · ") else "Pull OK"
 				if #results > 3 then
 					lastPullFlash ..= string.format(" (+%d)", #results - 3)
 				end
+				if SoundHooks then
+					SoundHooks.play("Ui")
+				end
 			elseif typeof(data) == "table" and data.ok == false then
 				lastPullFlash = "Échec : " .. tostring(data.error or "?")
+			else
+				lastPullFlash = lastPullFlash or "Pas de résultat"
 			end
 		end
 		rebuild()
