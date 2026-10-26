@@ -1065,9 +1065,8 @@ function ArenaService.ensureLobby(): Instance
 end
 
 --[[
-	Spawn retour allée : préfère un BasePart/SpawnLocation tagué BC_LobbySpawn
-	(World lobby). Fallback = LobbyBuilder.getSpawnCFrame() (plaza tant que World
-	n’a pas posé le tag — Combat ne reconstruit pas la géométrie).
+	Retour allée : LobbyBuilder.getSpawnCFrame() (ArtPass 8 = début d’allée).
+	Si World tague un BC_LobbySpawn, on le préfère (sans toucher la géométrie).
 ]]
 function ArenaService.getLobbyCFrame(): CFrame
 	ArenaService.ensureLobby()
@@ -1088,18 +1087,13 @@ end
 
 function ArenaService.getLobbyDisplayName(): string
 	ArenaService.ensureLobby()
-	for _, inst in CollectionService:GetTagged(CombatConfig.Tags.LobbySpawn) do
-		if inst:IsA("BasePart") then
-			local n = inst:GetAttribute("DisplayName")
-			if typeof(n) == "string" and n ~= "" then
-				return n
-			end
-		end
-	end
 	if lobbyBuilt then
+		local layout = lobbyBuilt:GetAttribute("BC_Layout")
 		local n = lobbyBuilt:GetAttribute("DisplayName")
+		if layout == "AlleySlots" then
+			return if typeof(n) == "string" and n ~= "" then n else "Allée Concord"
+		end
 		if typeof(n) == "string" and n ~= "" then
-			-- World allée : DisplayName peut rester « Concord Hall » jusqu’au rebuild
 			return n
 		end
 	end

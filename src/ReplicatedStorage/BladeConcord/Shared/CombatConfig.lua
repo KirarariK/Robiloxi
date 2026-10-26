@@ -159,9 +159,10 @@ local CombatConfig = {
 		ArenaSpawnB = "ArenaSpawnB",
 		KillPlane = "KillPlane",
 		Hazard = "Hazard",
-		-- World lobby (allée) — Combat lit / écrit attrs, ne pose pas la géométrie
-		DuelSlot = "BC_DuelSlot",
-		LobbySpawn = "BC_LobbySpawn",
+		-- World lobby (allée ArtPass 8) — Combat lit / écrit attrs, ne pose pas la géométrie
+		-- Tag pads = BC_DuelSlotPad ; Attribute BC_DuelSlot = slotIndex (number)
+		DuelSlotPad = "BC_DuelSlotPad",
+		LobbySpawn = "BC_LobbySpawn", -- optionnel ; fallback LobbyBuilder.getSpawnCFrame (allée)
 	},
 }
 

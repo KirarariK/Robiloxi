@@ -50,7 +50,7 @@ DataStores : **mock automatique en Studio** (`DataStoreSafe`) ; en production Ro
 | P | Showcase animations (32 sets) |
 | F8 | Overlay debug anim (set + clip) — ou attribut `BC_AnimDebug` |
 
-**Lobby allée** : claim un pad tagué `BC_DuelSlot` (2 joueurs même slot → grande arène). Solo Studio → ConcordBot après ~2,5 s (voir limitations).
+**Lobby allée** : claim un pad `BC_DuelSlotPad` (attr `BC_DuelSlot`) — 2 joueurs même slot → grande arène. Solo Studio → ConcordBot après ~2,5 s (voir limitations).
 
 ### Mobile
 
