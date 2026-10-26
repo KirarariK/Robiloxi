@@ -542,6 +542,15 @@ function CombatFx.start()
 			if SoundHooks then
 				SoundHooks.play(if kind == "FocusDash" then "FocusDash" else "Dash")
 			end
+		elseif kind == "DoubleJump" then
+			local uid = data.userId or localPlayer.UserId
+			local root = characterRoot(uid)
+			if root then
+				ringWave(root.Position, Theme.Focus, 6)
+			end
+			if SoundHooks then
+				SoundHooks.play("Dash")
+			end
 		elseif kind == "ClashSparks" then
 			-- déjà géré via HitResolved ; bonus tip burst
 		elseif kind == "PerfectFlash" then

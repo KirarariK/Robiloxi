@@ -22,6 +22,8 @@ export type Fighter = {
 	iFramesUntil: number,
 	dodgeCooldownUntil: number,
 	dashCooldownUntil: number,
+	doubleJumpCooldownUntil: number,
+	airJumpsUsed: number,
 	focusPushCooldownUntil: number,
 	focusDashCooldownUntil: number,
 	lastDodgeClock: number,
@@ -64,6 +66,8 @@ function FighterState.create(player: Player): Fighter
 		iFramesUntil = 0,
 		dodgeCooldownUntil = 0,
 		dashCooldownUntil = 0,
+		doubleJumpCooldownUntil = 0,
+		airJumpsUsed = 0,
 		focusPushCooldownUntil = 0,
 		focusDashCooldownUntil = 0,
 		lastDodgeClock = 0,
@@ -126,6 +130,7 @@ function FighterState.resetRound(fighter: Fighter)
 	fighter.staggerUntil = 0
 	fighter.riposteBuffUntil = 0
 	fighter.iFramesUntil = 0
+	fighter.airJumpsUsed = 0
 	fighter.hitThisSwing = {}
 	fighter.formUniqueUsed = false
 	fighter.astraFluxArmed = false
@@ -140,6 +145,8 @@ function FighterState.resetMatch(fighter: Fighter)
 	fighter.focusDashCooldownUntil = 0
 	fighter.dodgeCooldownUntil = 0
 	fighter.dashCooldownUntil = 0
+	fighter.doubleJumpCooldownUntil = 0
+	fighter.airJumpsUsed = 0
 end
 
 function FighterState.hasIFrames(fighter: Fighter): boolean

@@ -62,6 +62,13 @@ local CombatConfig = {
 		IFrames = 0, -- pas d'i-frames
 	},
 
+	-- Double saut (Space en l’air) — server-auth
+	DoubleJump = {
+		MaxAirJumps = 1,
+		UpVelocity = 52,
+		Cooldown = 0.35,
+	},
+
 	Feint = {
 		StaminaCost = 8,
 		-- Cancel légère avant Active uniquement
@@ -133,6 +140,7 @@ local CombatConfig = {
 		RematchClientCooldown = 1.4,
 		RematchServerCooldown = 2.0,
 		SoloMatchmakingDelay = 1.6, -- après Jouer Amical solo → bot
+		SlotSoloBotDelay = 2.5, -- claim slot seul en Studio → ConcordBot
 	},
 
 	Arena = {
@@ -151,6 +159,9 @@ local CombatConfig = {
 		ArenaSpawnB = "ArenaSpawnB",
 		KillPlane = "KillPlane",
 		Hazard = "Hazard",
+		-- World lobby (allée) — Combat lit / écrit attrs, ne pose pas la géométrie
+		DuelSlot = "BC_DuelSlot",
+		LobbySpawn = "BC_LobbySpawn",
 	},
 }
 

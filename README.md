@@ -43,11 +43,14 @@ DataStores : **mock automatique en Studio** (`DataStoreSafe`) ; en production Ro
 | RMB | Parade hold (pendant startup légère = **feinte**) |
 | Q / E ou double-tap A / D | Esquive (i-frames 160 ms) |
 | Shift + direction | Dash combat (pas d’i-frames) |
-| F | **Poussée Focus** (knockback, 0 dmg, CD 14 s) |
+| Space (en l’air) | **Double saut** (1× / cycle, serveur) |
+| F | **Poussée Focus** / Force Push (knockback, 0 dmg, CD 14 s) |
 | G | **Dash Focus** (12 studs + i-frames 100 ms, CD 11 s) |
 | M | Panneau méta (shop / gacha / quêtes / queue) |
 | P | Showcase animations (32 sets) |
 | F8 | Overlay debug anim (set + clip) — ou attribut `BC_AnimDebug` |
+
+**Lobby allée** : claim un pad tagué `BC_DuelSlot` (2 joueurs même slot → grande arène). Solo Studio → ConcordBot après ~2,5 s (voir limitations).
 
 ### Mobile
 

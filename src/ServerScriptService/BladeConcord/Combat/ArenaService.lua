@@ -1064,9 +1064,46 @@ function ArenaService.ensureLobby(): Instance
 	return model
 end
 
+--[[
+	Spawn retour allée : préfère un BasePart/SpawnLocation tagué BC_LobbySpawn
+	(World lobby). Fallback = LobbyBuilder.getSpawnCFrame() (plaza tant que World
+	n’a pas posé le tag — Combat ne reconstruit pas la géométrie).
+]]
 function ArenaService.getLobbyCFrame(): CFrame
 	ArenaService.ensureLobby()
+	local spawnTag = CombatConfig.Tags.LobbySpawn
+	for _, inst in CollectionService:GetTagged(spawnTag) do
+		if inst:IsA("BasePart") and inst:IsDescendantOf(Workspace) then
+			local look = inst.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			local cf = inst.CFrame + Vector3.new(0, 3, 0)
+			if flat.Magnitude > 1e-3 then
+				return CFrame.lookAt(cf.Position, cf.Position + flat.Unit)
+			end
+			return cf
+		end
+	end
 	return LobbyBuilder.getSpawnCFrame()
+end
+
+function ArenaService.getLobbyDisplayName(): string
+	ArenaService.ensureLobby()
+	for _, inst in CollectionService:GetTagged(CombatConfig.Tags.LobbySpawn) do
+		if inst:IsA("BasePart") then
+			local n = inst:GetAttribute("DisplayName")
+			if typeof(n) == "string" and n ~= "" then
+				return n
+			end
+		end
+	end
+	if lobbyBuilt then
+		local n = lobbyBuilt:GetAttribute("DisplayName")
+		if typeof(n) == "string" and n ~= "" then
+			-- World allée : DisplayName peut rester « Concord Hall » jusqu’au rebuild
+			return n
+		end
+	end
+	return "Allée Concord"
 end
 
 function ArenaService.applyLobbyLighting()

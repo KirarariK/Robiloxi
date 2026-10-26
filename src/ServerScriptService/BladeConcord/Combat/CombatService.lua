@@ -21,6 +21,7 @@ local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local DodgeService = require(script.Parent:WaitForChild("DodgeService"))
 local DashService = require(script.Parent:WaitForChild("DashService"))
 local FocusService = require(script.Parent:WaitForChild("FocusService"))
+local DoubleJumpService = require(script.Parent:WaitForChild("DoubleJumpService"))
 local BotStub = require(script.Parent:WaitForChild("BotStub"))
 local MatchService = require(script.Parent.Parent.Match:WaitForChild("MatchService"))
 local PlayerDataService = require(script.Parent.Parent.Data:WaitForChild("PlayerDataService"))
@@ -132,6 +133,7 @@ function CombatService.bindCharacter(fighter: FighterState.Fighter, character: M
 	humanoid.MaxHealth = CombatConfig.MaxHp
 	humanoid.Health = fighter.hp
 	humanoid.BreakJointsOnDeath = false
+	DoubleJumpService.bindCharacter(fighter, character)
 
 	task.defer(function()
 		safeEnsureBlade(fighter, character)
@@ -244,9 +246,6 @@ function CombatService.onGuardIntent(player: Player, payload: any)
 end
 
 function CombatService.onMobilityIntent(player: Player, payload: any)
-	if not MatchService.isFighting() then
-		return
-	end
 	local fighter = FighterState.get(player)
 	if not fighter or typeof(payload) ~= "table" then
 		return
@@ -257,6 +256,16 @@ function CombatService.onMobilityIntent(player: Player, payload: any)
 		return
 	end
 	if not rateOk(mobilityRate, player, CombatConfig.AntiCheat.MobilityRateLimitPerSecond) then
+		return
+	end
+
+	-- Double saut : lobby + combat (mobilité) ; reste du kit mobilité = Fighting only
+	if kind == "DoubleJump" then
+		DoubleJumpService.tryDoubleJump(fighter, seq)
+		CombatService.broadcastState()
+		return
+	end
+	if not MatchService.isFighting() then
 		return
 	end
 
@@ -426,6 +435,7 @@ function CombatService.start()
 	MatchService.broadcast()
 	Players.PlayerRemoving:Connect(function(player)
 		MatchService.onPlayerRemoving(player)
+		DoubleJumpService.unbind(player)
 		FighterState.remove(player)
 		attackRate[player] = nil
 		mobilityRate[player] = nil

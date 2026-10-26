@@ -19,12 +19,12 @@ local SHOW_DELAY = 1.8
 
 local TIPS = {
 	{
-		title = "Salon",
-		body = "Amical ou Classé · puis Jouer",
+		title = "Allée",
+		body = "Choisis un slot 1v1 · 2 joueurs = duel",
 	},
 	{
 		title = "Combat",
-		body = "LMB attaquer · RMB parer · M méta",
+		body = "LMB attaque · RMB parade · Shift dash · F Force · Space×2 saut",
 	},
 }
 

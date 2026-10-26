@@ -92,7 +92,7 @@ local function broadcast()
 		scores = scoreboard,
 		fighters = fighters,
 		arenaId = if phase == "Lobby" then "ConcordLobby" else ArenaService.getActiveId(),
-		arenaName = if phase == "Lobby" then "Concord Hall" else ArenaService.getDisplayName(),
+		arenaName = if phase == "Lobby" then ArenaService.getLobbyDisplayName() else ArenaService.getDisplayName(),
 		fairKit = mode == "Ranked" and phase ~= "Lobby",
 		countdown = if phase == "Countdown" then phaseTimer else nil,
 		rematchIn = if phase == "MatchEnd" then phaseTimer else nil,
@@ -326,6 +326,9 @@ function MatchService.leaveQueue(player: Player)
 		pendingSoloPlayer = nil
 		soloMatchmakingTimer = 0
 	end
+	-- Libère aussi un claim slot allée
+	local SlotMatchService = require(script.Parent:WaitForChild("SlotMatchService"))
+	SlotMatchService.release(player)
 	broadcast()
 end
 
@@ -336,7 +339,18 @@ function MatchService.enqueue(player: Player, matchMode: CombatTypes.MatchMode?)
 		return
 	end
 	mode = matchMode or mode
-	MatchService.leaveQueue(player)
+	-- leaveQueue appelle déjà SlotMatchService.release — on retire seulement la file globale ici
+	for i = #queue, 1, -1 do
+		if queue[i] == player then
+			table.remove(queue, i)
+		end
+	end
+	if pendingSoloPlayer == player then
+		pendingSoloPlayer = nil
+		soloMatchmakingTimer = 0
+	end
+	local SlotMatchService = require(script.Parent:WaitForChild("SlotMatchService"))
+	SlotMatchService.release(player)
 
 	-- Deux joueurs déjà présents → démarrer immédiatement si les deux en queue / ou pair auto via file
 	table.insert(queue, player)
@@ -397,6 +411,8 @@ function MatchService.returnToLobby()
 
 	teleportPlayersToLobby(toTeleport)
 	ArenaService.applyLobbyLighting()
+	local SlotMatchService = require(script.Parent:WaitForChild("SlotMatchService"))
+	SlotMatchService.onReturnedToLobby()
 	if onLobbyHook then
 		onLobbyHook()
 	end
@@ -559,11 +575,13 @@ function MatchService.step(dt: number)
 		phaseTimer -= dt
 		broadcast()
 		if phaseTimer <= 0 then
-			-- Auto → salon (pas revanches infinies sans consentement)
+			-- Auto → allée lobby (pas revanches infinies sans consentement)
 			MatchService.returnToLobby()
 		end
 	elseif phase == "Lobby" then
-		-- Matchmaking solo Amical → bot après délai
+		local SlotMatchService = require(script.Parent:WaitForChild("SlotMatchService"))
+		SlotMatchService.step(dt)
+		-- Matchmaking solo Amical (HUD / ancien pad) → bot après délai
 		if pendingSoloPlayer and pendingSoloPlayer.Parent == Players then
 			soloMatchmakingTimer -= dt
 			if soloMatchmakingTimer <= 0 then
@@ -592,11 +610,14 @@ function MatchService.start()
 	ArenaService.ensureLobby()
 	ArenaService.applyLobbyLighting()
 
-	-- Pads monde → même flux que QueueMatch remote (LobbyHud / ProximityPrompt)
+	-- Pads monde legacy (Casual/Ranked) → file globale ; slots BC_DuelSlot = SlotMatchService
 	local LobbyBuilder = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyBuilder"))
 	LobbyBuilder.bindQueuePads(function(player, mode)
 		MatchService.enqueue(player, mode :: any)
 	end)
+
+	local SlotMatchService = require(script.Parent:WaitForChild("SlotMatchService"))
+	SlotMatchService.start()
 
 	metaRemotes.QueueMatch.OnServerEvent:Connect(function(player, payload)
 		if typeof(payload) ~= "table" then

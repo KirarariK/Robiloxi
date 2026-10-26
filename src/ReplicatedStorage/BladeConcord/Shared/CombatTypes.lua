@@ -32,7 +32,7 @@ export type HitResult =
 
 export type GuardResult = "None" | "Normal" | "Perfect" | "Break"
 
-export type MobilityKind = "Dodge" | "Dash" | "Feint"
+export type MobilityKind = "Dodge" | "Dash" | "Feint" | "DoubleJump"
 
 export type FocusKind = "Push" | "DashFocus"
 
@@ -85,6 +85,7 @@ local CombatTypes = {
 		Dodge = "Dodge" :: MobilityKind,
 		Dash = "Dash" :: MobilityKind,
 		Feint = "Feint" :: MobilityKind,
+		DoubleJump = "DoubleJump" :: MobilityKind,
 	},
 	FocusKind = {
 		Push = "Push" :: FocusKind,

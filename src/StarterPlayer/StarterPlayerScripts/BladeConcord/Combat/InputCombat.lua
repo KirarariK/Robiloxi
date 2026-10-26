@@ -1,6 +1,8 @@
 --!strict
 --[[
-	PC + mobile : Attaque / Guard / Dodge / Dash / Feinte / Focus.
+	PC + mobile : Attaque / Guard / Dodge / Dash / Feinte / Focus / DoubleJump.
+	Bindings kit :
+	  LMB Attaque · RMB Parade · Shift Dash · F Force Push · Space (air) Double saut
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -24,6 +26,8 @@ local GUARD_THROTTLE = 1 / 20
 local lastA = 0
 local lastD = 0
 local DOUBLE_TAP = 0.28
+local lastDoubleJumpSend = 0
+local DOUBLE_JUMP_CLIENT_CD = 0.2
 
 local function nextSeq(): number
 	seq += 1
@@ -94,6 +98,37 @@ local function fireFocus(kind: string)
 		seq = nextSeq(),
 		dir = { X = d.X, Y = d.Y, Z = d.Z },
 	})
+end
+
+local function isLocalAirborne(): boolean
+	local character = Players.LocalPlayer.Character
+	if not character then
+		return false
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+	local state = humanoid:GetState()
+	if state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping then
+		return true
+	end
+	return humanoid.FloorMaterial == Enum.Material.Air
+end
+
+local function tryFireDoubleJump()
+	if not enabled then
+		return
+	end
+	local now = os.clock()
+	if now - lastDoubleJumpSend < DOUBLE_JUMP_CLIENT_CD then
+		return
+	end
+	if not isLocalAirborne() then
+		return
+	end
+	lastDoubleJumpSend = now
+	fireMobility("DoubleJump", moveDir())
 end
 
 function InputCombat.setEnabled(value: boolean)
@@ -176,10 +211,22 @@ function InputCombat.start()
 		elseif input.KeyCode == Enum.KeyCode.LeftShift then
 			fireMobility("Dash", moveDir())
 		elseif input.KeyCode == Enum.KeyCode.F then
+			-- Force Push (FocusService.tryPush serveur)
 			fireFocus("Push")
 		elseif input.KeyCode == Enum.KeyCode.G then
 			fireFocus("DashFocus")
+		elseif input.KeyCode == Enum.KeyCode.Space then
+			-- Space au sol = saut Humanoid natif ; en l’air = double saut serveur
+			tryFireDoubleJump()
 		end
+	end)
+
+	-- JumpRequest couvre pads / mobile jump button
+	UserInputService.JumpRequest:Connect(function()
+		if not enabled then
+			return
+		end
+		tryFireDoubleJump()
 	end)
 
 	UserInputService.InputEnded:Connect(function(input, _processed)
