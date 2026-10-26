@@ -135,7 +135,10 @@ function BotStub.enable(spawnCf: CFrame)
 		end
 	end
 	FighterState.resetMatch(botFighter)
-	print("[BladeConcord] BotStub enabled (Play Solo) — sabre Constructible")
+	-- Forme Distincte pour playtest sets (Duelant Rare ≠ Astra défaut joueur)
+	botFighter.formId = "Duelant"
+	botFighter.formRarity = "Rare"
+	print("[BladeConcord] BotStub enabled (Play Solo) — sabre + anim set Duelant_Rare_PerfectEdge")
 end
 
 function BotStub.disable()

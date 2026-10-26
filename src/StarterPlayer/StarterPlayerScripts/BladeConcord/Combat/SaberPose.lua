@@ -1,8 +1,8 @@
 --!strict
 --[[
-	Poses combat procédurales (CFrame tween sur Motor6D) —
-	arcs lisibles, anticipation Startup, recovery distincte Light/Heavy.
-	Pas d'AnimationClip requis ; chaque client pose tous les fighters via CombatState.
+	Poses combat Motor6D (fallback) + visuals lame (couleur / trail / light).
+	Chemin principal = CombatAnimator (KeyframeSequence / Procedural).
+	SaberPose.applyMotorFallback si track manquant.
 ]]
 
 local Players = game:GetService("Players")
@@ -23,6 +23,10 @@ end)
 
 local SaberPose = {}
 
+local combatListenerEnabled = true
+local visualOnlyStarted = false
+local remotesBound = false
+
 local ACTION_COLOR: { [string]: Color3 } = {
 	Idle = Theme.BladeIdle,
 	Guard = Theme.BladeGuard,
@@ -38,17 +42,14 @@ local ACTION_COLOR: { [string]: Color3 } = {
 	Dead = Theme.BladeDead,
 }
 
--- Motor6D.C1 — arcs plus ouverts (lisible à 20 studs)
+-- Motor6D.C1 — arcs fallback si Animator / Procedural indisponible
 local POSES: { [string]: CFrame } = {
 	Idle = CFrame.new(),
 	Guard = CFrame.Angles(math.rad(-42), math.rad(32), math.rad(-18)) * CFrame.new(0.05, 0.08, 0),
-	-- Anticipation : chambre haute arrière
 	Startup = CFrame.Angles(math.rad(-88), math.rad(-55), math.rad(28)) * CFrame.new(-0.12, 0.15, 0.08),
 	StartupHeavy = CFrame.Angles(math.rad(-105), math.rad(-70), math.rad(35)) * CFrame.new(-0.18, 0.22, 0.12),
-	-- Active : coupe diagonale large
 	Active = CFrame.Angles(math.rad(38), math.rad(95), math.rad(-18)) * CFrame.new(0.2, -0.1, -0.15),
 	ActiveHeavy = CFrame.Angles(math.rad(55), math.rad(120), math.rad(-25)) * CFrame.new(0.28, -0.18, -0.22),
-	-- Recovery légère = retour rapide bas ; lourde = follow-through ouvert
 	Recovery = CFrame.Angles(math.rad(-8), math.rad(28), math.rad(8)) * CFrame.new(0.05, -0.05, 0),
 	RecoveryHeavy = CFrame.Angles(math.rad(22), math.rad(48), math.rad(-12)) * CFrame.new(0.12, -0.12, -0.08),
 	Stagger = CFrame.Angles(math.rad(48), math.rad(-38), math.rad(30)),
@@ -101,48 +102,49 @@ local function resolvePoseKey(actionId: string, attackKind: string?): string
 	return actionId
 end
 
-local function poseCharacter(character: Model, actionId: string, attackKind: string?)
-	local motor = findMotor(character)
+function SaberPose.applyVisuals(character: Model, actionId: string, attackKind: string?)
 	local blade = findBlade(character)
-	local poseKey = resolvePoseKey(actionId, attackKind)
-	local target = POSES[poseKey] or POSES[actionId] or POSES.Idle
 	local color = ACTION_COLOR[actionId] or Theme.BladeIdle
-
-	if blade then
-		-- Idle : restaurer cosmétique si posée ; sinon couleur d'action
-		if actionId == "Idle" then
-			local r = blade:GetAttribute("CosmeticR")
-			local g = blade:GetAttribute("CosmeticG")
-			local b = blade:GetAttribute("CosmeticB")
-			if typeof(r) == "number" and typeof(g) == "number" and typeof(b) == "number" then
-				SaberBuilder.setBladeColor(blade, Color3.new(r, g, b))
-			else
-				SaberBuilder.setBladeColor(blade, color)
-			end
+	if not blade then
+		return
+	end
+	if actionId == "Idle" then
+		local r = blade:GetAttribute("CosmeticR")
+		local g = blade:GetAttribute("CosmeticG")
+		local b = blade:GetAttribute("CosmeticB")
+		if typeof(r) == "number" and typeof(g) == "number" and typeof(b) == "number" then
+			SaberBuilder.setBladeColor(blade, Color3.new(r, g, b))
 		else
 			SaberBuilder.setBladeColor(blade, color)
 		end
-		SaberBuilder.setTrailEnabled(
-			blade,
-			actionId == "Active" or actionId == "Startup" or actionId == "Dash" or actionId == "FocusDash"
-		)
-		local light = blade:FindFirstChild("BladeLight")
-		if light and light:IsA("PointLight") then
-			local bright = 2.0
-			if actionId == "Active" then
-				bright = if attackKind == "Heavy" then 4.2 else 3.5
-			elseif actionId == "FocusPush" then
-				bright = 3.8
-			elseif actionId == "Startup" then
-				bright = 2.8
-			end
-			light.Brightness = bright
-		end
+	else
+		SaberBuilder.setBladeColor(blade, color)
 	end
+	SaberBuilder.setTrailEnabled(
+		blade,
+		actionId == "Active" or actionId == "Startup" or actionId == "Dash" or actionId == "FocusDash"
+	)
+	local light = blade:FindFirstChild("BladeLight")
+	if light and light:IsA("PointLight") then
+		local bright = 2.0
+		if actionId == "Active" then
+			bright = if attackKind == "Heavy" then 4.2 else 3.5
+		elseif actionId == "FocusPush" then
+			bright = 3.8
+		elseif actionId == "Startup" then
+			bright = 2.8
+		end
+		light.Brightness = bright
+	end
+end
 
+function SaberPose.applyMotorFallback(character: Model, actionId: string, attackKind: string?)
+	local motor = findMotor(character)
 	if not motor then
 		return
 	end
+	local poseKey = resolvePoseKey(actionId, attackKind)
+	local target = POSES[poseKey] or POSES[actionId] or POSES.Idle
 
 	local prev = activeTweens[motor]
 	if prev then
@@ -156,13 +158,12 @@ local function poseCharacter(character: Model, actionId: string, attackKind: str
 
 	if actionId == "Active" then
 		duration = if heavy then 0.1 else 0.065
-		easing = Enum.EasingStyle.Back -- overshoot = arc lisible
+		easing = Enum.EasingStyle.Back
 		dir = Enum.EasingDirection.Out
 		if SoundHooks and character == Players.LocalPlayer.Character then
 			SoundHooks.play("Swing")
 		end
 	elseif actionId == "Startup" then
-		-- Anticipation lente puis snappy
 		duration = if heavy then 0.2 else 0.13
 		easing = Enum.EasingStyle.Quad
 		dir = Enum.EasingDirection.In
@@ -191,6 +192,11 @@ local function poseCharacter(character: Model, actionId: string, attackKind: str
 	tw:Play()
 end
 
+local function poseCharacter(character: Model, actionId: string, attackKind: string?)
+	SaberPose.applyVisuals(character, actionId, attackKind)
+	SaberPose.applyMotorFallback(character, actionId, attackKind)
+end
+
 local function resolveCharacter(userId: number): Model?
 	if userId == -9001 then
 		local bot = workspace:FindFirstChild("ConcordBot")
@@ -203,10 +209,51 @@ local function resolveCharacter(userId: number): Model?
 	return p and p.Character or nil
 end
 
+function SaberPose.setCombatListenerEnabled(enabled: boolean)
+	combatListenerEnabled = enabled
+end
+
+function SaberPose.startVisualOnly()
+	if visualOnlyStarted then
+		return
+	end
+	visualOnlyStarted = true
+	-- Micro-bob idle si aucun tween Motor C1 actif (fallback path)
+	RunService.RenderStepped:Connect(function()
+		if not combatListenerEnabled then
+			-- CombatAnimator / Procedural gère Transform — pas de bob C1
+			return
+		end
+		local t = os.clock()
+		for _, player in Players:GetPlayers() do
+			local character = player.Character
+			if not character then
+				continue
+			end
+			local uid = player.UserId
+			if lastAction[uid] and lastAction[uid] ~= "Idle" then
+				continue
+			end
+			local motor = findMotor(character)
+			if motor and not activeTweens[motor] then
+				motor.C1 = CFrame.Angles(math.sin(t * 2.2) * 0.045, math.cos(t * 1.6) * 0.035, math.sin(t * 1.1) * 0.015)
+			end
+		end
+	end)
+end
+
 function SaberPose.start()
+	SaberPose.startVisualOnly()
+	if remotesBound then
+		return
+	end
+	remotesBound = true
 	local remotes = Remotes.get()
 
 	remotes.CombatState.OnClientEvent:Connect(function(payload)
+		if not combatListenerEnabled then
+			return
+		end
 		if typeof(payload) ~= "table" or typeof(payload.fighters) ~= "table" then
 			return
 		end
@@ -226,25 +273,6 @@ function SaberPose.start()
 			local character = resolveCharacter(userId)
 			if character then
 				poseCharacter(character, actionId, attackKind)
-			end
-		end
-	end)
-
-	-- Micro-bob idle léger pour présence
-	RunService.RenderStepped:Connect(function()
-		local t = os.clock()
-		for _, player in Players:GetPlayers() do
-			local character = player.Character
-			if not character then
-				continue
-			end
-			local uid = player.UserId
-			if lastAction[uid] and lastAction[uid] ~= "Idle" then
-				continue
-			end
-			local motor = findMotor(character)
-			if motor and not activeTweens[motor] then
-				motor.C1 = CFrame.Angles(math.sin(t * 2.2) * 0.045, math.cos(t * 1.6) * 0.035, math.sin(t * 1.1) * 0.015)
 			end
 		end
 	end)
