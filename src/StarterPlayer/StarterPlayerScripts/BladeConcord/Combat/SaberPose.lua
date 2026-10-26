@@ -1,7 +1,7 @@
 --!strict
 --[[
 	Poses combat procédurales (CFrame tween sur Motor6D) —
-	attaque / parade / esquive / dash / Focus.
+	arcs lisibles, anticipation Startup, recovery distincte Light/Heavy.
 	Pas d'AnimationClip requis ; chaque client pose tous les fighters via CombatState.
 ]]
 
@@ -15,6 +15,11 @@ local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Theme = require(Shared:WaitForChild("Theme"))
 local SaberBuilder = require(ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual"):WaitForChild("SaberBuilder"))
+
+local SoundHooks: any = nil
+pcall(function()
+	SoundHooks = require(script.Parent.Parent:WaitForChild("Audio"):WaitForChild("SoundHooks"))
+end)
 
 local SaberPose = {}
 
@@ -33,23 +38,30 @@ local ACTION_COLOR: { [string]: Color3 } = {
 	Dead = Theme.BladeDead,
 }
 
--- Motor6D.C1 offsets (rad) — relative grip
+-- Motor6D.C1 — arcs plus ouverts (lisible à 20 studs)
 local POSES: { [string]: CFrame } = {
 	Idle = CFrame.new(),
-	Guard = CFrame.Angles(math.rad(-35), math.rad(25), math.rad(-15)),
-	Startup = CFrame.Angles(math.rad(-70), math.rad(-40), math.rad(20)),
-	Active = CFrame.Angles(math.rad(25), math.rad(70), math.rad(-10)),
-	Recovery = CFrame.Angles(math.rad(-15), math.rad(20), math.rad(5)),
-	Stagger = CFrame.Angles(math.rad(40), math.rad(-30), math.rad(25)),
-	RiposteLock = CFrame.Angles(math.rad(-20), math.rad(10), math.rad(0)),
-	Dodge = CFrame.Angles(math.rad(-50), math.rad(60), math.rad(-40)),
-	Dash = CFrame.Angles(math.rad(10), math.rad(-20), math.rad(5)),
-	FocusPush = CFrame.Angles(math.rad(-20), math.rad(0), math.rad(0)) * CFrame.new(0, 0, -0.3),
-	FocusDash = CFrame.Angles(math.rad(-10), math.rad(0), math.rad(0)),
-	Dead = CFrame.Angles(math.rad(80), 0, math.rad(30)),
+	Guard = CFrame.Angles(math.rad(-42), math.rad(32), math.rad(-18)) * CFrame.new(0.05, 0.08, 0),
+	-- Anticipation : chambre haute arrière
+	Startup = CFrame.Angles(math.rad(-88), math.rad(-55), math.rad(28)) * CFrame.new(-0.12, 0.15, 0.08),
+	StartupHeavy = CFrame.Angles(math.rad(-105), math.rad(-70), math.rad(35)) * CFrame.new(-0.18, 0.22, 0.12),
+	-- Active : coupe diagonale large
+	Active = CFrame.Angles(math.rad(38), math.rad(95), math.rad(-18)) * CFrame.new(0.2, -0.1, -0.15),
+	ActiveHeavy = CFrame.Angles(math.rad(55), math.rad(120), math.rad(-25)) * CFrame.new(0.28, -0.18, -0.22),
+	-- Recovery légère = retour rapide bas ; lourde = follow-through ouvert
+	Recovery = CFrame.Angles(math.rad(-8), math.rad(28), math.rad(8)) * CFrame.new(0.05, -0.05, 0),
+	RecoveryHeavy = CFrame.Angles(math.rad(22), math.rad(48), math.rad(-12)) * CFrame.new(0.12, -0.12, -0.08),
+	Stagger = CFrame.Angles(math.rad(48), math.rad(-38), math.rad(30)),
+	RiposteLock = CFrame.Angles(math.rad(-28), math.rad(14), math.rad(0)),
+	Dodge = CFrame.Angles(math.rad(-58), math.rad(72), math.rad(-48)) * CFrame.new(0.1, 0.05, 0),
+	Dash = CFrame.Angles(math.rad(14), math.rad(-28), math.rad(8)) * CFrame.new(0, 0, -0.12),
+	FocusPush = CFrame.Angles(math.rad(-28), math.rad(0), math.rad(0)) * CFrame.new(0, 0, -0.4),
+	FocusDash = CFrame.Angles(math.rad(-14), math.rad(0), math.rad(0)) * CFrame.new(0, 0, -0.2),
+	Dead = CFrame.Angles(math.rad(88), 0, math.rad(35)),
 }
 
 local lastAction: { [number]: string } = {}
+local lastKind: { [number]: string } = {}
 local activeTweens: { [Motor6D]: Tween } = {}
 
 local function findMotor(character: Model): Motor6D?
@@ -77,18 +89,54 @@ local function findBlade(character: Model): BasePart?
 	return nil
 end
 
-local function poseCharacter(character: Model, actionId: string)
+local function resolvePoseKey(actionId: string, attackKind: string?): string
+	local heavy = attackKind == "Heavy"
+	if actionId == "Startup" and heavy then
+		return "StartupHeavy"
+	elseif actionId == "Active" and heavy then
+		return "ActiveHeavy"
+	elseif actionId == "Recovery" and heavy then
+		return "RecoveryHeavy"
+	end
+	return actionId
+end
+
+local function poseCharacter(character: Model, actionId: string, attackKind: string?)
 	local motor = findMotor(character)
 	local blade = findBlade(character)
-	local target = POSES[actionId] or POSES.Idle
+	local poseKey = resolvePoseKey(actionId, attackKind)
+	local target = POSES[poseKey] or POSES[actionId] or POSES.Idle
 	local color = ACTION_COLOR[actionId] or Theme.BladeIdle
 
 	if blade then
-		SaberBuilder.setBladeColor(blade, color)
-		SaberBuilder.setTrailEnabled(blade, actionId == "Active" or actionId == "Startup" or actionId == "Dash" or actionId == "FocusDash")
+		-- Idle : restaurer cosmétique si posée ; sinon couleur d'action
+		if actionId == "Idle" then
+			local r = blade:GetAttribute("CosmeticR")
+			local g = blade:GetAttribute("CosmeticG")
+			local b = blade:GetAttribute("CosmeticB")
+			if typeof(r) == "number" and typeof(g) == "number" and typeof(b) == "number" then
+				SaberBuilder.setBladeColor(blade, Color3.new(r, g, b))
+			else
+				SaberBuilder.setBladeColor(blade, color)
+			end
+		else
+			SaberBuilder.setBladeColor(blade, color)
+		end
+		SaberBuilder.setTrailEnabled(
+			blade,
+			actionId == "Active" or actionId == "Startup" or actionId == "Dash" or actionId == "FocusDash"
+		)
 		local light = blade:FindFirstChild("BladeLight")
 		if light and light:IsA("PointLight") then
-			light.Brightness = if actionId == "Active" or actionId == "FocusPush" then 3.5 else 2.0
+			local bright = 2.0
+			if actionId == "Active" then
+				bright = if attackKind == "Heavy" then 4.2 else 3.5
+			elseif actionId == "FocusPush" then
+				bright = 3.8
+			elseif actionId == "Startup" then
+				bright = 2.8
+			end
+			light.Brightness = bright
 		end
 	end
 
@@ -101,18 +149,37 @@ local function poseCharacter(character: Model, actionId: string)
 		prev:Cancel()
 	end
 
+	local heavy = attackKind == "Heavy"
 	local duration = 0.12
+	local easing = Enum.EasingStyle.Quad
+	local dir = Enum.EasingDirection.Out
+
 	if actionId == "Active" then
-		duration = 0.07
+		duration = if heavy then 0.1 else 0.065
+		easing = Enum.EasingStyle.Back -- overshoot = arc lisible
+		dir = Enum.EasingDirection.Out
+		if SoundHooks and character == Players.LocalPlayer.Character then
+			SoundHooks.play("Swing")
+		end
 	elseif actionId == "Startup" then
-		duration = 0.14
+		-- Anticipation lente puis snappy
+		duration = if heavy then 0.2 else 0.13
+		easing = Enum.EasingStyle.Quad
+		dir = Enum.EasingDirection.In
+	elseif actionId == "Recovery" then
+		duration = if heavy then 0.22 else 0.11
+		easing = Enum.EasingStyle.Sine
+		dir = Enum.EasingDirection.Out
 	elseif actionId == "Guard" then
-		duration = 0.1
+		duration = 0.09
 	elseif actionId == "Dodge" then
-		duration = 0.08
+		duration = 0.07
+		easing = Enum.EasingStyle.Back
+	elseif actionId == "Dash" or actionId == "FocusDash" then
+		duration = 0.06
 	end
 
-	local tw = TweenService:Create(motor, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+	local tw = TweenService:Create(motor, TweenInfo.new(duration, easing, dir), {
 		C1 = target,
 	})
 	activeTweens[motor] = tw
@@ -146,16 +213,19 @@ function SaberPose.start()
 		for _, snap in payload.fighters do
 			local actionId = tostring(snap.actionId or "Idle")
 			local userId = snap.userId
+			local attackKind = if typeof(snap.attackKind) == "string" then snap.attackKind else nil
 			if typeof(userId) ~= "number" then
 				continue
 			end
-			if lastAction[userId] == actionId then
+			local kindKey = attackKind or ""
+			if lastAction[userId] == actionId and lastKind[userId] == kindKey then
 				continue
 			end
 			lastAction[userId] = actionId
+			lastKind[userId] = kindKey
 			local character = resolveCharacter(userId)
 			if character then
-				poseCharacter(character, actionId)
+				poseCharacter(character, actionId, attackKind)
 			end
 		end
 	end)
@@ -174,7 +244,7 @@ function SaberPose.start()
 			end
 			local motor = findMotor(character)
 			if motor and not activeTweens[motor] then
-				motor.C1 = CFrame.Angles(math.sin(t * 2.2) * 0.04, math.cos(t * 1.6) * 0.03, 0)
+				motor.C1 = CFrame.Angles(math.sin(t * 2.2) * 0.045, math.cos(t * 1.6) * 0.035, math.sin(t * 1.1) * 0.015)
 			end
 		end
 	end)

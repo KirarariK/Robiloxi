@@ -15,6 +15,7 @@ local CameraShake = require(script.Parent:WaitForChild("CameraShake"))
 local SoftLockCamera = {}
 
 local enabled = true
+local cinematicActive = false
 local opponentUserId: number? = nil
 
 local function findOpponentRoot(): BasePart?
@@ -46,6 +47,19 @@ function SoftLockCamera.setEnabled(value: boolean)
 	enabled = value
 end
 
+--[[ Pause soft-lock pendant une cinématique client (KO). ]]
+function SoftLockCamera.beginCinematic()
+	cinematicActive = true
+end
+
+function SoftLockCamera.endCinematic()
+	cinematicActive = false
+end
+
+function SoftLockCamera.isCinematic(): boolean
+	return cinematicActive
+end
+
 function SoftLockCamera.start()
 	local player = Players.LocalPlayer
 	local camera = Workspace.CurrentCamera
@@ -64,7 +78,7 @@ function SoftLockCamera.start()
 	end)
 
 	RunService.RenderStepped:Connect(function()
-		if not enabled then
+		if not enabled or cinematicActive then
 			return
 		end
 		camera = Workspace.CurrentCamera

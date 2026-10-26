@@ -9,18 +9,21 @@ local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local Theme = require(Shared:WaitForChild("Theme"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local SaberBuilder = require(ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual"):WaitForChild("SaberBuilder"))
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
-local CollectionService = game:GetService("CollectionService")
 
 local CombatFx = {}
 
 local CameraShake: any = nil
 local SoundHooks: any = nil
+local SoftLockCamera: any = nil
+local koBusy = false
 
 local function getFolder(): Folder
 	local f = Workspace:FindFirstChild("BC_Fx")
@@ -154,34 +157,47 @@ local function ringWave(position: Vector3, color: Color3, maxSize: number)
 end
 
 local function dashTrail(root: BasePart, color: Color3)
-	local ghost = Instance.new("Part")
-	ghost.Name = "DashGhost"
-	ghost.Size = Vector3.new(2, 3, 1)
-	ghost.Anchored = true
-	ghost.CanCollide = false
-	ghost.Material = Enum.Material.ForceField
-	ghost.Color = color
-	ghost.Transparency = 0.35
-	ghost.CFrame = root.CFrame
-	ghost.Parent = getFolder()
-	TweenService:Create(ghost, TweenInfo.new(0.35), { Transparency = 1 }):Play()
-	Debris:AddItem(ghost, 0.4)
+	-- Ghosts échelonnés (silhouette lisible, fade propre)
+	local look = root.CFrame.LookVector
+	for i = 0, 3 do
+		local ghost = Instance.new("Part")
+		ghost.Name = "DashGhost"
+		ghost.Size = Vector3.new(1.6 - i * 0.12, 2.8 - i * 0.1, 0.85)
+		ghost.Anchored = true
+		ghost.CanCollide = false
+		ghost.CastShadow = false
+		ghost.Material = Enum.Material.ForceField
+		ghost.Color = color
+		ghost.Transparency = 0.28 + i * 0.12
+		ghost.CFrame = root.CFrame * CFrame.new(0, 0, i * 1.35) - look * (i * 0.15)
+		ghost.Parent = getFolder()
+		local delay = i * 0.04
+		task.delay(delay, function()
+			TweenService:Create(ghost, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Transparency = 1,
+				Size = ghost.Size * 0.7,
+			}):Play()
+		end)
+		Debris:AddItem(ghost, 0.55 + delay)
+	end
 
 	local att0 = Instance.new("Attachment")
-	att0.Position = Vector3.new(0, 1, 0)
+	att0.Position = Vector3.new(0, 1.1, 0)
 	att0.Parent = root
 	local att1 = Instance.new("Attachment")
-	att1.Position = Vector3.new(0, -1, 0)
+	att1.Position = Vector3.new(0, -1.1, 0)
 	att1.Parent = root
 	local trail = Instance.new("Trail")
 	trail.Attachment0 = att0
 	trail.Attachment1 = att1
-	trail.Lifetime = 0.25
+	trail.Lifetime = 0.32
+	trail.MinLength = 0.08
 	trail.LightEmission = 1
-	trail.Color = ColorSequence.new(color)
-	trail.Transparency = NumberSequence.new(0.2, 1)
+	trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+	trail.Transparency = NumberSequence.new(0.15, 1)
+	trail.WidthScale = NumberSequence.new(1, 0.2)
 	trail.Parent = root
-	task.delay(0.35, function()
+	task.delay(0.4, function()
 		trail:Destroy()
 		att0:Destroy()
 		att1:Destroy()
@@ -222,54 +238,141 @@ local function impactFrame(seconds: number)
 end
 
 local function koCinematic(winnerId: number?, loserId: number?)
+	if koBusy then
+		return
+	end
+	koBusy = true
+
 	local loserRoot = if loserId then characterRoot(loserId) else nil
 	local winnerRoot = if winnerId then characterRoot(winnerId) else nil
-	local pos = if loserRoot then loserRoot.Position else (if winnerRoot then winnerRoot.Position else Vector3.new())
-	pos += Vector3.new(0, 2, 0)
+	local focus = if loserRoot then loserRoot else winnerRoot
+	local pos = if focus then focus.Position + Vector3.new(0, 2.2, 0) else Vector3.new(0, 4, 0)
 
-	sparkBurst(pos, Theme.AccentHot, 50)
-	ringWave(pos, Theme.Danger, 16)
+	sparkBurst(pos, Theme.AccentHot, 56)
+	ringWave(pos, Theme.Danger, 18)
+	sparkBurst(pos + Vector3.new(0, 1, 0), Theme.Perfect, 28)
 
+	-- Slow-mo léger (CC + blur + FOV) — sensation, pas time-scale serveur
+	local cc = Lighting:FindFirstChild("BC_ImpactCC")
+	if not cc then
+		cc = Instance.new("ColorCorrectionEffect")
+		cc.Name = "BC_ImpactCC"
+		cc.Parent = Lighting
+	end
+	local effect = cc :: ColorCorrectionEffect
+	effect.Saturation = -0.45
+	effect.Contrast = 0.28
+	effect.Brightness = 0.08
+
+	local blur = Lighting:FindFirstChild("BC_KoBlur")
+	if not blur then
+		blur = Instance.new("BlurEffect")
+		blur.Name = "BC_KoBlur"
+		blur.Parent = Lighting
+	end
+	local blurFx = blur :: BlurEffect
+	blurFx.Size = 8
+
+	local camera = Workspace.CurrentCamera
+	local baseFov = if camera then camera.FieldOfView else 70
+	if SoftLockCamera then
+		SoftLockCamera.beginCinematic()
+	end
+
+	if camera then
+		camera.CameraType = Enum.CameraType.Scriptable
+		camera.FieldOfView = baseFov
+		TweenService:Create(camera, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			FieldOfView = math.clamp(baseFov - 18, 42, 70),
+		}):Play()
+	end
+
+	local duration = 1.35
+	local start = os.clock()
+	local radius = 11
+	local height = 4.5
+	local conn: RBXScriptConnection?
+	conn = RunService.RenderStepped:Connect(function()
+		if not camera then
+			return
+		end
+		local t = math.clamp((os.clock() - start) / duration, 0, 1)
+		-- Orbit + zoom-in progressif
+		local angle = t * math.rad(110)
+		local r = radius * (1 - t * 0.42)
+		local h = height + math.sin(t * math.pi) * 1.2
+		local orbitPos = pos + Vector3.new(math.cos(angle) * r, h, math.sin(angle) * r)
+		local look = pos + Vector3.new(0, 0.4 - t * 0.6, 0)
+		camera.CFrame = CFrame.new(orbitPos, look)
+		if t >= 1 and conn then
+			conn:Disconnect()
+			conn = nil
+		end
+	end)
+
+	-- Billboard titre (secondaire à la caméra)
 	local billboardHost = Instance.new("Part")
 	billboardHost.Anchored = true
 	billboardHost.CanCollide = false
 	billboardHost.Transparency = 1
 	billboardHost.Size = Vector3.new(1, 1, 1)
-	billboardHost.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+	billboardHost.CFrame = CFrame.new(pos + Vector3.new(0, 3.2, 0))
 	billboardHost.Parent = getFolder()
 
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromOffset(280, 60)
+	gui.Size = UDim2.fromOffset(300, 64)
 	gui.AlwaysOnTop = true
 	gui.Parent = billboardHost
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Font = Theme.FontTitle
-	label.TextSize = 36
+	label.TextSize = 38
 	label.TextColor3 = Theme.Bone
-	label.TextStrokeTransparency = 0.4
+	label.TextStrokeTransparency = 0.35
+	label.TextTransparency = 0.15
 	label.Text = "CONCORDANCE"
 	label.Parent = gui
 
-	TweenService:Create(label, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TextTransparency = 1,
-		TextStrokeTransparency = 1,
-	}):Play()
-	Debris:AddItem(billboardHost, 1.4)
+	task.delay(0.55, function()
+		TweenService:Create(label, TweenInfo.new(0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TextTransparency = 1,
+			TextStrokeTransparency = 1,
+		}):Play()
+	end)
+	Debris:AddItem(billboardHost, duration + 0.2)
 
 	if CameraShake then
-		CameraShake.shake(0.55, 0.45)
+		CameraShake.shake(0.48, 0.4)
 	end
-	impactFrame(0.08)
 	if SoundHooks then
 		SoundHooks.play("Ko")
 	end
+
+	task.delay(duration, function()
+		if conn then
+			conn:Disconnect()
+		end
+		TweenService:Create(effect, TweenInfo.new(0.28), {
+			Saturation = 0,
+			Contrast = 0,
+			Brightness = 0,
+		}):Play()
+		TweenService:Create(blurFx, TweenInfo.new(0.28), { Size = 0 }):Play()
+		if camera then
+			TweenService:Create(camera, TweenInfo.new(0.3), { FieldOfView = baseFov }):Play()
+		end
+		if SoftLockCamera then
+			SoftLockCamera.endCinematic()
+		end
+		koBusy = false
+	end)
 end
 
-function CombatFx.bind(deps: { CameraShake: any?, SoundHooks: any? })
+function CombatFx.bind(deps: { CameraShake: any?, SoundHooks: any?, SoftLockCamera: any? })
 	CameraShake = deps.CameraShake
 	SoundHooks = deps.SoundHooks
+	SoftLockCamera = deps.SoftLockCamera
 end
 
 function CombatFx.start()

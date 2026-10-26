@@ -10,8 +10,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local Theme = require(Shared:WaitForChild("Theme"))
+local EconomyConfig = require(Shared:WaitForChild("EconomyConfig"))
 
 local SaberBuilder = {}
+
+-- Sound IDs alignés SoundHooks Pass 2 (documentés polish notes)
+local SOUND_IDS = {
+	SaberHum = "rbxassetid://9114323612",
+	SaberSwing = "rbxassetid://12222216",
+	SaberClash = "rbxassetid://8917041751",
+	SaberHit = "rbxassetid://1469323642",
+}
 
 export type SaberBuild = {
 	model: Model,
@@ -56,14 +65,14 @@ local function weldPart(
 	return p
 end
 
-local function stubSound(parent: Instance, name: string, volume: number)
+local function attachSound(parent: Instance, name: string, volume: number, looped: boolean?): Sound
 	local s = Instance.new("Sound")
 	s.Name = name
 	s.Volume = volume
 	s.RollOffMaxDistance = 60
-	s.PlaybackSpeed = 1
-	-- SoundId vide = stub silencieux jusqu'à asset Studio
-	s.SoundId = ""
+	s.PlaybackSpeed = if name == "SaberHum" then 0.55 else 1
+	s.Looped = looped == true
+	s.SoundId = SOUND_IDS[name] or ""
 	s.Parent = parent
 	return s
 end
@@ -327,10 +336,15 @@ function SaberBuilder.attach(character: Model, bladeColor: Color3?): SaberBuild
 	clash.LightInfluence = 0
 	clash.Parent = tipAtt
 
-	stubSound(grip, "SaberHum", 0.15)
-	stubSound(blade, "SaberSwing", 0.4)
-	stubSound(blade, "SaberClash", 0.55)
-	stubSound(blade, "SaberHit", 0.5)
+	local hum = attachSound(grip, "SaberHum", 0.12, true)
+	attachSound(blade, "SaberSwing", 0.4)
+	attachSound(blade, "SaberClash", 0.55)
+	attachSound(blade, "SaberHit", 0.5)
+	task.defer(function()
+		if hum.Parent and hum.SoundId ~= "" then
+			hum:Play()
+		end
+	end)
 
 	model.PrimaryPart = grip
 
@@ -344,6 +358,95 @@ function SaberBuilder.attach(character: Model, bladeColor: Color3?): SaberBuild
 		beam = beam,
 		clashEmitter = clash,
 	}
+end
+
+local function applyCosmeticsInternal(model: Model, blade: BasePart, grip: BasePart, cosmetics: { [string]: any })
+	local visuals = EconomyConfig.CosmeticVisuals
+	local bladeId = cosmetics.bladeColor
+	if typeof(bladeId) == "string" and visuals[bladeId] and visuals[bladeId].color then
+		local col = visuals[bladeId].color :: Color3
+		SaberBuilder.setBladeColor(blade, col)
+		blade:SetAttribute("CosmeticR", col.R)
+		blade:SetAttribute("CosmeticG", col.G)
+		blade:SetAttribute("CosmeticB", col.B)
+	end
+
+	local auraId = cosmetics.aura
+	if typeof(auraId) == "string" and visuals[auraId] and visuals[auraId].color then
+		local auraColor = visuals[auraId].color :: Color3
+		local existing = model:FindFirstChild("AuraRing")
+		if existing then
+			existing:Destroy()
+		end
+		local ring = Instance.new("Part")
+		ring.Name = "AuraRing"
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(0.15, 2.4, 2.4)
+		ring.Material = Enum.Material.ForceField
+		ring.Color = auraColor
+		ring.Transparency = 0.45
+		ring.CanCollide = false
+		ring.Massless = true
+		ring.CastShadow = false
+		ring.CFrame = grip.CFrame * CFrame.Angles(0, 0, math.rad(90))
+		ring.Parent = model
+		local w = Instance.new("WeldConstraint")
+		w.Part0 = grip
+		w.Part1 = ring
+		w.Parent = ring
+		local al = Instance.new("PointLight")
+		al.Name = "AuraLight"
+		al.Color = auraColor
+		al.Brightness = 1.1
+		al.Range = 10
+		al.Parent = ring
+	end
+
+	local hiltId = cosmetics.hilt
+	if typeof(hiltId) == "string" and visuals[hiltId] then
+		local vis = visuals[hiltId]
+		local wrap = model:FindFirstChild("GripWrap")
+		if wrap and wrap:IsA("BasePart") and vis.wrapColor then
+			wrap.Color = vis.wrapColor
+		end
+		for _, name in { "GripRingA", "GripRingB" } do
+			local part = model:FindFirstChild(name)
+			if part and part:IsA("BasePart") and vis.ringColor then
+				part.Color = vis.ringColor
+			end
+		end
+	end
+end
+
+--[[
+	Applique cosmétiques équipés (blade / aura / hilt) depuis le profil joueur.
+]]
+function SaberBuilder.applyCosmetics(build: SaberBuild, cosmetics: { [string]: any }?)
+	if not cosmetics then
+		return
+	end
+	applyCosmeticsInternal(build.model, build.blade, build.grip, cosmetics)
+end
+
+function SaberBuilder.applyCosmeticsFromModel(character: Model, cosmetics: { [string]: any }?)
+	if not cosmetics then
+		return
+	end
+	local saber = character:FindFirstChild("EnergySaber")
+	if not saber or not saber:IsA("Model") then
+		return
+	end
+	local grip = saber:FindFirstChild("HiltGrip")
+	local blade: BasePart? = nil
+	for _, inst in CollectionService:GetTagged(CombatConfig.Tags.SaberBlade) do
+		if inst:IsDescendantOf(character) and inst:IsA("BasePart") then
+			blade = inst
+			break
+		end
+	end
+	if grip and grip:IsA("BasePart") and blade then
+		applyCosmeticsInternal(saber, blade, grip, cosmetics)
+	end
 end
 
 function SaberBuilder.setBladeColor(blade: BasePart, color: Color3)

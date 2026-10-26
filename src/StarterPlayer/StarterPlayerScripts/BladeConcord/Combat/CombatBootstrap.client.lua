@@ -15,7 +15,7 @@ local MetaHud = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Me
 
 SoundHooks.start()
 CameraShake.start()
-CombatFx.bind({ CameraShake = CameraShake, SoundHooks = SoundHooks })
+CombatFx.bind({ CameraShake = CameraShake, SoundHooks = SoundHooks, SoftLockCamera = SoftLockCamera })
 CombatHud.start()
 CombatFx.start()
 SaberPose.start()
@@ -23,6 +23,7 @@ CombatPredict.start()
 InputCombat.start()
 SoftLockCamera.start()
 MetaHud.start()
+SoundHooks.startHum()
 
 print(
 	"[BladeConcord] Client ready — polish visuel · LMB/RMB · Q/E esquive · Shift dash · F Poussée · G Dash Focus · M méta"
