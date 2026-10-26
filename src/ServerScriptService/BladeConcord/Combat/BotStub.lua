@@ -6,8 +6,11 @@
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
+local Visual = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local CombatTypes = require(Shared:WaitForChild("CombatTypes"))
+local Theme = require(Shared:WaitForChild("Theme"))
+local SaberBuilder = require(Visual:WaitForChild("SaberBuilder"))
 local FighterState = require(script.Parent:WaitForChild("FighterState"))
 local AttackService = require(script.Parent:WaitForChild("AttackService"))
 local GuardService = require(script.Parent:WaitForChild("GuardService"))
@@ -81,14 +84,7 @@ local function ensureBotModel(spawnCf: CFrame): Model
 
 	local head = weldedPart("Head", Vector3.new(1.2, 1.2, 1.2), CFrame.new(0, 1.6, 0), Color3.fromRGB(200, 180, 160))
 	local torso = weldedPart("UpperTorso", Vector3.new(2, 2, 1), CFrame.new(), Color3.fromRGB(60, 60, 80))
-	local blade = weldedPart(
-		"SaberBlade",
-		Vector3.new(0.3, 0.3, CombatConfig.Light.BladeLength),
-		CFrame.new(1.2, 0.5, -1.2),
-		Color3.fromRGB(255, 100, 100)
-	)
-	blade.Material = Enum.Material.Neon
-	CollectionService:AddTag(blade, CombatConfig.Tags.SaberBlade)
+	local rightHand = weldedPart("RightHand", Vector3.new(0.4, 0.4, 0.8), CFrame.new(1.2, 0.4, -0.6), Color3.fromRGB(200, 180, 160))
 	CollectionService:AddTag(torso, CombatConfig.Tags.Hurtbox)
 	CollectionService:AddTag(head, CombatConfig.Tags.Hurtbox)
 
@@ -99,6 +95,7 @@ local function ensureBotModel(spawnCf: CFrame): Model
 	humanoid.Parent = model
 
 	model.Parent = workspace
+	SaberBuilder.attach(model, Theme.Danger)
 	botModel = model
 	return model
 end
@@ -115,7 +112,8 @@ function BotStub.enable(spawnCf: CFrame)
 		botFighter = FighterState.create(botPlayer :: any)
 	end
 	botFighter.character = model
-	botFighter.bladePart = model:FindFirstChild("SaberBlade") :: BasePart
+	local blade = model:FindFirstChild("SaberBlade", true)
+	botFighter.bladePart = if blade and blade:IsA("BasePart") then blade else nil
 	botFighter.hurtboxes = {}
 	for _, name in { "UpperTorso", "Head" } do
 		local p = model:FindFirstChild(name)
@@ -124,7 +122,7 @@ function BotStub.enable(spawnCf: CFrame)
 		end
 	end
 	FighterState.resetMatch(botFighter)
-	print("[BladeConcord] BotStub enabled (Play Solo)")
+	print("[BladeConcord] BotStub enabled (Play Solo) — sabre Constructible")
 end
 
 function BotStub.disable()

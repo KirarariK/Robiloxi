@@ -7,9 +7,11 @@ local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Shared")
+local Visual = ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual")
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local CombatTypes = require(Shared:WaitForChild("CombatTypes"))
 local RemotesMod = require(Shared:WaitForChild("Remotes"))
+local SaberBuilder = require(Visual:WaitForChild("SaberBuilder"))
 local FighterState = require(script.Parent:WaitForChild("FighterState"))
 local StaminaService = require(script.Parent:WaitForChild("StaminaService"))
 local AttackService = require(script.Parent:WaitForChild("AttackService"))
@@ -35,43 +37,8 @@ local function ensureBlade(character: Model): BasePart
 			return inst
 		end
 	end
-	local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
-	local handle = Instance.new("Part")
-	handle.Name = "SaberBlade"
-	handle.Size = Vector3.new(0.3, 0.3, CombatConfig.Light.BladeLength)
-	handle.Massless = true
-	handle.CanCollide = false
-	handle.Color = Color3.fromRGB(120, 200, 255)
-	handle.Material = Enum.Material.Neon
-	handle.Parent = character
-
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = if rightHand and rightHand:IsA("BasePart") then rightHand else character:FindFirstChild("HumanoidRootPart") :: BasePart
-	weld.Part1 = handle
-	weld.Parent = handle
-	if rightHand and rightHand:IsA("BasePart") then
-		handle.CFrame = rightHand.CFrame * CFrame.new(0, 0, -CombatConfig.Light.BladeLength * 0.5)
-	end
-	CollectionService:AddTag(handle, CombatConfig.Tags.SaberBlade)
-
-	-- Trail stub VFX
-	local att0 = Instance.new("Attachment")
-	att0.Name = "TrailA"
-	att0.Position = Vector3.new(0, 0, CombatConfig.Light.BladeLength * 0.45)
-	att0.Parent = handle
-	local att1 = Instance.new("Attachment")
-	att1.Name = "TrailB"
-	att1.Position = Vector3.new(0, 0, -CombatConfig.Light.BladeLength * 0.45)
-	att1.Parent = handle
-	local trail = Instance.new("Trail")
-	trail.Name = "SaberTrailStub"
-	trail.Attachment0 = att0
-	trail.Attachment1 = att1
-	trail.Lifetime = 0.15
-	trail.Enabled = false
-	trail.Parent = handle
-
-	return handle
+	local build = SaberBuilder.attach(character)
+	return build.blade
 end
 
 local function ensureHurtboxes(character: Model): { BasePart }
