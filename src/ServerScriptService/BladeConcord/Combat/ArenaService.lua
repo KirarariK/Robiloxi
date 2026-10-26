@@ -36,6 +36,13 @@ local LobbyBuilder = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForC
 local LobbyConfig = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyConfig"))
 local LobbyLighting = require(script.Parent.Parent:WaitForChild("Lobby"):WaitForChild("LobbyLighting"))
 
+-- Pool croiseur 8 arènes (World tag BC_MatchArena + BC_ArenaIndex 1..8)
+local worldByIndex: { [number]: Instance } = {}
+local activePoolIndex = 1
+local activeWorldRoot: Instance? = nil
+local poolRotation = 0
+local occupiedPoolIndex: number? = nil
+
 local function part(
 	name: string,
 	size: Vector3,
@@ -1033,16 +1040,153 @@ function ArenaService.getActiveId(): ArenaId
 	return activeId
 end
 
+function ArenaService.getActivePoolIndex(): number
+	return activePoolIndex
+end
+
+--[[ World : tag BC_MatchArena + BC_ArenaIndex 1..8 (+ SpawnA/B ou Offset*). ]]
+function ArenaService.refreshWorldPool()
+	table.clear(worldByIndex)
+	local tag = CombatConfig.Tags.MatchArena
+	for _, inst in CollectionService:GetTagged(tag) do
+		local idx = inst:GetAttribute("BC_ArenaIndex")
+		if typeof(idx) == "number" then
+			local n = math.floor(idx)
+			local maxN = CombatConfig.Match.MatchArenaCount or 8
+			if n >= 1 and n <= maxN then
+				worldByIndex[n] = inst
+			end
+		end
+	end
+end
+
+function ArenaService.listPoolIndices(): { number }
+	ArenaService.refreshWorldPool()
+	local maxN = CombatConfig.Match.MatchArenaCount or 8
+	local list = {}
+	local worldCount = 0
+	for i = 1, maxN do
+		if worldByIndex[i] then
+			worldCount += 1
+		end
+	end
+	if worldCount > 0 then
+		for i = 1, maxN do
+			if worldByIndex[i] then
+				table.insert(list, i)
+			end
+		end
+		return list
+	end
+	-- Fallback procédural : 8 indices virtuels sur les 4 thèmes (1 match / serveur)
+	for i = 1, maxN do
+		table.insert(list, i)
+	end
+	return list
+end
+
+local function themeForPoolIndex(index: number): ArenaId
+	return ARENA_ORDER[((index - 1) % #ARENA_ORDER) + 1]
+end
+
+local function findSpawnPart(root: Instance, tag: string, name: string): BasePart?
+	for _, inst in CollectionService:GetTagged(tag) do
+		if inst:IsA("BasePart") and inst:IsDescendantOf(root) then
+			return inst
+		end
+	end
+	local named = root:FindFirstChild(name, true)
+	if named and named:IsA("BasePart") then
+		return named
+	end
+	return nil
+end
+
 function ArenaService.setActive(id: ArenaId)
 	ArenaService.ensureAll()
 	if built[id] then
 		activeId = id
+		activeWorldRoot = nil
 		applyArenaLighting(id)
 	end
 end
 
+function ArenaService.setActivePoolIndex(index: number)
+	ArenaService.ensureAll()
+	ArenaService.refreshWorldPool()
+	local maxN = CombatConfig.Match.MatchArenaCount or 8
+	local idx = math.clamp(math.floor(index), 1, maxN)
+	activePoolIndex = idx
+	local world = worldByIndex[idx]
+	if world and world.Parent then
+		activeWorldRoot = world
+		local themeAttr = world:GetAttribute("BC_ArenaTheme")
+		if typeof(themeAttr) == "string" and built[themeAttr :: any] then
+			activeId = themeAttr :: ArenaId
+		else
+			activeId = themeForPoolIndex(idx)
+		end
+		if built[activeId] then
+			applyArenaLighting(activeId)
+		end
+	else
+		activeWorldRoot = nil
+		activeId = themeForPoolIndex(idx)
+		if built[activeId] then
+			applyArenaLighting(activeId)
+		end
+	end
+	occupiedPoolIndex = idx
+end
+
+--[[ Rotation / libre : saute l’index occupé si pool > 1. ]]
+function ArenaService.pickMatchArena(): number
+	local pool = ArenaService.listPoolIndices()
+	if #pool == 0 then
+		ArenaService.setActive("ObsidianPit")
+		activePoolIndex = 1
+		return 1
+	end
+	poolRotation = (poolRotation % #pool) + 1
+	local start = poolRotation
+	local chosen = pool[start]
+	-- Préfère une arène libre (≠ occupied) quand plusieurs dispo
+	if occupiedPoolIndex and #pool > 1 then
+		for step = 0, #pool - 1 do
+			local i = ((start - 1 + step) % #pool) + 1
+			if pool[i] ~= occupiedPoolIndex then
+				chosen = pool[i]
+				poolRotation = i
+				break
+			end
+		end
+	end
+	ArenaService.setActivePoolIndex(chosen)
+	return chosen
+end
+
+function ArenaService.releasePoolOccupation()
+	occupiedPoolIndex = nil
+end
+
 function ArenaService.getSpawnCFrames(): (CFrame, CFrame)
 	ArenaService.ensureAll()
+
+	if activeWorldRoot and activeWorldRoot.Parent then
+		local spawnA = findSpawnPart(activeWorldRoot, CombatConfig.Tags.ArenaSpawnA, "SpawnA")
+		local spawnB = findSpawnPart(activeWorldRoot, CombatConfig.Tags.ArenaSpawnB, "SpawnB")
+		if spawnA and spawnB then
+			return spawnA.CFrame + Vector3.new(0, 3, 0), spawnB.CFrame + Vector3.new(0, 3, 0)
+		end
+		local ox = (activeWorldRoot:GetAttribute("OffsetX") :: number?) or 0
+		local oy = (activeWorldRoot:GetAttribute("OffsetY") :: number?) or 0
+		local oz = (activeWorldRoot:GetAttribute("OffsetZ") :: number?) or 0
+		local origin = Vector3.new(ox, oy, oz)
+		local a = CFrame.new(origin + Vector3.new(-18, 4, 0)) * CFrame.Angles(0, math.rad(90), 0)
+		local b = CFrame.new(origin + Vector3.new(18, 4, 0)) * CFrame.Angles(0, math.rad(-90), 0)
+		return a, b
+	end
+
 	local folder = built[activeId]
 	local ox = if folder then (folder:GetAttribute("OffsetX") :: number?) or 0 else 0
 	local a = CFrame.new(ox - 18, 4, 0) * CFrame.Angles(0, math.rad(90), 0)

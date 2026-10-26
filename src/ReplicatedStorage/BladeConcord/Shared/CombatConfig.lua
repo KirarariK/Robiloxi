@@ -141,6 +141,9 @@ local CombatConfig = {
 		RematchServerCooldown = 2.0,
 		SoloMatchmakingDelay = 1.6, -- après Jouer Amical solo → bot
 		SlotSoloBotDelay = 2.5, -- claim slot seul en Studio → ConcordBot
+		-- Croiseur : 2 pads devant baie (BC_DuelSlot 1–2) → pool 8 arènes L/R
+		MaxDuelSlots = 2,
+		MatchArenaCount = 8,
 	},
 
 	Arena = {
@@ -159,10 +162,12 @@ local CombatConfig = {
 		ArenaSpawnB = "ArenaSpawnB",
 		KillPlane = "KillPlane",
 		Hazard = "Hazard",
-		-- World lobby (allée ArtPass 8) — Combat lit / écrit attrs, ne pose pas la géométrie
-		-- Tag pads = BC_DuelSlotPad ; Attribute BC_DuelSlot = slotIndex (number)
+		-- World lobby — Combat lit / écrit attrs, ne pose pas la géométrie
+		-- Tag pads = BC_DuelSlotPad ; Attribute BC_DuelSlot = 1|2 (croiseur)
 		DuelSlotPad = "BC_DuelSlotPad",
-		LobbySpawn = "BC_LobbySpawn", -- optionnel ; fallback LobbyBuilder.getSpawnCFrame (allée)
+		LobbySpawn = "BC_LobbySpawn",
+		-- 8 arènes L/R : tag BC_MatchArena + Attribute BC_ArenaIndex = 1..8
+		MatchArena = "BC_MatchArena",
 	},
 }
 

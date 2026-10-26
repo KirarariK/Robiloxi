@@ -1,15 +1,15 @@
 --!strict
 --[[
-	Matchmaking par slot 1v1 — contrat World lobby (ArtPass 8).
+	Matchmaking par slot 1v1 — contrat World croiseur (2 pads devant baie).
 
 	World pose les pads ; Combat ne touche PAS LobbyBuilder géométrie.
 	API World :
 	  LobbyBuilder.bindDuelSlots(claimFn) — claimFn(player, slotIndex)
-	  Tag BC_DuelSlotPad · Attribute BC_DuelSlot = number (1..N)
+	  Tag BC_DuelSlotPad · Attribute BC_DuelSlot = 1|2 seulement (MaxDuelSlots)
 
-	Flux : claim → file slot-scoped (max 2) → MatchService.tryStartPair → grande arène.
+	Flux : claim → file slot-scoped (max 2) → MatchService.tryStartPair →
+	  une des 8 grandes arènes (ArenaService.pickMatchArena).
 	Solo (#Players == 1) : après SlotSoloBotDelay → ConcordBot (demo Studio).
-	Sinon : file jusqu’au 2e claim du même slotIndex.
 
 	Feedback attrs écrits sur ClaimPad :
 	  BC_SlotClaimCount, BC_SlotOccupantA/B, BC_SlotStatus
@@ -35,6 +35,10 @@ local slots: { [number]: SlotState } = {}
 local playerSlot: { [Player]: number } = {}
 local started = false
 local LobbyBuilder: any = nil
+
+local function maxSlots(): number
+	return CombatConfig.Match.MaxDuelSlots or 2
+end
 
 local function getLobbyBuilder()
 	if not LobbyBuilder then
@@ -133,6 +137,7 @@ local function tryLaunch(state: SlotState)
 		pad:SetAttribute("BC_SlotOccupantA", 0)
 		pad:SetAttribute("BC_SlotOccupantB", 0)
 	end
+	-- tryStartPair → pickMatchArena (pool 8)
 	MatchService.tryStartPair(p1, p2, "Casual")
 end
 
@@ -154,7 +159,7 @@ local function trySoloBot(state: SlotState)
 	MatchService.beginSoloPractice(p)
 end
 
---[[ Claim depuis World bindDuelSlots(player, slotIndex). ]]
+--[[ Claim depuis World bindDuelSlots(player, slotIndex) — indices 1..MaxDuelSlots seulement. ]]
 function SlotMatchService.claimByIndex(player: Player, slotIndex: number): boolean
 	if MatchService.getPhase() ~= "Lobby" then
 		return false
@@ -162,11 +167,16 @@ function SlotMatchService.claimByIndex(player: Player, slotIndex: number): boole
 	if MatchService.isPlayerQueued(player) then
 		return false
 	end
-	if typeof(slotIndex) ~= "number" or slotIndex < 1 then
+	if typeof(slotIndex) ~= "number" then
+		return false
+	end
+	local idx = math.floor(slotIndex)
+	local maxS = maxSlots()
+	if idx < 1 or idx > maxS then
 		return false
 	end
 
-	local state = ensureSlot(slotIndex)
+	local state = ensureSlot(idx)
 
 	for _, p in state.claimers do
 		if p == player then
@@ -175,7 +185,7 @@ function SlotMatchService.claimByIndex(player: Player, slotIndex: number): boole
 		end
 	end
 
-	if playerSlot[player] and playerSlot[player] ~= slotIndex then
+	if playerSlot[player] and playerSlot[player] ~= idx then
 		removeFromSlot(player)
 	end
 
@@ -184,7 +194,7 @@ function SlotMatchService.claimByIndex(player: Player, slotIndex: number): boole
 	end
 
 	table.insert(state.claimers, player)
-	playerSlot[player] = slotIndex
+	playerSlot[player] = idx
 	writePadAttrs(state)
 
 	if #state.claimers >= 2 then
@@ -212,6 +222,9 @@ function SlotMatchService.step(dt: number)
 		return
 	end
 	for _, state in slots do
+		if state.index > maxSlots() then
+			continue
+		end
 		if state.soloTimer and #state.claimers == 1 then
 			state.soloTimer -= dt
 			if state.soloTimer <= 0 then
@@ -233,14 +246,22 @@ function SlotMatchService.getPlayerSlotIndex(player: Player): number?
 	return playerSlot[player]
 end
 
+function SlotMatchService.getMaxSlots(): number
+	return maxSlots()
+end
+
 function SlotMatchService.start()
 	if started then
 		return
 	end
 	started = true
 
+	-- Pré-crée les 2 files slot
+	for i = 1, maxSlots() do
+		ensureSlot(i)
+	end
+
 	local lb = getLobbyBuilder()
-	-- Branche officielle World — Prompt/Touched déjà hookés côté LobbyBuilder
 	lb.bindDuelSlots(function(player: Player, slotIndex: number)
 		SlotMatchService.claimByIndex(player, slotIndex)
 	end)
@@ -248,7 +269,13 @@ function SlotMatchService.start()
 	Players.PlayerRemoving:Connect(SlotMatchService.onPlayerRemoving)
 
 	if RunService:IsStudio() then
-		print("[BladeConcord] SlotMatchService: bindDuelSlots — solo Studio → bot après SlotSoloBotDelay")
+		print(
+			string.format(
+				"[BladeConcord] SlotMatchService: slots 1–%d → pool %d arènes",
+				maxSlots(),
+				CombatConfig.Match.MatchArenaCount or 8
+			)
+		)
 	end
 end
 

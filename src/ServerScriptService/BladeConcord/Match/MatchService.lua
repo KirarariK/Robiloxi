@@ -92,7 +92,10 @@ local function broadcast()
 		scores = scoreboard,
 		fighters = fighters,
 		arenaId = if phase == "Lobby" then "ConcordLobby" else ArenaService.getActiveId(),
-		arenaName = if phase == "Lobby" then ArenaService.getLobbyDisplayName() else ArenaService.getDisplayName(),
+		arenaName = if phase == "Lobby"
+			then ArenaService.getLobbyDisplayName()
+			else string.format("%s · #%d", ArenaService.getDisplayName(), ArenaService.getActivePoolIndex()),
+		arenaIndex = if phase == "Lobby" then nil else ArenaService.getActivePoolIndex(),
 		fairKit = mode == "Ranked" and phase ~= "Lobby",
 		countdown = if phase == "Countdown" then phaseTimer else nil,
 		rematchIn = if phase == "MatchEnd" then phaseTimer else nil,
@@ -293,10 +296,10 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 	end
 end
 
+--[[ Pool croiseur 8 arènes (World BC_MatchArena 1..8) — rotation / libre. ]]
 local function pickArena()
-	local list = ArenaService.list()
-	arenaRotationIndex = (arenaRotationIndex % #list) + 1
-	ArenaService.setActive(list[arenaRotationIndex])
+	local idx = ArenaService.pickMatchArena()
+	arenaRotationIndex = idx
 end
 
 function MatchService.tryStartPair(p1: Player, p2: Player, matchMode: CombatTypes.MatchMode?)
@@ -410,6 +413,7 @@ function MatchService.returnToLobby()
 	mode = "Casual"
 
 	teleportPlayersToLobby(toTeleport)
+	ArenaService.releasePoolOccupation()
 	ArenaService.applyLobbyLighting()
 	local SlotMatchService = require(script.Parent:WaitForChild("SlotMatchService"))
 	SlotMatchService.onReturnedToLobby()
@@ -434,12 +438,11 @@ function MatchService.rematch()
 		return
 	end
 	resetScores(activePair)
+	-- Solo et 1v1 : re-pick dans le pool 8 (libre / rotation)
 	if soloPractice then
 		scores[-9001] = 0
-		ArenaService.setActive("ObsidianPit")
-	else
-		pickArena()
 	end
+	pickArena()
 	for _, p in activePair do
 		local f = FighterState.get(p)
 		if f then
@@ -554,7 +557,7 @@ function MatchService.beginSoloPractice(player: Player)
 	if f then
 		FighterState.resetMatch(f)
 	end
-	ArenaService.setActive("ObsidianPit")
+	pickArena() -- pool 8 arènes (pas figé Obsidian)
 	MatchService.beginCountdown()
 end
 
