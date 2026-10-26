@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Catalogue des ≥20 sets d'animations Blade Concord.
+	Catalogue des ≥20 sets d'animations Blade Concord (28 au Pass fluidité).
 	Un set = Idle combat + Startup + Active + Recovery (+ Guard).
 	Sélection runtime : forme × rareté, ou set nommé (riposte, focus, KO…).
 ]]
@@ -589,6 +589,90 @@ local SETS: { AnimationSetDef } = {
 			priority = Enum.AnimationPriority.Action4,
 		}),
 	},
+	-- 25–28 Pass fluidité — situations / lectures distinctes
+	{
+		id = "Concord_ClashRebound",
+		index = 25,
+		displayName = "Concord · Rebond de Clash",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "clash" },
+		covers = "Rebond post-clash — anticipation contractée, Active whip courte, torsade forte",
+		style = style({
+			anticipation = 0.5,
+			swingArc = 1.35,
+			planeBias = 0.38,
+			followThrough = 0.7,
+			guardPitch = -0.55,
+			idleLean = 0.06,
+			torsoTwist = 0.65,
+			offhand = 0.55,
+			tempo = 1.22,
+			priority = Enum.AnimationPriority.Action2,
+		}),
+	},
+	{
+		id = "Concord_ParryBrace",
+		index = 26,
+		displayName = "Concord · Parade Brace",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "parry" },
+		covers = "Garde ultra-haute brace — Idle compact, Guard pitch extrême, peu de swing",
+		style = style({
+			anticipation = 0.7,
+			swingArc = 0.65,
+			planeBias = 0.55,
+			followThrough = 0.3,
+			guardPitch = -1.05,
+			idleLean = 0.02,
+			torsoTwist = 0.2,
+			offhand = 0.5,
+			tempo = 1.0,
+			priority = Enum.AnimationPriority.Action,
+		}),
+	},
+	{
+		id = "Concord_EdgePressure",
+		index = 27,
+		displayName = "Concord · Pression de Fil",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "pressure" },
+		covers = "Pression avant — lean fort, arcs courts répétés, recovery snappy",
+		style = style({
+			anticipation = 0.55,
+			swingArc = 0.95,
+			planeBias = 0.42,
+			followThrough = 0.32,
+			guardPitch = -0.5,
+			idleLean = 0.16,
+			torsoTwist = 0.28,
+			offhand = 0.35,
+			tempo = 1.32,
+		}),
+	},
+	{
+		id = "Concord_CounterStep",
+		index = 28,
+		displayName = "Concord · Pas de Contre",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "counter", "mobility" },
+		covers = "Contre-pas — Dodge/Dash hybrides, lean inverse, Active latérale courte",
+		style = style({
+			anticipation = 0.45,
+			swingArc = 1.05,
+			planeBias = 0.28,
+			followThrough = 0.4,
+			guardPitch = -0.42,
+			idleLean = -0.12,
+			torsoTwist = 0.55,
+			offhand = 0.4,
+			tempo = 1.25,
+			priority = Enum.AnimationPriority.Movement,
+		}),
+	},
 }
 
 local byId: { [string]: AnimationSetDef } = {}
@@ -662,6 +746,10 @@ function AnimationSets.resolveForSnapshot(snap: {
 		return byId.Concord_FocusPulse, "FocusDash"
 	end
 	if actionId == "Dodge" then
+		-- Contre-pas si lean négatif côté forme Zephyr-like déjà couvert ; CounterStep = dodge reverse
+		if snap.flags and snap.flags.riposteBuff then
+			return byId.Concord_CounterStep, "Dodge"
+		end
 		return byId.Concord_MobilityWeave, "Dodge"
 	end
 	if actionId == "Dash" then
@@ -674,6 +762,21 @@ function AnimationSets.resolveForSnapshot(snap: {
 	end
 
 	local heavy = snap.attackKind == "Heavy"
+	-- Clash rebound : Active Heavy Epic → lecture rebond distincte
+	if actionId == "Active" and heavy and snap.formRarity == "Epic" then
+		local clash = byId.Concord_ClashRebound
+		if clash then
+			return clash, "ActiveHeavy"
+		end
+	end
+	-- Pression de fil : Startup Light Legendary (tempo/lean distincts de la forme)
+	if actionId == "Startup" and not heavy and snap.formRarity == "Legendary" then
+		local pressure = byId.Concord_EdgePressure
+		if pressure then
+			return pressure, "StartupLight"
+		end
+	end
+
 	if actionId == "Startup" then
 		return formSet, if heavy then "StartupHeavy" else "StartupLight"
 	elseif actionId == "Active" then
@@ -681,6 +784,13 @@ function AnimationSets.resolveForSnapshot(snap: {
 	elseif actionId == "Recovery" then
 		return formSet, if heavy then "RecoveryHeavy" else "RecoveryLight"
 	elseif actionId == "Guard" then
+		-- Parade brace : Duelant Epic garde déjà ChipWard ; ParryBrace pour Guard + stagger flag clear
+		if snap.formId == "Duelant" and snap.formRarity == "Legendary" then
+			local brace = byId.Concord_ParryBrace
+			if brace then
+				return brace, "Guard"
+			end
+		end
 		return formSet, "Guard"
 	elseif actionId == "Idle" then
 		return formSet, "Idle"

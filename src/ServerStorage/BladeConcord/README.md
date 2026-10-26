@@ -5,7 +5,7 @@ Placeholders pour assets importés plus tard. Le polish actuel est **100 % Const
 | Chemin prévu | Usage | Statut |
 |--------------|--------|--------|
 | `SaberMeshes/` | Hilts / cristaux custom | Remplacé par `SaberBuilder` Constructible |
-| `Animations/` | Swing Light/Heavy, Guard, Dodge | **24 sets** dans `ReplicatedStorage/BladeConcord/Animation/` (KeyframeFactory). Upload `rbxassetid://` optionnel pour live |
+| `Animations/` | Swing Light/Heavy, Guard, Dodge | **28 sets** dans `ReplicatedStorage/BladeConcord/Animation/` (KeyframeFactory). Upload `rbxassetid://` optionnel pour live |
 | `Finishers/` | Cinématiques finisher | Stub `KoFinisher` (ring + Billboard CONCORDANCE) |
 | `Emotes/` | Emotes salon | TODO |
 | `Audio/` | SoundIds combat | Hooks `SoundHooks` — coller `rbxassetid://` |

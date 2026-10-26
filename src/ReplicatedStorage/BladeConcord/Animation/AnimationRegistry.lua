@@ -63,12 +63,21 @@ function AnimationRegistry.ensureBuilt(): Folder
 		return sequencesFolder
 	end
 
+	-- Rebuild propre si un build partiel avait laissé des orphelins
+	for k in cache do
+		cache[k] = nil
+	end
+	if sequencesFolder then
+		sequencesFolder:Destroy()
+		sequencesFolder = nil
+	end
+
 	local folder = Instance.new("Folder")
 	folder.Name = "BC_KeyframeSequences"
-	-- Parenté sous ce ModuleScript pour debug Studio (non répliqué autrement)
 	folder.Parent = script
 
 	local registerOk = false
+	local registerFail = 0
 	local built = 0
 
 	for _, setDef in AnimationSets.Sets do
@@ -88,6 +97,8 @@ function AnimationRegistry.ensureBuilt(): Folder
 				anim = animation
 				animation.Parent = setFolder
 				registerOk = true
+			else
+				registerFail += 1
 			end
 
 			cache[clipKey(setDef.id, clipName)] = {
@@ -102,6 +113,18 @@ function AnimationRegistry.ensureBuilt(): Folder
 			}
 			built += 1
 		end
+	end
+
+	-- Register partiel = pas fiable pour Animator path (clips manquants → cut)
+	if registerOk and registerFail > 0 and registerFail < built then
+		warn(
+			string.format(
+				"[BladeConcord] AnimationRegistry: Register partiel (%d fail / %d) — bascule Procedural",
+				registerFail,
+				built
+			)
+		)
+		registerOk = false
 	end
 
 	AnimationRegistry.RegisterAvailable = registerOk

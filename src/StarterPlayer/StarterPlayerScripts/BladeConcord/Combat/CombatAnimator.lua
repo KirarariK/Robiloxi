@@ -65,49 +65,48 @@ local function getOrLoadTrack(character: Model, setId: string, clipName: string)
 end
 
 local function fadeTimesFor(clipName: string, actionId: string): (number, number)
+	-- fadeIn, fadeOut — Idle↔Startup plus long pour éviter cut
 	if actionId == "Active" then
-		return 0.04, 0.08
+		return 0.05, 0.1
 	elseif actionId == "Startup" then
-		return 0.1, 0.12
+		return 0.14, 0.12 -- crossfade depuis Idle
 	elseif actionId == "Recovery" then
-		return 0.08, 0.12
-	elseif actionId == "Guard" or actionId == "Idle" then
-		return 0.12, 0.15
+		return 0.1, 0.14
+	elseif actionId == "Guard" then
+		return 0.12, 0.14
+	elseif actionId == "Idle" then
+		return 0.16, 0.14 -- settle doux depuis Recovery
 	elseif actionId == "Dodge" or actionId == "Dash" then
-		return 0.05, 0.08
+		return 0.06, 0.1
+	elseif clipName == "Feint" then
+		return 0.08, 0.12
 	end
-	return 0.08, 0.1
+	return 0.1, 0.12
 end
 
-local function stopCompeting(character: Model, keepLooped: boolean?)
+local function stopCompeting(character: Model, fadeOut: number, keepTrack: AnimationTrack?)
 	local bag = tracksByChar[character]
 	if not bag then
 		return
 	end
 	for _, track in bag do
-		if track.IsPlaying then
-			if keepLooped and track.Looped then
-				-- laissera le blend écraser via priorité
-			else
-				if not track.Looped then
-					track:Stop(0.08)
-				end
-			end
+		if track ~= keepTrack and track.IsPlaying then
+			track:Stop(fadeOut)
 		end
 	end
 end
 
 local function playClip(character: Model, setId: string, clipName: string, actionId: string): boolean
-	local fadeIn, _fadeOut = fadeTimesFor(clipName, actionId)
+	local fadeIn, fadeOut = fadeTimesFor(clipName, actionId)
 	local track = getOrLoadTrack(character, setId, clipName)
 	if track then
-		stopCompeting(character, clipName == "Idle" or clipName == "Guard")
-		-- Stop other looped at same priority when switching Idle↔Guard
+		-- Crossfade : Stop avec fadeOut = fadeIn du nouveau (Idle↔Startup propre)
+		stopCompeting(character, fadeOut, track)
 		local bag = tracksByChar[character]
 		if bag then
-			for key, t in bag do
+			for _, t in bag do
 				if t ~= track and t.IsPlaying and t.Looped then
-					t:Stop(fadeIn)
+					t:Stop(math.max(fadeIn, fadeOut))
 				end
 			end
 		end
@@ -115,8 +114,8 @@ local function playClip(character: Model, setId: string, clipName: string, actio
 		return true
 	end
 
-	-- Procedural path (live / Register indisponible)
-	ProceduralPlayer.play(character, setId, clipName, fadeIn, 1)
+	-- Procedural path (live / Register indisponible) — fade-out croisé
+	ProceduralPlayer.play(character, setId, clipName, fadeIn, 1, fadeOut)
 	return true
 end
 
@@ -132,13 +131,16 @@ local function applyState(userId: number, snap: any)
 		local setDef = AnimationSets.get("Concord_FeintSnap")
 		local character = resolveCharacter(userId)
 		if setDef and character then
+			local feintKey = string.format("%s|%s|Feint|%s", tostring(userId), setDef.id, actionId)
+			if lastKey[userId] == feintKey then
+				return
+			end
+			lastKey[userId] = feintKey
 			SaberPose.applyVisuals(character, actionId, attackKind)
+			character:SetAttribute("BC_AnimSet", setDef.id)
+			character:SetAttribute("BC_AnimClip", "Feint")
 			playClip(character, setDef.id, "Feint", actionId)
-			-- Motor fallback si besoin de C1 lame
-			if not useAnimatorPath then
-				-- Procedural déjà applique HiltGrip Transform
-			else
-				-- Animator drive joints ; SaberPose motor C1 idle
+			if useAnimatorPath then
 				SaberPose.applyMotorFallback(character, "Guard", attackKind)
 			end
 			return
