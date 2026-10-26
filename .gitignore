@@ -1,0 +1,15 @@
+# Rojo / tooling
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+sourcemap.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+!.agents/skills/
+
+# npm (skills CLI cache if any)
+node_modules/
