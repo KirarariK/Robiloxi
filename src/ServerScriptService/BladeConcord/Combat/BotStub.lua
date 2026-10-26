@@ -137,9 +137,12 @@ local function ensureBotModel(spawnCf: CFrame): Model
 end
 
 function BotStub.enable(spawnCf: CFrame)
-	-- Idempotent : pas de reset ici (sinon CombatService.step reset chaque frame)
+	-- Idempotent : pas de reset ici (sinon CombatService.step reset chaque frame).
+	-- Si le modèle a été détruit, rebuild sans wipe HP du fighter.
 	if enabled and botFighter then
-		return
+		if botModel and botModel.Parent then
+			return
+		end
 	end
 	enabled = true
 	local model = ensureBotModel(spawnCf)

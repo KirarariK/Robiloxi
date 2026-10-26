@@ -54,6 +54,10 @@ function DataStoreSafe.getStore(name: string): any
 			UpdateAsync = function(_, key: string, transform: (any) -> any)
 				local current = mockStore[name][key]
 				local nextValue = transform(current)
+				-- nil = cancel (même sémantique DataStore live)
+				if nextValue == nil then
+					return nil
+				end
 				mockStore[name][key] = nextValue
 				return nextValue
 			end,
@@ -76,11 +80,20 @@ function DataStoreSafe.unlock(key: string)
 	sessionLocks[key] = nil
 end
 
-function DataStoreSafe.load(storeName: string, key: string, defaultValue: any): any
+--[[
+	Retourne (ok, data).
+	ok=false → erreur / throttle (ne pas traiter comme profil neuf).
+	ok=true, data=nil → clé absente (nouveau joueur).
+]]
+function DataStoreSafe.loadResult(storeName: string, key: string): (boolean, any)
 	local store = DataStoreSafe.getStore(storeName)
-	local ok, data = withRetries("load:" .. storeName, function()
+	return withRetries("load:" .. storeName, function()
 		return store:GetAsync(key)
 	end)
+end
+
+function DataStoreSafe.load(storeName: string, key: string, defaultValue: any): any
+	local ok, data = DataStoreSafe.loadResult(storeName, key)
 	if not ok then
 		return defaultValue
 	end

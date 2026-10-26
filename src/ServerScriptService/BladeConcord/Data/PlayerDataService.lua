@@ -60,6 +60,27 @@ export type PlayerProfile = {
 
 local PlayerDataService = {}
 local profiles: { [Player]: PlayerProfile } = {}
+local loadFailed: { [Player]: boolean } = {}
+
+local function deepFill(dst: any, src: any)
+	if typeof(dst) ~= "table" or typeof(src) ~= "table" then
+		return
+	end
+	for k, v in src do
+		if dst[k] == nil then
+			if typeof(v) == "table" then
+				-- Deep-copy nested defaults (évite tables partagées template)
+				local copy = {}
+				deepFill(copy, v)
+				dst[k] = copy
+			else
+				dst[k] = v
+			end
+		elseif typeof(dst[k]) == "table" and typeof(v) == "table" then
+			deepFill(dst[k], v)
+		end
+	end
+end
 
 local function dayKey(): string
 	return os.date("%Y-%m-%d") :: string
@@ -131,20 +152,28 @@ end
 
 function PlayerDataService.load(player: Player): PlayerProfile
 	local key = "u_" .. tostring(player.UserId)
-	DataStoreSafe.tryLock(key)
-	local data = DataStoreSafe.load(STORE_NAME, key, nil)
+	if not DataStoreSafe.tryLock(key) then
+		warn("[PlayerDataService] session lock busy for", key, "— ephemeral defaults (no save)")
+		local ephemeral = defaultProfile()
+		profiles[player] = ephemeral
+		loadFailed[player] = true
+		return ephemeral
+	end
+
+	local ok, data = DataStoreSafe.loadResult(STORE_NAME, key)
 	local profile: PlayerProfile
-	if typeof(data) == "table" then
-		profile = data :: PlayerProfile
-		-- fill missing defaults
-		local d = defaultProfile()
-		for k, v in d do
-			if profile[k] == nil then
-				(profile :: any)[k] = v
-			end
-		end
-	else
+	if not ok then
+		warn("[PlayerDataService] load failed for", key, "— ephemeral profile, skip save until success")
 		profile = defaultProfile()
+		loadFailed[player] = true
+	elseif typeof(data) == "table" then
+		profile = data :: PlayerProfile
+		deepFill(profile, defaultProfile())
+		loadFailed[player] = false
+	else
+		-- Clé absente = nouveau joueur
+		profile = defaultProfile()
+		loadFailed[player] = false
 	end
 	refreshDailyIfNeeded(profile)
 	profiles[player] = profile
@@ -156,8 +185,14 @@ function PlayerDataService.save(player: Player): boolean
 	if not profile then
 		return false
 	end
+	-- Ne pas persister un profil éphémère issu d'un échec de lecture (évite wipe)
+	if loadFailed[player] then
+		warn("[PlayerDataService] skip save — prior load failed for", player.UserId)
+		return false
+	end
 	local key = "u_" .. tostring(player.UserId)
-	return DataStoreSafe.save(STORE_NAME, key, profile)
+	local ok = DataStoreSafe.save(STORE_NAME, key, profile)
+	return ok
 end
 
 function PlayerDataService.release(player: Player)
@@ -165,27 +200,31 @@ function PlayerDataService.release(player: Player)
 	local key = "u_" .. tostring(player.UserId)
 	DataStoreSafe.unlock(key)
 	profiles[player] = nil
+	loadFailed[player] = nil
 end
 
-function PlayerDataService.toClientSnapshot(profile: PlayerProfile): { [string]: any }
+function PlayerDataService.toClientSnapshot(profile: PlayerProfile?): { [string]: any }?
+	if typeof(profile) ~= "table" then
+		return nil
+	end
 	return {
-		credits = profile.credits,
-		shards = profile.shards,
-		fragments = profile.fragments,
-		mmr = profile.mmr,
-		rank = RankedConfig.rankFromMmr(profile.mmr),
+		credits = profile.credits or 0,
+		shards = profile.shards or 0,
+		fragments = profile.fragments or 0,
+		mmr = profile.mmr or RankedConfig.StartingMMR,
+		rank = RankedConfig.rankFromMmr(profile.mmr or RankedConfig.StartingMMR),
 		faction = profile.faction,
 		equippedFormId = profile.equippedFormId,
 		equippedFormRarity = profile.equippedFormRarity,
-		ownedForms = profile.ownedForms,
-		ownedCosmetics = profile.ownedCosmetics,
-		equippedCosmetics = profile.equippedCosmetics,
-		pityEpic = profile.pityEpic,
-		pityLegendary = profile.pityLegendary,
+		ownedForms = profile.ownedForms or {},
+		ownedCosmetics = profile.ownedCosmetics or {},
+		equippedCosmetics = profile.equippedCosmetics or {},
+		pityEpic = profile.pityEpic or 0,
+		pityLegendary = profile.pityLegendary or 0,
 		pityEpicAt = FormConfig.PityEpic,
 		pityLegendaryAt = FormConfig.PityLegendary,
-		dailyQuests = profile.dailyQuests,
-		stats = profile.stats,
+		dailyQuests = profile.dailyQuests or {},
+		stats = profile.stats or {},
 		dataStoreMock = DataStoreSafe.isMock(),
 	}
 end

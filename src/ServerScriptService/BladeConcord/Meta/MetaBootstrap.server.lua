@@ -92,12 +92,19 @@ end)
 
 HitService.setDamageHook(function(attacker, _defender, damage, isHeavy)
 	if damage > 0 and isHeavy then
-		QuestService.track(attacker.player, "heavyDamage", damage)
+		-- Bot proxy n'est pas un Player Instance — skip
+		local p = attacker.player
+		if typeof(p) == "Instance" and p:IsA("Player") then
+			QuestService.track(p, "heavyDamage", damage)
+		end
 	end
 end)
 
 HitService.setPerfectHook(function(defender)
-	QuestService.track(defender.player, "perfects", 1)
+	local p = defender.player
+	if typeof(p) == "Instance" and p:IsA("Player") then
+		QuestService.track(p, "perfects", 1)
+	end
 end)
 
 -- Throttle ~10 Hz : pas besoin de Heartbeat full-rate pour un edge phase

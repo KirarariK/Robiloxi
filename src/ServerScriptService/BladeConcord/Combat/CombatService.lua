@@ -122,6 +122,7 @@ end
 function CombatService.bindCharacter(fighter: FighterState.Fighter, character: Model)
 	fighter.character = character
 	fighter.bladePart = nil :: any
+	fighter.hurtboxes = {}
 	local humanoid = character:WaitForChild("Humanoid", 8) :: Humanoid?
 	if not humanoid then
 		warn("[BladeConcord] bindCharacter: Humanoid nil après timeout")
@@ -405,6 +406,7 @@ function CombatService.start()
 		MatchService.enqueue(player, "Casual")
 	end
 	Players.PlayerRemoving:Connect(function(player)
+		MatchService.onPlayerRemoving(player)
 		FighterState.remove(player)
 		attackRate[player] = nil
 		mobilityRate[player] = nil

@@ -60,9 +60,30 @@ check "CombatBootstrap.client" "src/StarterPlayer/StarterPlayerScripts/BladeConc
 check "CombatBootstrap.server" "src/ServerScriptService/BladeConcord/Combat/CombatBootstrap.server.lua"
 
 echo
-echo "Result: $PASS ok · $FAIL missing"
+echo "-- Hardening patterns --"
+PATTERN_FAIL=0
+pattern_check() {
+  local label="$1"
+  local file="$2"
+  local needle="$3"
+  if [[ -f "$file" ]] && grep -q "$needle" "$file"; then
+    PASS=$((PASS + 1))
+    printf "  OK  %s\n" "$label"
+  else
+    PATTERN_FAIL=$((PATTERN_FAIL + 1))
+    printf "  MISSING  %s (%s)\n" "$label" "$needle"
+  fi
+}
+pattern_check "DataStoreSafe.loadResult" "src/ServerScriptService/BladeConcord/Data/DataStoreSafe.lua" "loadResult"
+pattern_check "PlayerData loadFailed" "src/ServerScriptService/BladeConcord/Data/PlayerDataService.lua" "loadFailed"
+pattern_check "Match onPlayerRemoving" "src/ServerScriptService/BladeConcord/Match/MatchService.lua" "onPlayerRemoving"
+pattern_check "Match rematchIn" "src/ServerScriptService/BladeConcord/Match/MatchService.lua" "rematchIn"
+pattern_check "toClientSnapshot nil-safe" "src/ServerScriptService/BladeConcord/Data/PlayerDataService.lua" "PlayerProfile?"
 
-if [[ "$FAIL" -gt 0 ]]; then
+echo
+echo "Result: $PASS ok · $FAIL missing · pattern_fail=$PATTERN_FAIL"
+
+if [[ "$FAIL" -gt 0 || "$PATTERN_FAIL" -gt 0 ]]; then
   echo "Missing modules:"
   for m in "${MISSING[@]}"; do
     echo "  - $m"

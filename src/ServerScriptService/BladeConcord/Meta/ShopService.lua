@@ -126,7 +126,7 @@ function ShopService.start()
 			ShopService.grantShardStub(player, nil)
 			meta.MetaState:FireClient(player, {
 				kind = "Profile",
-				profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player) :: any),
+				profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player)),
 			})
 			return
 		end
@@ -134,7 +134,7 @@ function ShopService.start()
 		meta.MetaState:FireClient(player, {
 			kind = "ShopResult",
 			data = result,
-			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player) :: any),
+			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player)),
 			catalog = EconomyConfig.Shop,
 		})
 	end)

@@ -20,6 +20,7 @@ local metaRemotes: Remotes.MetaRemotes
 local profile: any = nil
 local catalog: any = nil
 local lastPullFlash: string? = nil
+local warScore: { Dawn: number, Dusk: number }? = nil
 local open = false
 local factionPromptShown = false
 local factionOverlay: Frame? = nil
@@ -751,14 +752,29 @@ function MetaHud.start()
 
 		-- Factions
 		y += mkSection(content, "Factions", "Choix unique — Aube / Crépuscule")
-		mkButton(content, "Rejoindre Ordre de l'Aube", y, function()
-			metaRemotes.SelectFaction:FireServer({ factionId = "Dawn" })
-		end, Color3.fromRGB(60, 45, 28))
-		y += 38
-		mkButton(content, "Rejoindre Voie du Crépuscule", y, function()
-			metaRemotes.SelectFaction:FireServer({ factionId = "Dusk" })
-		end, Color3.fromRGB(40, 28, 60))
-		y += 40
+		if profile and (profile.faction == "Dawn" or profile.faction == "Dusk") then
+			mkText(content, "Faction verrouillée — choix tutoriel unique.", 12, y).TextColor3 = Theme.Muted
+			y += 22
+			if warScore then
+				mkText(
+					content,
+					string.format("War Score  Aube %d · Crépuscule %d", warScore.Dawn or 0, warScore.Dusk or 0),
+					12,
+					y
+				).TextColor3 =
+					Theme.Muted
+				y += 22
+			end
+		else
+			mkButton(content, "Rejoindre Ordre de l'Aube", y, function()
+				metaRemotes.SelectFaction:FireServer({ factionId = "Dawn" })
+			end, Color3.fromRGB(60, 45, 28))
+			y += 38
+			mkButton(content, "Rejoindre Voie du Crépuscule", y, function()
+				metaRemotes.SelectFaction:FireServer({ factionId = "Dusk" })
+			end, Color3.fromRGB(40, 28, 60))
+			y += 40
+		end
 
 		content.Size = UDim2.new(1, 0, 0, y + 40)
 		panel.CanvasSize = UDim2.new(0, 0, 0, y + 40)
@@ -773,6 +789,9 @@ function MetaHud.start()
 		end
 		if payload.catalog then
 			catalog = payload.catalog
+		end
+		if typeof(payload.warScore) == "table" then
+			warScore = payload.warScore
 		end
 		-- Feedback pull gacha (FormService: kind=GachaResult, data.results)
 		-- Défensif : aussi payload.results top-level (anciens payloads / outils)

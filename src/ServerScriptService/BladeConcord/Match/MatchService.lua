@@ -33,6 +33,16 @@ local onMatchEndHook: ((winner: Player?, loser: Player?, mode: CombatTypes.Match
 local onRoundEndHook: ((winner: Player?) -> ())? = nil
 local lastRematchRequestAt: { [number]: number } = {} -- userId → clock
 
+local function pruneActivePair()
+	local kept = {}
+	for _, p in activePair do
+		if p and p.Parent == Players then
+			table.insert(kept, p)
+		end
+	end
+	activePair = kept
+end
+
 local function broadcast()
 	local scoreboard = {}
 	for userId, wins in scores do
@@ -40,10 +50,12 @@ local function broadcast()
 	end
 	local fighters = {}
 	for _, p in activePair do
-		table.insert(fighters, {
-			userId = p.UserId,
-			name = p.DisplayName ~= "" and p.DisplayName or p.Name,
-		})
+		if p and p.Parent == Players then
+			table.insert(fighters, {
+				userId = p.UserId,
+				name = p.DisplayName ~= "" and p.DisplayName or p.Name,
+			})
+		end
 	end
 	if soloPractice then
 		table.insert(fighters, { userId = -9001, name = "ConcordBot" })
@@ -59,6 +71,7 @@ local function broadcast()
 		arenaName = ArenaService.getDisplayName(),
 		fairKit = mode == "Ranked",
 		countdown = if phase == "Countdown" then phaseTimer else nil,
+		rematchIn = if phase == "MatchEnd" then phaseTimer else nil,
 		queueCount = #queue,
 	})
 end
@@ -283,22 +296,90 @@ function MatchService.enqueue(player: Player, matchMode: CombatTypes.MatchMode?)
 end
 
 function MatchService.rematch()
-	if #activePair >= 1 then
-		resetScores(activePair)
-		if soloPractice then
-			scores[-9001] = 0
-			ArenaService.setActive("ObsidianPit")
-		else
-			pickArena()
-		end
-		for _, p in activePair do
-			local f = FighterState.get(p)
-			if f then
-				FighterState.resetMatch(f)
-			end
-		end
+	pruneActivePair()
+	if #activePair == 0 then
+		soloPractice = false
+		phase = "Lobby"
+		phaseTimer = 0
+		scores = {}
+		roundNumber = 0
 		lastRematchRequestAt = {}
-		MatchService.beginCountdown()
+		broadcast()
+		return
+	end
+	if not soloPractice and #activePair == 1 then
+		soloPractice = true
+	elseif not soloPractice and #activePair < 2 then
+		phase = "Lobby"
+		phaseTimer = 0
+		activePair = {}
+		lastRematchRequestAt = {}
+		broadcast()
+		return
+	end
+	resetScores(activePair)
+	if soloPractice then
+		scores[-9001] = 0
+		ArenaService.setActive("ObsidianPit")
+	else
+		pickArena()
+	end
+	for _, p in activePair do
+		local f = FighterState.get(p)
+		if f then
+			FighterState.resetMatch(f)
+		end
+	end
+	lastRematchRequestAt = {}
+	MatchService.beginCountdown()
+end
+
+function MatchService.onPlayerRemoving(player: Player)
+	for i = #queue, 1, -1 do
+		if queue[i] == player then
+			table.remove(queue, i)
+		end
+	end
+	lastRematchRequestAt[player.UserId] = nil
+	local wasActive = false
+	for i = #activePair, 1, -1 do
+		if activePair[i] == player then
+			table.remove(activePair, i)
+			wasActive = true
+		end
+	end
+	if not wasActive then
+		broadcast()
+		return
+	end
+	local remaining = activePair[1]
+	if not remaining then
+		soloPractice = false
+		phase = "Lobby"
+		phaseTimer = 0
+		scores = {}
+		roundNumber = 0
+		broadcast()
+		return
+	end
+	if phase == "Fighting" or phase == "Countdown" or phase == "RoundEnd" then
+		scores[remaining.UserId] = CombatConfig.Match.FirstTo
+		phase = "MatchEnd"
+		phaseTimer = 3
+		if onMatchEndHook then
+			onMatchEndHook(remaining, nil, mode)
+		end
+		remotes.RoundEnded:FireAllClients({
+			winnerUserId = remaining.UserId,
+			matchOver = true,
+			scores = scores,
+		})
+		broadcast()
+	elseif phase == "MatchEnd" then
+		pruneActivePair()
+		broadcast()
+	else
+		broadcast()
 	end
 end
 
@@ -361,6 +442,7 @@ function MatchService.step(dt: number)
 		end
 	elseif phase == "MatchEnd" then
 		phaseTimer -= dt
+		broadcast()
 		if phaseTimer <= 0 then
 			MatchService.rematch()
 		end

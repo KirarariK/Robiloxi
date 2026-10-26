@@ -130,7 +130,7 @@ function QuestService.start()
 		meta.MetaState:FireClient(player, {
 			kind = "QuestClaim",
 			data = result,
-			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player) :: any),
+			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player)),
 		})
 	end)
 
@@ -142,7 +142,8 @@ function QuestService.start()
 		meta.MetaState:FireClient(player, {
 			kind = "Faction",
 			ok = ok,
-			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player) :: any),
+			error = if ok then nil else (if PlayerDataService.get(player) and PlayerDataService.get(player).faction then "already_joined" else "failed"),
+			profile = PlayerDataService.toClientSnapshot(PlayerDataService.get(player)),
 			warScore = QuestService.getWarScore(),
 			factions = QuestConfig.Factions,
 		})
