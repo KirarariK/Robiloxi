@@ -1,6 +1,8 @@
 # Concord Hall — lobby serveur
 
-Hall procédural ~360×360 studs (`LobbyArtPass = 6`), origin monde `(0, 0, 700)` pour ne pas chevaucher les arènes de match.
+Hall procédural ~360×360 studs (`LobbyArtPass = 7`), origin monde `(0, 0, 700)` pour ne pas chevaucher les arènes de match.
+
+Pass 7 = densification maquette (colonnes ornées, arches-vues, sol marbre/or, balcons, forge visible, DoF off).
 
 ## Modules
 
@@ -8,8 +10,8 @@ Hall procédural ~360×360 studs (`LobbyArtPass = 6`), origin monde `(0, 0, 700)
 |--------|------|
 | `Lobby/LobbyConfig.lua` | Layout, palette, budgets, tags |
 | `Lobby/LobbyUtil.lua` | Parts / lights / emitters + compteurs |
-| `Lobby/LobbyLighting.lua` | Atmosphere, Sky, Bloom, CC, SunRays, DoF |
-| `Lobby/LobbyProps.lua` | Colonnes, arches, braseros, cristaux, piédestaux |
+| `Lobby/LobbyLighting.lua` | Atmosphere, Sky, Bloom/CC légers, DoF **désactivé** |
+| `Lobby/LobbyProps.lua` | Colonnes or, grandArch, braseros, arsenal, forge, balcons |
 | `Lobby/LobbyBuilder.lua` | Assemble zones + pads + anims + leaderboards |
 
 `ArenaService.ensureLobby()` délègue à `LobbyBuilder`. `MatchService` bind les pads → `enqueue`.
@@ -38,7 +40,7 @@ Pads monde (studs) ≈ Amical `(−26, ~2, 604)` · Classé `(26, ~2, 604)`.
 - Panneaux : `BC_OpenPanel` = `Forms` \| `Forge` \| `Quests` (UI client)
 - Leaderboards : `BC_LeaderboardKind` = `Elo` \| `FactionTop` \| `Faction`
 - Joueur : `BC_MMR`, `BC_Faction`, `BC_WarScore` (rafraîchis 60 s pour SurfaceGui)
-- Lighting : `BC_LightingMode` = `ConcordHall`
+- Lighting : `BC_LightingMode` = `ConcordHall`, `BC_DoF` = false
 - MatchState `arenaId = "ConcordLobby"` → `SoundHooks.AmbientLobby`
 
 ## Budgets

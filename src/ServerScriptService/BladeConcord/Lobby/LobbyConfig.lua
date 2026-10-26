@@ -5,19 +5,20 @@
 	Monde : LobbyConfig.Origin décale le hall loin des arènes de match (X≥0).
 
 	Attributs / tags exposés au client (monde) :
-	- Model ConcordHall : ArtPass, DisplayName, BC_LobbyOrigin (Vector3)
+	- Model ConcordLobby : ArtPass, DisplayName, BC_LobbyOrigin (Vector3)
 	- Pads : Attribute BC_QueueMode = "Casual"|"Ranked", tag BC_QueuePad
 	- Zones : Attribute BC_ZoneId (Plaza|Pads|Gallery|Leaderboard|Dawn|Dusk|Forms|Forge|Quests|Training|Diorama*)
-	- SpawnLocation.ForceField = true (Duration>0)
-	- SurfaceGui Leaderboard : Attribute BC_LeaderboardKind = "Elo"|"Faction"
-	- ProximityPrompt ActionText : file Amical / Classé ; Forge / Formes (UI client)
+	- SpawnLocation.Duration > 0 (ForceField)
+	- SurfaceGui Leaderboard : Attribute BC_LeaderboardKind = "Elo"|"Faction"|"FactionTop"
+	- ProximityPrompt : file Amical / Classé ; Forge / Formes / Quêtes (UI client)
 
 	Son ambiance : SoundHooks.AssetIds.AmbientLobby (placeholder configurable).
 ]]
 
 local LobbyConfig = {}
 
-LobbyConfig.ArtPass = 6
+-- ArtPass 7 = densification maquette (colonnes/arches/sol/DoF off)
+LobbyConfig.ArtPass = 7
 LobbyConfig.Name = "ConcordLobby"
 LobbyConfig.DisplayName = "Concord Hall"
 
@@ -37,8 +38,9 @@ LobbyConfig.Colors = {
 	Ink800 = Color3.fromRGB(13, 20, 36),
 	Ink700 = Color3.fromRGB(20, 29, 51),
 	Ink600 = Color3.fromRGB(29, 42, 71),
-	Marble = Color3.fromRGB(48, 56, 78),
-	MarbleLite = Color3.fromRGB(72, 82, 108),
+	Marble = Color3.fromRGB(42, 50, 72),
+	MarbleLite = Color3.fromRGB(78, 88, 118),
+	MarblePolish = Color3.fromRGB(58, 66, 92),
 	Gold = Color3.fromRGB(232, 196, 104),
 	GoldLite = Color3.fromRGB(255, 233, 168),
 	GoldDark = Color3.fromRGB(184, 137, 43),
@@ -79,9 +81,11 @@ LobbyConfig.Zones = {
 
 LobbyConfig.HallHalf = 180 -- ±180 → ~360×360
 LobbyConfig.PlazaRadius = 70
+LobbyConfig.InnerColonnadeRadius = 92
 LobbyConfig.ColonnadeRadius = 170
 LobbyConfig.ColumnCount = 16
-LobbyConfig.ColumnHeight = 40
+LobbyConfig.InnerColumnCount = 12
+LobbyConfig.ColumnHeight = 42
 
 LobbyConfig.PadRadius = 9
 LobbyConfig.PadRaise = 0.6
@@ -94,11 +98,10 @@ LobbyConfig.Tags = {
 	AmbientHost = "BC_LobbyAmbient",
 }
 
--- Placeholders audio (alignés SoundHooks — ids configurables)
 LobbyConfig.AmbientSoundIds = {
-	Hall = "rbxassetid://9114221256", -- soft wind / nappe
-	Forge = "rbxassetid://9113839759", -- braises
-	Fountain = "rbxassetid://9114221571", -- eau / brise
+	Hall = "rbxassetid://9114221256",
+	Forge = "rbxassetid://9113839759",
+	Fountain = "rbxassetid://9114221571",
 }
 
 LobbyConfig.FormsShowcase = {

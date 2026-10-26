@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Concord Hall — construction serveur procédurale (~360×360).
+	Concord Hall — construction serveur procédurale densifiée (maquette IA).
 	API :
 	  LobbyBuilder.ensure(parentFolder) → Model ConcordLobby
 	  LobbyBuilder.getSpawnCFrame() → CFrame plaza
@@ -8,7 +8,7 @@
 	  LobbyBuilder.bindQueuePads(enqueueFn) — enqueueFn(player, mode)
 
 	Attributs client (voir LobbyConfig header) :
-	  Workspace.Arenas.ConcordLobby attributes + pads BC_QueueMode.
+	  Workspace.Arenas.ConcordLobby + pads BC_QueueMode.
 ]]
 
 local Players = game:GetService("Players")
@@ -35,137 +35,224 @@ local leaderboardRefresh: thread? = nil
 local C = LobbyConfig.Colors
 local Z = LobbyConfig.Zones
 
-local function octagonFloor(
-	parent: Instance,
-	radius: number,
-	y: number,
-	color: Color3,
-	material: Enum.Material,
-	thickness: number?
-)
-	-- Approximation : disque + 8 dalles radialement
-	local t = thickness or 2
-	LobbyUtil.part(
-		"PlazaCore",
-		Vector3.new(radius * 1.1, t, radius * 1.1),
-		LobbyUtil.cf(Vector3.new(0, y, 0)),
-		color,
-		parent,
-		material,
-		{ reflectance = 0.06 }
-	)
-	for i = 0, 7 do
-		local ang = math.rad(i * 45)
-		local dist = radius * 0.72
-		local px = math.sin(ang) * dist
-		local pz = -math.cos(ang) * dist
-		LobbyUtil.part(
-			"OctTile" .. i,
-			Vector3.new(radius * 0.55, t * 0.5, radius * 0.55),
-			LobbyUtil.cf(Vector3.new(px, y + 0.15, pz), i * 45),
-			if i % 2 == 0 then C.MarbleLite else C.Ink600,
-			parent,
-			if i % 2 == 0 then Enum.Material.Marble else Enum.Material.Slate,
-			{ reflectance = 0.04 }
-		)
-	end
-end
-
 local function buildFloorShell(root: Model)
 	local floor = LobbyUtil.model("HallFloor", root, "Plaza")
-	-- Sol principal 360×360
+
+	-- Sol principal poli (marbre sombre, pas plateau gris)
 	LobbyUtil.part(
 		"Ground",
-		Vector3.new(LobbyConfig.HallHalf * 2, 2, LobbyConfig.HallHalf * 2),
-		LobbyUtil.cf(Vector3.new(0, -1, 0)),
+		Vector3.new(LobbyConfig.HallHalf * 2, 2.4, LobbyConfig.HallHalf * 2),
+		LobbyUtil.cf(Vector3.new(0, -1.2, 0)),
 		C.Ink800,
 		floor,
 		Enum.Material.Basalt
 	)
-	-- Anneaux de promenade
-	for _, r in { 55, 70, 95, 130 } do
+	LobbyUtil.part(
+		"MarbleField",
+		Vector3.new(220, 0.5, 220),
+		LobbyUtil.cf(Vector3.new(0, 0.05, 0)),
+		C.MarblePolish,
+		floor,
+		Enum.Material.Marble,
+		{ reflectance = 0.22, canCollide = false }
+	)
+
+	-- Anneaux concentriques or (maquette)
+	local ringSpecs = {
+		{ r = 18, t = 0.55, col = C.Gold, mat = Enum.Material.Neon, tr = 0.35 },
+		{ r = 28, t = 0.35, col = C.GoldDark, mat = Enum.Material.Metal, tr = 0.15 },
+		{ r = 42, t = 0.4, col = C.Gold, mat = Enum.Material.Neon, tr = 0.55 },
+		{ r = 55, t = 0.3, col = C.Ink600, mat = Enum.Material.Slate, tr = 0.2 },
+		{ r = 70, t = 0.45, col = C.GoldDark, mat = Enum.Material.Metal, tr = 0.25 },
+		{ r = 95, t = 0.28, col = C.Ink700, mat = Enum.Material.Concrete, tr = 0.4 },
+		{ r = 120, t = 0.28, col = C.Ink700, mat = Enum.Material.Concrete, tr = 0.5 },
+		{ r = 145, t = 0.35, col = C.GoldDark, mat = Enum.Material.Metal, tr = 0.45 },
+	}
+	for _, spec in ringSpecs do
 		LobbyUtil.part(
-			"Ring" .. r,
-			Vector3.new(r * 2, 0.25, r * 2),
-			LobbyUtil.cf(Vector3.new(0, 0.15, 0)),
-			if r == 70 then C.GoldDark else C.Ink700,
+			"Ring" .. spec.r,
+			Vector3.new(spec.r * 2, spec.t, spec.r * 2),
+			LobbyUtil.cf(Vector3.new(0, 0.2, 0)),
+			spec.col,
 			floor,
-			if r == 70 then Enum.Material.Metal else Enum.Material.Concrete,
-			{ canCollide = false, transparency = if r == 70 then 0.35 else 0.55, reflectance = 0.1 }
+			spec.mat,
+			{ canCollide = false, transparency = spec.tr, reflectance = 0.15 }
 		)
 	end
-	octagonFloor(floor, LobbyConfig.PlazaRadius, 0, C.Marble, Enum.Material.Marble, 2.2)
 
-	-- Rose des vents Neon Ø30
+	-- Plaza octogonale (8 dalles)
+	for i = 0, 7 do
+		local ang = math.rad(i * 45)
+		local dist = LobbyConfig.PlazaRadius * 0.68
+		LobbyUtil.part(
+			"OctTile" .. i,
+			Vector3.new(LobbyConfig.PlazaRadius * 0.58, 1.8, LobbyConfig.PlazaRadius * 0.58),
+			LobbyUtil.cf(Vector3.new(math.sin(ang) * dist, 0.1, -math.cos(ang) * dist), i * 45),
+			if i % 2 == 0 then C.MarbleLite else C.Marble,
+			floor,
+			Enum.Material.Marble,
+			{ reflectance = 0.1 }
+		)
+	end
+	LobbyUtil.part(
+		"PlazaCore",
+		Vector3.new(48, 2, 48),
+		LobbyUtil.cf(Vector3.new(0, 0.15, 0)),
+		C.MarblePolish,
+		floor,
+		Enum.Material.Marble,
+		{ reflectance = 0.18 }
+	)
+
+	-- Rose des vents
 	local rose = LobbyUtil.part(
 		"CompassRose",
-		Vector3.new(30, 0.3, 30),
-		LobbyUtil.cf(Vector3.new(0, 1.15, 0)),
+		Vector3.new(28, 0.35, 28),
+		LobbyUtil.cf(Vector3.new(0, 1.25, 0)),
 		C.Focus,
 		floor,
 		Enum.Material.Neon,
-		{ canCollide = false, transparency = 0.55, castShadow = false }
+		{ canCollide = false, transparency = 0.5, castShadow = false }
 	)
 	if rose then
-		LobbyUtil.pointLight(rose, C.Gold, 0.6, 28)
-		LobbyUtil.billboard(rose, "CONCORD HALL", C.GoldLite, Vector2.new(260, 40), 8)
+		LobbyUtil.pointLight(rose, C.Gold, 0.7, 30)
+		LobbyUtil.billboard(rose, "CONCORD HALL", C.GoldLite, Vector2.new(280, 42), 9)
 	end
-	local goldRing = LobbyUtil.part(
-		"GoldAnnulus",
-		Vector3.new(36, 0.2, 36),
-		LobbyUtil.cf(Vector3.new(0, 1.18, 0)),
-		C.Gold,
-		floor,
-		Enum.Material.Neon,
-		{ canCollide = false, transparency = 0.7 }
-	)
-	goldRing = goldRing
+	-- Étoile / croisillons rose
+	for i = 0, 3 do
+		LobbyUtil.part(
+			"RoseArm" .. i,
+			Vector3.new(2.2, 0.2, 22),
+			LobbyUtil.cf(Vector3.new(0, 1.35, 0), i * 45),
+			C.GoldLite,
+			floor,
+			Enum.Material.Neon,
+			{ canCollide = false, transparency = 0.25, castShadow = false }
+		)
+	end
 
-	-- Allées vers pads / forge / formes
+	-- Allées guidées (cyan/or = jouer, diagonales méta)
 	for _, lane in
 		{
-			{ Vector3.new(0, 0.2, -50), Vector3.new(24, 0.35, 90), 0 },
-			{ Vector3.new(-55, 0.2, 40), Vector3.new(80, 0.35, 18), 35 },
-			{ Vector3.new(55, 0.2, 40), Vector3.new(80, 0.35, 18), -35 },
-			{ Vector3.new(-70, 0.2, -5), Vector3.new(90, 0.35, 16), 90 },
-			{ Vector3.new(70, 0.2, -5), Vector3.new(90, 0.35, 16), 90 },
-			{ Vector3.new(0, 0.2, 70), Vector3.new(20, 0.35, 70), 0 },
+			{ Vector3.new(0, 0.25, -48), Vector3.new(26, 0.3, 96), 0, C.Ink600 },
+			{ Vector3.new(-52, 0.25, 38), Vector3.new(78, 0.3, 16), 38, C.Ink600 },
+			{ Vector3.new(52, 0.25, 38), Vector3.new(78, 0.3, 16), -38, C.Ink600 },
+			{ Vector3.new(-68, 0.25, -4), Vector3.new(88, 0.3, 15), 90, C.Ink600 },
+			{ Vector3.new(68, 0.25, -4), Vector3.new(88, 0.3, 15), 90, C.Ink600 },
+			{ Vector3.new(0, 0.25, 72), Vector3.new(18, 0.3, 72), 0, C.Ink600 },
 		}
 	do
 		LobbyUtil.part(
 			"Lane",
 			lane[2] :: Vector3,
 			LobbyUtil.cf(lane[1] :: Vector3, lane[3] :: number),
-			C.Ink600,
+			lane[4] :: Color3,
 			floor,
 			Enum.Material.Slate,
-			{ canCollide = false, transparency = 0.25 }
+			{ canCollide = false, transparency = 0.18, reflectance = 0.06 }
+		)
+	end
+
+	-- Incrustations carreaux or autour plaza
+	for i = 0, 15 do
+		local ang = (i / 16) * math.pi * 2
+		local r = 38
+		LobbyUtil.part(
+			"Inlay" .. i,
+			Vector3.new(3.2, 0.18, 3.2),
+			LobbyUtil.cf(Vector3.new(math.sin(ang) * r, 1.15, -math.cos(ang) * r), math.deg(ang)),
+			C.Gold,
+			floor,
+			Enum.Material.Metal,
+			{ canCollide = false, reflectance = 0.4, transparency = 0.15 }
 		)
 	end
 end
 
 local function buildColonnade(root: Model)
 	local colo = LobbyUtil.model("Colonnade", root)
+
+	-- Anneau intérieur dense (cathédrale — visible spawn)
+	local innerR = LobbyConfig.InnerColonnadeRadius
+	local innerN = LobbyConfig.InnerColumnCount
+	for i = 0, innerN - 1 do
+		local ang = (i / innerN) * math.pi * 2
+		local x = math.sin(ang) * innerR
+		local z = -math.cos(ang) * innerR
+		-- Une seule lumière sur colonne 0 (budget)
+		LobbyProps.column(colo, Vector3.new(x, 0, z), 38, math.deg(ang), i == 0)
+	end
+
+	-- Entablements entre colonnes intérieures
+	for i = 0, innerN - 1 do
+		local a0 = (i / innerN) * math.pi * 2
+		local a1 = ((i + 1) / innerN) * math.pi * 2
+		local mid = (a0 + a1) * 0.5
+		local bx = math.sin(mid) * (innerR + 0.5)
+		local bz = -math.cos(mid) * (innerR + 0.5)
+		local chord = (innerR * 2) * math.sin(math.pi / innerN)
+		LobbyUtil.part(
+			"Entablature",
+			Vector3.new(chord * 0.95, 2.2, 4),
+			LobbyUtil.cf(Vector3.new(bx, 37, bz), math.deg(mid)),
+			C.Ink600,
+			colo,
+			Enum.Material.Slate
+		)
+		LobbyUtil.part(
+			"EntablatureGold",
+			Vector3.new(chord * 0.9, 0.35, 4.2),
+			LobbyUtil.cf(Vector3.new(bx, 35.8, bz), math.deg(mid)),
+			C.GoldDark,
+			colo,
+			Enum.Material.Metal,
+			{ canCollide = false, reflectance = 0.3 }
+		)
+	end
+
+	-- Colonnade périmètre R=170
 	local R = LobbyConfig.ColonnadeRadius
 	local n = LobbyConfig.ColumnCount
 	for i = 0, n - 1 do
 		local ang = (i / n) * math.pi * 2
 		local x = math.sin(ang) * R
 		local z = -math.cos(ang) * R
-		LobbyProps.column(colo, Vector3.new(x, 0, z), LobbyConfig.ColumnHeight, math.deg(ang))
-		-- Bannières entre colonnes (1 sur 2)
+		LobbyProps.column(colo, Vector3.new(x, 0, z), LobbyConfig.ColumnHeight, math.deg(ang), false)
 		if i % 2 == 0 then
 			local midAng = ((i + 0.5) / n) * math.pi * 2
-			local bx = math.sin(midAng) * (R - 4)
-			local bz = -math.cos(midAng) * (R - 4)
-			local col = if i % 4 == 0 then C.Dawn else C.Dusk
-			LobbyProps.banner(colo, Vector3.new(bx, 0, bz), col, 22, math.deg(midAng))
+			local bx = math.sin(midAng) * (R - 5)
+			local bz = -math.cos(midAng) * (R - 5)
+			local isDawn = i % 4 == 0
+			LobbyProps.banner(
+				colo,
+				Vector3.new(bx, 0, bz),
+				if isDawn then C.Dawn else C.Dusk,
+				24,
+				math.deg(midAng),
+				if isDawn then "AUBE" else "CRÉPUSCULE"
+			)
 		end
 	end
-	-- Arches nord (vers pads / galerie)
-	LobbyProps.arch(colo, Vector3.new(0, 0, -118), 36, 28, 0)
-	LobbyProps.arch(colo, Vector3.new(-90, 0, -40), 28, 24, 55)
-	LobbyProps.arch(colo, Vector3.new(90, 0, -40), 28, 24, -55)
+
+	-- Façade nord : 3 grandes arches (vues dioramas / ciel) — cœur de la maquette
+	LobbyProps.grandArch(colo, Vector3.new(-48, 0, -125), 32, 32, 0, C.Lava, false)
+	LobbyProps.grandArch(colo, Vector3.new(0, 0, -128), 36, 34, 0, C.Focus, true)
+	LobbyProps.grandArch(colo, Vector3.new(48, 0, -125), 32, 32, 0, C.Sanctum, false)
+
+	-- Arches latérales
+	LobbyProps.grandArch(colo, Vector3.new(-95, 0, -35), 26, 26, 50, C.Dawn, false)
+	LobbyProps.grandArch(colo, Vector3.new(95, 0, -35), 26, 26, -50, C.Dusk, false)
+	LobbyProps.grandArch(colo, Vector3.new(-88, 0, 55), 24, 24, 130, C.Arcane, false)
+	LobbyProps.grandArch(colo, Vector3.new(88, 0, 55), 24, 24, -130, C.Forge, false)
+
+	-- Bannières factions visibles depuis spawn (maquette)
+	LobbyProps.banner(colo, Vector3.new(-38, 0, -55), C.Dawn, 30, 15, "AUBE")
+	LobbyProps.banner(colo, Vector3.new(38, 0, -55), C.Dusk, 30, -15, "CRÉPUSCULE")
+
+	-- God-rays plaza
+	LobbyProps.godRay(colo, Vector3.new(-12, 0, -20), C.GoldLite, 52)
+	LobbyProps.godRay(colo, Vector3.new(14, 0, -28), Color3.fromRGB(200, 190, 255), 46)
+	LobbyProps.godRay(colo, Vector3.new(0, 0, 10), C.Gold, 40)
 end
 
 local function makeQueuePad(
@@ -176,25 +263,45 @@ local function makeQueuePad(
 	label: string
 ): BasePart?
 	local zone = LobbyUtil.model("Pad_" .. mode, parent, "Pads")
-	LobbyProps.stairs(zone, localPos + Vector3.new(0, 0, 12), 3, 16, 0)
+	LobbyProps.stairs(zone, localPos + Vector3.new(0, 0, 14), 3, 18, 0)
 
-	local platform = LobbyUtil.part(
-		"Platform",
-		Vector3.new(LobbyConfig.PadRadius * 2, 1.2, LobbyConfig.PadRadius * 2),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 0.6, 0)),
+	-- Socle multi-étages (maquette pads circulaires)
+	LobbyUtil.part(
+		"Tier2",
+		Vector3.new(LobbyConfig.PadRadius * 2.4, 0.8, LobbyConfig.PadRadius * 2.4),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 0.3, 0)),
 		C.Ink700,
 		zone,
 		Enum.Material.Slate,
 		{ reflectance = 0.08 }
 	)
+	local platform = LobbyUtil.part(
+		"Platform",
+		Vector3.new(LobbyConfig.PadRadius * 2, 1.1, LobbyConfig.PadRadius * 2),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.0, 0)),
+		C.Ink600,
+		zone,
+		Enum.Material.Marble,
+		{ reflectance = 0.12 }
+	)
+	LobbyUtil.part(
+		"GoldRim",
+		Vector3.new(LobbyConfig.PadRadius * 2.15, 0.25, LobbyConfig.PadRadius * 2.15),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.55, 0)),
+		C.Gold,
+		zone,
+		Enum.Material.Metal,
+		{ canCollide = false, reflectance = 0.4 }
+	)
+
 	local pad = LobbyUtil.part(
 		"QueuePad",
-		Vector3.new(LobbyConfig.PadRadius * 1.7, 0.35, LobbyConfig.PadRadius * 1.7),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.25, 0)),
+		Vector3.new(LobbyConfig.PadRadius * 1.65, 0.4, LobbyConfig.PadRadius * 1.65),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.7, 0)),
 		color,
 		zone,
 		Enum.Material.Neon,
-		{ canCollide = false, transparency = 0.35, castShadow = false }
+		{ canCollide = false, transparency = 0.28, castShadow = false }
 	)
 	if not pad then
 		return nil
@@ -202,41 +309,66 @@ local function makeQueuePad(
 	pad:SetAttribute("BC_QueueMode", mode)
 	LobbyUtil.tag(pad, LobbyConfig.Tags.QueuePad)
 
-	local ring = LobbyUtil.part(
-		"Ring",
-		Vector3.new(LobbyConfig.PadRadius * 2.1, 0.2, LobbyConfig.PadRadius * 2.1),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.3, 0)),
-		color,
+	LobbyUtil.part(
+		"InnerRune",
+		Vector3.new(LobbyConfig.PadRadius * 0.9, 0.15, LobbyConfig.PadRadius * 0.9),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.85, 0)),
+		C.GoldLite,
 		zone,
 		Enum.Material.Neon,
-		{ canCollide = false, transparency = 0.65 }
+		{ canCollide = false, transparency = 0.4, castShadow = false }
 	)
-	ring = ring
 
 	local beam = LobbyUtil.part(
 		"LightColumn",
-		Vector3.new(2.5, 40, 2.5),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 22, 0)),
+		Vector3.new(3.2, 46, 3.2),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 25, 0)),
 		color,
 		zone,
 		Enum.Material.ForceField,
-		{ canCollide = false, transparency = 0.72, castShadow = false }
+		{ canCollide = false, transparency = 0.68, castShadow = false }
 	)
 	if beam then
-		LobbyUtil.pointLight(beam, color, 1.6, 36)
+		LobbyUtil.pointLight(beam, color, 1.7, 38)
 		LobbyUtil.tag(beam, LobbyConfig.Tags.PortalPulse)
+	end
+	-- Anneaux énergie montants
+	for _, y in { 8, 16, 24 } do
+		LobbyUtil.part(
+			"EnergyRing",
+			Vector3.new(5, 0.3, 5),
+			LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + y, 0)),
+			color,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, transparency = 0.55, castShadow = false }
+		)
 	end
 
 	LobbyUtil.emitter(pad, "PadEnergy", {
-		rate = 6,
+		rate = 5,
 		lifetime = NumberRange.new(1, 2.2),
-		speed = NumberRange.new(1, 3),
-		accel = Vector3.new(0, 6, 0),
+		speed = NumberRange.new(1, 3.5),
+		accel = Vector3.new(0, 7, 0),
 		color = ColorSequence.new(color, C.Bone),
-		lightEmission = 0.8,
+		lightEmission = 0.85,
 	})
 
-	LobbyUtil.billboard(pad, label, color, Vector2.new(200, 40), 6)
+	LobbyUtil.billboard(pad, label, color, Vector2.new(220, 42), 7)
+
+	-- Plaque or label (maquette)
+	local plaque = LobbyUtil.part(
+		"Plaque",
+		Vector3.new(8, 1.2, 0.4),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 2.4, 10)),
+		C.GoldDark,
+		zone,
+		Enum.Material.Metal,
+		{ reflectance = 0.3 }
+	)
+	if plaque then
+		LobbyUtil.billboard(plaque, if mode == "Casual" then "AMICAL" else "CLASSÉ", color, Vector2.new(140, 28), 1.5)
+	end
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "QueuePrompt"
@@ -248,11 +380,10 @@ local function makeQueuePad(
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.Parent = pad
 
-	-- Volume touch (mobile)
 	local touch = LobbyUtil.part(
 		"TouchVolume",
-		Vector3.new(LobbyConfig.PadRadius * 2.2, 6, LobbyConfig.PadRadius * 2.2),
-		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 3.5, 0)),
+		Vector3.new(LobbyConfig.PadRadius * 2.3, 7, LobbyConfig.PadRadius * 2.3),
+		LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 4, 0)),
 		color,
 		zone,
 		Enum.Material.ForceField,
@@ -266,18 +397,19 @@ local function makeQueuePad(
 	if platform then
 		LobbyUtil.part(
 			"AccentInlay",
-			Vector3.new(6, 0.2, 6),
-			LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.35, 0)),
+			Vector3.new(5, 0.2, 5),
+			LobbyUtil.cf(localPos + Vector3.new(0, LobbyConfig.PadRaise + 1.9, 0)),
 			C.Gold,
 			zone,
 			Enum.Material.Metal,
-			{ canCollide = false, reflectance = 0.35, transparency = 0.2 }
+			{ canCollide = false, reflectance = 0.4, transparency = 0.15 }
 		)
 	end
 	return pad
 end
 
 local function buildPads(root: Model)
+	-- Amical = cyan Focus ; Classé = or (spec) — Arcane en accent plaque seulement
 	makeQueuePad(root, Z.PadCasual, "Casual", C.Focus, "AMICAL")
 	makeQueuePad(root, Z.PadRanked, "Ranked", C.Gold, "CLASSÉ — Fair Kit")
 end
@@ -294,11 +426,11 @@ local function buildSpawns(root: Model)
 		local spawn = Instance.new("SpawnLocation")
 		spawn.Name = if i == 1 then "LobbySpawn" else ("LobbySpawnReserve" .. (i - 1))
 		spawn.Size = Vector3.new(6, 1, 6)
-		spawn.CFrame = LobbyUtil.cf(pos) * CFrame.Angles(0, math.rad(180), 0) -- face nord (pads)
+		spawn.CFrame = LobbyUtil.cf(pos) * CFrame.Angles(0, math.rad(180), 0)
 		spawn.Anchored = true
 		spawn.Transparency = 1
 		spawn.CanCollide = false
-		spawn.Duration = 4 -- ForceField
+		spawn.Duration = 4
 		spawn.Neutral = true
 		spawn.Enabled = true
 		spawn.Parent = spawns
@@ -315,82 +447,105 @@ local function buildFaction(root: Model, side: "Dawn" | "Dusk")
 
 	LobbyUtil.part(
 		"AlcovesFloor",
-		Vector3.new(55, 1.5, 55),
-		LobbyUtil.cf(center + Vector3.new(0, 0.2, 0)),
+		Vector3.new(58, 1.6, 58),
+		LobbyUtil.cf(center + Vector3.new(0, 0.25, 0)),
 		deep,
 		zone,
 		Enum.Material.Slate
 	)
-	-- Statue (soleil / croissant simplifié)
+	-- Murs alcôve
+	for _, off in {
+		Vector3.new(if isDawn then -28 else 28, 8, 0),
+		Vector3.new(0, 8, -28),
+		Vector3.new(0, 8, 28),
+	} do
+		local isX = math.abs(off.X) > 1
+		LobbyUtil.part(
+			"AlcoveWall",
+			if isX then Vector3.new(3, 16, 50) else Vector3.new(50, 16, 3),
+			LobbyUtil.cf(center + off),
+			deep,
+			zone,
+			Enum.Material.Basalt
+		)
+	end
+
 	if isDawn then
 		local sun = LobbyUtil.part(
 			"SunStatue",
-			Vector3.new(10, 10, 3),
-			LobbyUtil.cf(center + Vector3.new(-8, 12, 0)),
+			Vector3.new(12, 12, 3.5),
+			LobbyUtil.cf(center + Vector3.new(-6, 14, 0), 90) * CFrame.Angles(0, 0, math.rad(90)),
 			accent,
 			zone,
 			Enum.Material.Neon,
-			{ canCollide = false, shape = Enum.PartType.Cylinder, transparency = 0.15 }
+			{ canCollide = false, shape = Enum.PartType.Cylinder, transparency = 0.12 }
 		)
 		if sun then
-			sun.CFrame = LobbyUtil.cf(center + Vector3.new(-8, 12, 0), 90) * CFrame.Angles(0, 0, math.rad(90))
-			LobbyUtil.pointLight(sun, accent, 1.3, 30)
+			LobbyUtil.pointLight(sun, accent, 1.25, 28)
+		end
+		-- Rayons soleil
+		for i = 0, 5 do
+			LobbyUtil.part(
+				"SunRay" .. i,
+				Vector3.new(1.2, 10, 0.4),
+				LobbyUtil.cf(center + Vector3.new(-6, 14, 0), i * 30),
+				C.Gold,
+				zone,
+				Enum.Material.Neon,
+				{ canCollide = false, transparency = 0.35, castShadow = false }
+			)
 		end
 	else
 		local moon = LobbyUtil.part(
 			"MoonStatue",
-			Vector3.new(9, 9, 2.5),
-			LobbyUtil.cf(center + Vector3.new(8, 12, 0)),
+			Vector3.new(10, 10, 2.8),
+			LobbyUtil.cf(center + Vector3.new(6, 14, 0)),
 			accent,
 			zone,
 			Enum.Material.Neon,
-			{ canCollide = false, shape = Enum.PartType.Ball, transparency = 0.2 }
+			{ canCollide = false, shape = Enum.PartType.Ball, transparency = 0.15 }
 		)
 		if moon then
-			LobbyUtil.pointLight(moon, accent, 1.2, 28)
-			LobbyUtil.part(
-				"CrescentCut",
-				Vector3.new(6, 6, 3),
-				LobbyUtil.cf(center + Vector3.new(10, 13, 0)),
-				deep,
-				zone,
-				Enum.Material.SmoothPlastic,
-				{ canCollide = false, shape = Enum.PartType.Ball }
-			)
+			LobbyUtil.pointLight(moon, accent, 1.15, 26)
 		end
+		LobbyUtil.part(
+			"CrescentCut",
+			Vector3.new(7, 7, 3.2),
+			LobbyUtil.cf(center + Vector3.new(9, 15, 0)),
+			deep,
+			zone,
+			Enum.Material.SmoothPlastic,
+			{ canCollide = false, shape = Enum.PartType.Ball }
+		)
 	end
 
-	LobbyProps.banner(
-		zone,
-		center + Vector3.new(if isDawn then 10 else -10, 0, -18),
-		accent,
-		26,
-		if isDawn then 90 else -90
-	)
-	LobbyProps.banner(
-		zone,
-		center + Vector3.new(if isDawn then 10 else -10, 0, 18),
-		accent,
-		26,
-		if isDawn then 90 else -90
-	)
-	LobbyProps.column(zone, center + Vector3.new(if isDawn then 18 else -18, 0, -22), 28)
-	LobbyProps.column(zone, center + Vector3.new(if isDawn then 18 else -18, 0, 22), 28)
+	for _, zOff in { -20, 0, 20 } do
+		LobbyProps.banner(
+			zone,
+			center + Vector3.new(if isDawn then 14 else -14, 0, zOff),
+			accent,
+			28,
+			if isDawn then 90 else -90,
+			if isDawn then "AUBE" else "CRÉPUSCULE"
+		)
+	end
+	LobbyProps.column(zone, center + Vector3.new(if isDawn then 20 else -20, 0, -24), 30, 0, false)
+	LobbyProps.column(zone, center + Vector3.new(if isDawn then 20 else -20, 0, 24), 30, 0, false)
+	LobbyProps.brazier(zone, center + Vector3.new(if isDawn then 8 else -8, 0, -22), accent, false)
 
 	local host = LobbyUtil.part(
 		"FactionLabel",
 		Vector3.new(1, 1, 1),
-		LobbyUtil.cf(center + Vector3.new(0, 8, 0)),
+		LobbyUtil.cf(center + Vector3.new(0, 10, 0)),
 		accent,
 		zone,
 		Enum.Material.ForceField,
 		{ transparency = 1, canCollide = false }
 	)
 	if host then
-		LobbyUtil.billboard(host, title, accent, Vector2.new(280, 40), 0)
+		LobbyUtil.billboard(host, title, accent, Vector2.new(300, 42), 0)
 	end
 
-	-- Barre Score de Guerre (SurfaceGui simple)
 	local board = LobbyUtil.part(
 		"WarScoreBoard",
 		Vector3.new(18, 8, 0.6),
@@ -442,33 +597,45 @@ local function buildLeaderboardWall(root: Model)
 	local zone = LobbyUtil.model("Leaderboards", root, "Leaderboard")
 	for _, spec in
 		{
-			{ pos = Z.LeaderboardElo, kind = "Elo", title = "CLASSEMENT ELO", color = C.Focus },
+			{ pos = Z.LeaderboardElo, kind = "Elo", title = "CLASSEMENT", color = C.Focus },
 			{ pos = Z.LeaderboardFaction, kind = "FactionTop", title = "SCORE FACTION", color = C.Arcane },
 		}
 	do
 		local wall = LobbyUtil.part(
 			"Board_" .. spec.kind,
-			Vector3.new(28, 18, 1.2),
-			LobbyUtil.cf(spec.pos + Vector3.new(0, 12, 0), if spec.pos.X < 0 then 35 else -35),
+			Vector3.new(30, 20, 1.4),
+			LobbyUtil.cf(spec.pos + Vector3.new(0, 13, 0), if spec.pos.X < 0 then 35 else -35),
 			C.Ink700,
 			zone,
 			Enum.Material.Metal,
-			{ reflectance = 0.1 }
+			{ reflectance = 0.12 }
 		)
 		if not wall then
 			continue
 		end
 		local neon = LobbyUtil.part(
 			"FrameNeon",
-			Vector3.new(29, 19, 0.3),
-			wall.CFrame * CFrame.new(0, 0, -0.6),
+			Vector3.new(31.5, 21.5, 0.35),
+			wall.CFrame * CFrame.new(0, 0, -0.7),
 			spec.color,
 			zone,
 			Enum.Material.Neon,
-			{ canCollide = false, transparency = 0.4 }
+			{ canCollide = false, transparency = 0.35 }
 		)
 		if neon then
-			LobbyUtil.pointLight(neon, spec.color, 0.5, 16)
+			LobbyUtil.pointLight(neon, spec.color, 0.55, 18)
+		end
+		-- Colonnettes hologramme
+		for _, x in { -14, 14 } do
+			LobbyUtil.part(
+				"HoloPost",
+				Vector3.new(0.6, 18, 0.6),
+				wall.CFrame * CFrame.new(x, -1, -0.5),
+				spec.color,
+				zone,
+				Enum.Material.Neon,
+				{ canCollide = false, transparency = 0.4, castShadow = false }
+			)
 		end
 		if LobbyUtil.noteSurfaceGui() then
 			local sg = Instance.new("SurfaceGui")
@@ -482,7 +649,7 @@ local function buildLeaderboardWall(root: Model)
 			frame.Name = "Frame"
 			frame.Size = UDim2.fromScale(1, 1)
 			frame.BackgroundColor3 = C.Ink900
-			frame.BackgroundTransparency = 0.15
+			frame.BackgroundTransparency = 0.12
 			frame.Parent = sg
 			local title = Instance.new("TextLabel")
 			title.Name = "Title"
@@ -490,7 +657,7 @@ local function buildLeaderboardWall(root: Model)
 			title.Position = UDim2.fromOffset(10, 8)
 			title.BackgroundTransparency = 1
 			title.Font = Enum.Font.GothamBlack
-			title.TextSize = 26
+			title.TextSize = 28
 			title.TextColor3 = spec.color
 			title.Text = spec.title
 			title.TextXAlignment = Enum.TextXAlignment.Left
@@ -508,7 +675,7 @@ local function buildLeaderboardWall(root: Model)
 			list.Text = "Chargement…"
 			list.Parent = frame
 		end
-		LobbyProps.stairs(zone, spec.pos + Vector3.new(0, 0, 14), 3, 20, 0)
+		LobbyProps.stairs(zone, spec.pos + Vector3.new(0, 0, 16), 3, 22, 0)
 	end
 end
 
@@ -516,53 +683,66 @@ local function buildForms(root: Model)
 	local zone = LobbyUtil.model("FormsShowcase", root, "Forms")
 	LobbyUtil.part(
 		"Floor",
-		Vector3.new(60, 1.5, 50),
-		LobbyUtil.cf(Z.Forms + Vector3.new(0, 0.2, 0)),
+		Vector3.new(62, 1.6, 52),
+		LobbyUtil.cf(Z.Forms + Vector3.new(0, 0.25, 0)),
 		C.Ink700,
 		zone,
-		Enum.Material.Marble
+		Enum.Material.Marble,
+		{ reflectance = 0.1 }
 	)
-	LobbyProps.neonPortal(zone, Z.Forms + Vector3.new(0, 0, -22), C.Arcane, "VITRINE DES FORMES", 0)
+	LobbyProps.neonPortal(zone, Z.Forms + Vector3.new(0, 0, -24), C.Arcane, "VITRINE DES FORMES", 0, false)
+	LobbyProps.arsenalCase(zone, Z.Forms + Vector3.new(28, 0, 0), -90, true)
 	local spacing = 12
 	local startX = -spacing * 1.5
 	for i, form in LobbyConfig.FormsShowcase do
-		local pos = Z.Forms + Vector3.new(startX + (i - 1) * spacing, 0, 4)
-		LobbyProps.pedestalSaber(zone, pos, form.id, form.color)
+		local pos = Z.Forms + Vector3.new(startX + (i - 1) * spacing, 0, 6)
+		LobbyProps.pedestalSaber(zone, pos, form.id, form.color, i == 1)
 	end
-	LobbyProps.crystal(zone, Z.Forms + Vector3.new(-22, 0, -8), C.Focus, 1.2)
-	LobbyProps.crystal(zone, Z.Forms + Vector3.new(22, 0, -8), C.Arcane, 1.2)
+	LobbyProps.crystal(zone, Z.Forms + Vector3.new(-24, 0, -10), C.Focus, 1.3, false)
+	LobbyProps.crystal(zone, Z.Forms + Vector3.new(22, 0, -10), C.Arcane, 1.3, false)
+	LobbyProps.column(zone, Z.Forms + Vector3.new(-28, 0, 18), 24, 0, false)
+	LobbyProps.column(zone, Z.Forms + Vector3.new(28, 0, 18), 24, 0, false)
 end
 
 local function buildForge(root: Model)
 	local zone = LobbyUtil.model("Forge", root, "Forge")
 	LobbyUtil.part(
 		"Floor",
-		Vector3.new(60, 1.5, 50),
-		LobbyUtil.cf(Z.Forge + Vector3.new(0, 0.2, 0)),
+		Vector3.new(62, 1.6, 52),
+		LobbyUtil.cf(Z.Forge + Vector3.new(0, 0.25, 0)),
 		C.DawnDeep,
 		zone,
 		Enum.Material.Basalt
 	)
+	LobbyProps.forgeHearth(zone, Z.Forge + Vector3.new(0, 0, 22), 180, true)
 	LobbyUtil.part(
 		"Anvil",
-		Vector3.new(5, 2.5, 3),
-		LobbyUtil.cf(Z.Forge + Vector3.new(0, 2, 0)),
+		Vector3.new(5.5, 2.8, 3.2),
+		LobbyUtil.cf(Z.Forge + Vector3.new(0, 2.2, 0)),
+		C.Steel,
+		zone,
+		Enum.Material.Metal,
+		{ reflectance = 0.3 }
+	)
+	LobbyUtil.part(
+		"AnvilHorn",
+		Vector3.new(2.5, 1.2, 1.2),
+		LobbyUtil.cf(Z.Forge + Vector3.new(3.5, 2.8, 0)),
 		C.Steel,
 		zone,
 		Enum.Material.Metal,
 		{ reflectance = 0.25 }
 	)
-	LobbyProps.brazier(zone, Z.Forge + Vector3.new(-14, 0, 8), C.Forge, true)
-	LobbyProps.brazier(zone, Z.Forge + Vector3.new(14, 0, 8), C.Forge, false)
-	LobbyProps.brazier(zone, Z.Forge + Vector3.new(0, 0, -14), C.Lava, false)
+	LobbyProps.brazier(zone, Z.Forge + Vector3.new(-16, 0, 6), C.Forge, false)
+	LobbyProps.brazier(zone, Z.Forge + Vector3.new(16, 0, 6), C.Forge, false)
+	LobbyProps.brazier(zone, Z.Forge + Vector3.new(-10, 0, -16), C.Lava, false)
 
-	-- Rack de sabres
-	for i = 1, 5 do
-		local x = -16 + i * 6
+	for i = 1, 6 do
+		local x = -18 + i * 6
 		LobbyUtil.part(
 			"RackBlade" .. i,
-			Vector3.new(0.3, 4.5, 0.15),
-			LobbyUtil.cf(Z.Forge + Vector3.new(x, 5, 18)),
+			Vector3.new(0.32, 5, 0.16),
+			LobbyUtil.cf(Z.Forge + Vector3.new(x, 5.5, -20)),
 			if i % 2 == 0 then C.Focus else C.Gold,
 			zone,
 			Enum.Material.Neon,
@@ -570,25 +750,36 @@ local function buildForge(root: Model)
 		)
 		LobbyUtil.part(
 			"RackHilt" .. i,
-			Vector3.new(0.4, 1.2, 0.4),
-			LobbyUtil.cf(Z.Forge + Vector3.new(x, 2.5, 18)),
+			Vector3.new(0.45, 1.3, 0.45),
+			LobbyUtil.cf(Z.Forge + Vector3.new(x, 2.6, -20)),
 			C.Steel,
 			zone,
 			Enum.Material.Metal,
 			{ canCollide = false }
 		)
 	end
+	-- Étagères / caisses
+	for i = 1, 3 do
+		LobbyUtil.part(
+			"Crate" .. i,
+			Vector3.new(3.5, 2.2, 2.8),
+			LobbyUtil.cf(Z.Forge + Vector3.new(-22, 1.2, -8 + i * 6)),
+			Color3.fromRGB(90, 55, 30),
+			zone,
+			Enum.Material.Wood
+		)
+	end
 
 	local counter = LobbyUtil.part(
 		"ForgeCounter",
-		Vector3.new(16, 3, 4),
-		LobbyUtil.cf(Z.Forge + Vector3.new(0, 2, -18)),
+		Vector3.new(18, 3.2, 4.5),
+		LobbyUtil.cf(Z.Forge + Vector3.new(0, 2.1, -18)),
 		C.Ink600,
 		zone,
 		Enum.Material.Wood
 	)
 	if counter then
-		LobbyUtil.billboard(counter, "LA FORGE — Cosmétiques", C.Forge, Vector2.new(260, 36), 4)
+		LobbyUtil.billboard(counter, "LA FORGE — Cosmétiques", C.Forge, Vector2.new(280, 36), 4)
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Ouvrir La Forge"
 		prompt.ObjectText = "Boutique"
@@ -598,22 +789,31 @@ local function buildForge(root: Model)
 		prompt.Parent = counter
 		counter:SetAttribute("BC_OpenPanel", "Forge")
 	end
-	LobbyProps.column(zone, Z.Forge + Vector3.new(-24, 0, -18), 22)
-	LobbyProps.column(zone, Z.Forge + Vector3.new(24, 0, -18), 22)
+	LobbyProps.column(zone, Z.Forge + Vector3.new(-26, 0, -18), 24, 0, false)
+	LobbyProps.column(zone, Z.Forge + Vector3.new(26, 0, -18), 24, 0, false)
 end
 
 local function buildQuests(root: Model)
 	local zone = LobbyUtil.model("Quests", root, "Quests")
 	local board = LobbyUtil.part(
 		"QuestBoard",
-		Vector3.new(22, 12, 1),
-		LobbyUtil.cf(Z.Quests + Vector3.new(0, 8, 0)),
+		Vector3.new(24, 14, 1.2),
+		LobbyUtil.cf(Z.Quests + Vector3.new(0, 9, 0)),
 		Color3.fromRGB(90, 60, 40),
 		zone,
 		Enum.Material.Wood
 	)
+	LobbyUtil.part(
+		"QuestFrame",
+		Vector3.new(25.5, 15.2, 0.5),
+		LobbyUtil.cf(Z.Quests + Vector3.new(0, 9, -0.5)),
+		C.GoldDark,
+		zone,
+		Enum.Material.Metal,
+		{ canCollide = false, reflectance = 0.2 }
+	)
 	if board then
-		LobbyUtil.billboard(board, "QUÊTES", C.Gold, Vector2.new(160, 32), 8)
+		LobbyUtil.billboard(board, "QUÊTES", C.Gold, Vector2.new(160, 32), 9)
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Voir les quêtes"
 		prompt.ObjectText = "Tableau"
@@ -622,37 +822,59 @@ local function buildQuests(root: Model)
 		prompt.Parent = board
 		board:SetAttribute("BC_OpenPanel", "Quests")
 	end
+	-- Parchemins décoratifs
+	for i = 1, 5 do
+		LobbyUtil.part(
+			"Scroll" .. i,
+			Vector3.new(3.5, 4.5, 0.15),
+			LobbyUtil.cf(Z.Quests + Vector3.new(-8 + i * 3.2, 8, -0.4)),
+			Color3.fromRGB(220, 200, 160),
+			zone,
+			Enum.Material.Fabric,
+			{ canCollide = false }
+		)
+	end
 	local chest = LobbyUtil.part(
 		"DailyChest",
-		Vector3.new(4, 3, 3),
-		LobbyUtil.cf(Z.Quests + Vector3.new(12, 2, 6)),
+		Vector3.new(4.5, 3.2, 3.2),
+		LobbyUtil.cf(Z.Quests + Vector3.new(14, 2.2, 8)),
 		C.GoldDark,
 		zone,
 		Enum.Material.Metal,
-		{ reflectance = 0.2 }
+		{ reflectance = 0.25 }
 	)
 	if chest then
 		LobbyUtil.part(
 			"ChestGlow",
-			Vector3.new(3.2, 0.4, 2.2),
-			LobbyUtil.cf(Z.Quests + Vector3.new(12, 3.4, 6)),
+			Vector3.new(3.5, 0.45, 2.4),
+			LobbyUtil.cf(Z.Quests + Vector3.new(14, 3.7, 8)),
 			C.Gold,
 			zone,
 			Enum.Material.Neon,
-			{ canCollide = false, transparency = 0.3 }
+			{ canCollide = false, transparency = 0.25 }
 		)
 	end
+	LobbyProps.brazier(zone, Z.Quests + Vector3.new(-14, 0, 6), C.Gold, false)
 end
 
 local function buildTraining(root: Model)
 	local zone = LobbyUtil.model("TrainingYard", root, "Training")
 	LobbyUtil.part(
 		"YardFloor",
-		Vector3.new(80, 1.5, 50),
-		LobbyUtil.cf(Z.Training + Vector3.new(0, 0.2, 0)),
+		Vector3.new(82, 1.6, 52),
+		LobbyUtil.cf(Z.Training + Vector3.new(0, 0.25, 0)),
 		C.Ink700,
 		zone,
 		Enum.Material.Concrete
+	)
+	LobbyUtil.part(
+		"RingMark",
+		Vector3.new(36, 0.2, 36),
+		LobbyUtil.cf(Z.Training + Vector3.new(0, 1.1, 0)),
+		C.GoldDark,
+		zone,
+		Enum.Material.Neon,
+		{ canCollide = false, transparency = 0.55 }
 	)
 	for i = 1, 4 do
 		local x = -24 + (i - 1) * 16
@@ -661,14 +883,14 @@ local function buildTraining(root: Model)
 	local trainLabel = LobbyUtil.part(
 		"TrainLabel",
 		Vector3.new(1, 1, 1),
-		LobbyUtil.cf(Z.Training + Vector3.new(0, 6, -18)),
+		LobbyUtil.cf(Z.Training + Vector3.new(0, 7, -20)),
 		C.Bone,
 		zone,
 		Enum.Material.ForceField,
 		{ transparency = 1, canCollide = false }
 	)
 	if trainLabel then
-		LobbyUtil.billboard(trainLabel, "COUR D'ENTRAÎNEMENT", C.Muted, Vector2.new(280, 32), 0)
+		LobbyUtil.billboard(trainLabel, "COUR D'ENTRAÎNEMENT", C.Muted, Vector2.new(300, 32), 0)
 	end
 end
 
@@ -686,26 +908,25 @@ local function buildDiorama(parent: Instance, name: string, localPos: Vector3, k
 
 	LobbyUtil.part(
 		"PitFloor",
-		Vector3.new(48, 2, 48),
+		Vector3.new(52, 2, 52),
 		LobbyUtil.cf(localPos),
 		floorCol,
 		zone,
 		if kind == "Sanctum" then Enum.Material.Marble else Enum.Material.Basalt
 	)
-	-- Murs bas
 	for _, xz in
 		{
-			Vector3.new(0, 0, -25),
-			Vector3.new(0, 0, 25),
-			Vector3.new(-25, 0, 0),
-			Vector3.new(25, 0, 0),
+			Vector3.new(0, 0, -26),
+			Vector3.new(0, 0, 26),
+			Vector3.new(-26, 0, 0),
+			Vector3.new(26, 0, 0),
 		}
 	do
 		local isX = math.abs(xz.X) > 1
 		LobbyUtil.part(
 			"Wall",
-			if isX then Vector3.new(2, 10, 48) else Vector3.new(48, 10, 2),
-			LobbyUtil.cf(localPos + Vector3.new(xz.X, 5, xz.Z)),
+			if isX then Vector3.new(2.5, 12, 52) else Vector3.new(52, 12, 2.5),
+			LobbyUtil.cf(localPos + Vector3.new(xz.X, 6, xz.Z)),
 			C.Ink700,
 			zone,
 			Enum.Material.Rock
@@ -713,40 +934,59 @@ local function buildDiorama(parent: Instance, name: string, localPos: Vector3, k
 	end
 
 	if kind == "Obsidian" then
-		local lava = LobbyUtil.part(
-			"Lava",
-			Vector3.new(56, 1, 56),
-			LobbyUtil.cf(localPos + Vector3.new(0, -2, 0)),
+		-- Sphère lave (maquette « Arène de Lave »)
+		local orb = LobbyUtil.part(
+			"LavaOrb",
+			Vector3.new(22, 22, 22),
+			LobbyUtil.cf(localPos + Vector3.new(0, 18, -8)),
 			C.Lava,
 			zone,
 			Enum.Material.Neon,
-			{ canCollide = false, transparency = 0.2 }
+			{ canCollide = false, shape = Enum.PartType.Ball, transparency = 0.1, castShadow = false }
 		)
-		if lava then
-			LobbyUtil.pointLight(lava, C.Lava, 1.5, 40)
-			LobbyUtil.emitter(lava, "Ash", {
-				rate = 5,
+		if orb then
+			LobbyUtil.pointLight(orb, C.Lava, 1.4, 36)
+			LobbyUtil.emitter(orb, "Ash", {
+				rate = 4,
 				color = ColorSequence.new(C.Lava, Color3.fromRGB(40, 20, 10)),
 				accel = Vector3.new(0, 2, 0),
 			})
 		end
-		for _, c in
-			{ Vector3.new(-16, 4, -16), Vector3.new(16, 4, -16), Vector3.new(-16, 4, 16), Vector3.new(16, 4, 16) }
-		do
-			LobbyUtil.part(
-				"Pillar",
-				Vector3.new(3, 8, 3),
-				LobbyUtil.cf(localPos + c),
-				C.Ink600,
-				zone,
-				Enum.Material.Rock
-			)
+		LobbyUtil.part(
+			"LavaPool",
+			Vector3.new(48, 1, 48),
+			LobbyUtil.cf(localPos + Vector3.new(0, -1.5, 0)),
+			C.Lava,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, transparency = 0.35 }
+		)
+		for _, c in { Vector3.new(-16, 5, -16), Vector3.new(16, 5, -16), Vector3.new(-16, 5, 16), Vector3.new(16, 5, 16) } do
+			LobbyUtil.part("Pillar", Vector3.new(3.5, 10, 3.5), LobbyUtil.cf(localPos + c), C.Ink600, zone, Enum.Material.Rock)
 		end
 	elseif kind == "Sanctum" then
+		-- Temple flottant simplifié
+		LobbyUtil.part(
+			"FloatTemple",
+			Vector3.new(28, 4, 18),
+			LobbyUtil.cf(localPos + Vector3.new(0, 16, 0)),
+			C.Sanctum,
+			zone,
+			Enum.Material.Marble,
+			{ reflectance = 0.15 }
+		)
+		LobbyUtil.part(
+			"TempleTower",
+			Vector3.new(8, 14, 8),
+			LobbyUtil.cf(localPos + Vector3.new(0, 26, 0)),
+			C.MarbleLite,
+			zone,
+			Enum.Material.Marble
+		)
 		local sun = LobbyUtil.part(
 			"Astre",
-			Vector3.new(4, 4, 4),
-			LobbyUtil.cf(localPos + Vector3.new(-8, 14, 0)),
+			Vector3.new(5, 5, 5),
+			LobbyUtil.cf(localPos + Vector3.new(-14, 30, 0)),
 			C.GoldLite,
 			zone,
 			Enum.Material.Neon,
@@ -754,52 +994,60 @@ local function buildDiorama(parent: Instance, name: string, localPos: Vector3, k
 		)
 		local moon = LobbyUtil.part(
 			"Astre2",
-			Vector3.new(3.2, 3.2, 3.2),
-			LobbyUtil.cf(localPos + Vector3.new(8, 13, 0)),
+			Vector3.new(3.5, 3.5, 3.5),
+			LobbyUtil.cf(localPos + Vector3.new(14, 28, 0)),
 			C.Focus,
 			zone,
 			Enum.Material.Neon,
 			{ shape = Enum.PartType.Ball, canCollide = false }
 		)
 		if sun then
-			LobbyUtil.pointLight(sun, C.Gold, 1.2, 28)
+			LobbyUtil.pointLight(sun, C.Gold, 1.0, 24)
 		end
 		if moon then
-			LobbyUtil.pointLight(moon, C.Focus, 0.9, 24)
+			-- pas de 2e light si budget serré — Neon suffit
 		end
 		for z = -12, 12, 12 do
-			LobbyProps.column(zone, localPos + Vector3.new(-18, 12, z) - Vector3.new(0, 12, 0), 16)
-			LobbyProps.column(zone, localPos + Vector3.new(18, 12, z) - Vector3.new(0, 12, 0), 16)
+			LobbyProps.column(zone, localPos + Vector3.new(-18, 0, z), 14, 0, false)
+			LobbyProps.column(zone, localPos + Vector3.new(18, 0, z), 14, 0, false)
 		end
-	else -- Mirage
+	else
 		local water = LobbyUtil.part(
 			"Water",
-			Vector3.new(60, 1, 50),
-			LobbyUtil.cf(localPos + Vector3.new(0, -1.5, 0)),
+			Vector3.new(62, 1.2, 52),
+			LobbyUtil.cf(localPos + Vector3.new(0, -1.2, 0)),
 			accent,
 			zone,
 			Enum.Material.Glass,
-			{ canCollide = false, transparency = 0.4 }
+			{ canCollide = false, transparency = 0.35, reflectance = 0.35 }
 		)
 		if water then
-			LobbyUtil.pointLight(water, accent, 0.8, 30)
+			LobbyUtil.pointLight(water, accent, 0.75, 28)
 		end
 		for x = -18, 18, 12 do
 			LobbyUtil.part(
 				"Pier",
-				Vector3.new(1.2, 5, 1.2),
-				LobbyUtil.cf(localPos + Vector3.new(x, 0, -20)),
+				Vector3.new(1.4, 6, 1.4),
+				LobbyUtil.cf(localPos + Vector3.new(x, 0.5, -22)),
 				Color3.fromRGB(90, 70, 50),
 				zone,
 				Enum.Material.Wood
 			)
 		end
+		LobbyUtil.part(
+			"PierDeck",
+			Vector3.new(42, 1, 8),
+			LobbyUtil.cf(localPos + Vector3.new(0, 3.5, -22)),
+			Color3.fromRGB(100, 75, 50),
+			zone,
+			Enum.Material.Wood
+		)
 	end
 
 	local labelHost = LobbyUtil.part(
 		"DioramaTitle",
 		Vector3.new(1, 1, 1),
-		LobbyUtil.cf(localPos + Vector3.new(0, 16, 0)),
+		LobbyUtil.cf(localPos + Vector3.new(0, 22, 0)),
 		accent,
 		zone,
 		Enum.Material.ForceField,
@@ -811,32 +1059,28 @@ local function buildDiorama(parent: Instance, name: string, localPos: Vector3, k
 			Sanctum = "Sanctum des Deux Astres",
 			Mirage = "Quai Mirage",
 		}
-		LobbyUtil.billboard(labelHost, titles[kind] or name, accent, Vector2.new(240, 32), 0)
+		LobbyUtil.billboard(labelHost, titles[kind] or name, accent, Vector2.new(260, 32), 0)
 	end
 end
 
 local function buildGalleryAndDioramas(root: Model)
 	local gallery = LobbyUtil.model("ArenaGallery", root, "Gallery")
-	LobbyUtil.part(
-		"Balcony",
-		Vector3.new(200, 1.5, 18),
-		LobbyUtil.cf(Z.Gallery + Vector3.new(0, 8, 0)),
-		C.Marble,
-		gallery,
-		Enum.Material.Marble
-	)
-	LobbyProps.railing(gallery, Z.Gallery + Vector3.new(-95, 8, -8), Z.Gallery + Vector3.new(95, 8, -8), 3.5)
+	LobbyProps.balconySegment(gallery, Z.Gallery + Vector3.new(0, 8, 0), 190, 0)
+	-- Balcons latéraux
+	LobbyProps.balconySegment(gallery, Z.Gallery + Vector3.new(-70, 8, 20), 50, 90)
+	LobbyProps.balconySegment(gallery, Z.Gallery + Vector3.new(70, 8, 20), 50, -90)
+
 	local galLabel = LobbyUtil.part(
 		"GalLabel",
 		Vector3.new(1, 1, 1),
-		LobbyUtil.cf(Z.Gallery + Vector3.new(0, 14, 4)),
+		LobbyUtil.cf(Z.Gallery + Vector3.new(0, 16, 6)),
 		C.Bone,
 		gallery,
 		Enum.Material.ForceField,
 		{ transparency = 1, canCollide = false }
 	)
 	if galLabel then
-		LobbyUtil.billboard(galLabel, "GALERIE DES ARÈNES", C.GoldLite, Vector2.new(280, 32), 0)
+		LobbyUtil.billboard(galLabel, "GALERIE DES ARÈNES", C.GoldLite, Vector2.new(300, 34), 0)
 	end
 
 	local dios = LobbyUtil.model("Dioramas", root)
@@ -847,26 +1091,34 @@ end
 
 local function buildAmbience(root: Model)
 	local amb = LobbyUtil.model("Ambience", root)
-	-- Bassins plaza
-	LobbyProps.basin(amb, Vector3.new(-40, 0, 40), 10, C.FocusDark)
-	LobbyProps.basin(amb, Vector3.new(40, 0, 40), 10, C.Dusk)
-	-- Cristaux flottants épars
+	LobbyProps.basin(amb, Vector3.new(-42, 0, 42), 11, C.FocusDark, true)
+	LobbyProps.basin(amb, Vector3.new(42, 0, 42), 11, C.Dusk, false)
+	LobbyProps.basin(amb, Vector3.new(-55, 0, -20), 8, C.Arcane, false)
+	LobbyProps.basin(amb, Vector3.new(55, 0, -20), 8, C.Dawn, false)
+
+	LobbyProps.brazier(amb, Vector3.new(-30, 0, -70), C.Gold, false)
+	LobbyProps.brazier(amb, Vector3.new(30, 0, -70), C.Gold, false)
+	LobbyProps.brazier(amb, Vector3.new(-22, 0, 55), C.Forge, false)
+	LobbyProps.brazier(amb, Vector3.new(22, 0, 55), C.Forge, false)
+
 	for i, pos in
 		{
 			Vector3.new(-50, 2, -40),
 			Vector3.new(50, 2, -40),
-			Vector3.new(-20, 1, 50),
-			Vector3.new(20, 1, 50),
-			Vector3.new(0, 2, -60),
+			Vector3.new(-20, 1, 55),
+			Vector3.new(20, 1, 55),
+			Vector3.new(0, 2, -70),
+			Vector3.new(-70, 1, 20),
+			Vector3.new(70, 1, 20),
 		}
 	do
-		LobbyProps.crystal(amb, pos, if i % 2 == 0 then C.Focus else C.Arcane, 0.9 + (i % 3) * 0.15)
+		LobbyProps.crystal(amb, pos, if i % 2 == 0 then C.Focus else C.Arcane, 0.85 + (i % 3) * 0.12, false)
 	end
-	-- Poussière / god-ray host
+
 	local dustHost = LobbyUtil.part(
 		"DustHost",
-		Vector3.new(80, 1, 80),
-		LobbyUtil.cf(Vector3.new(0, 12, 0)),
+		Vector3.new(90, 1, 90),
+		LobbyUtil.cf(Vector3.new(0, 14, 0)),
 		C.Bone,
 		amb,
 		Enum.Material.ForceField,
@@ -875,7 +1127,7 @@ local function buildAmbience(root: Model)
 	if dustHost then
 		LobbyUtil.tag(dustHost, LobbyConfig.Tags.AmbientHost)
 		LobbyUtil.emitter(dustHost, "DustMotes", {
-			rate = 8,
+			rate = 6,
 			lifetime = NumberRange.new(5, 9),
 			speed = NumberRange.new(0.1, 0.5),
 			spread = Vector2.new(180, 180),
@@ -885,7 +1137,6 @@ local function buildAmbience(root: Model)
 		})
 	end
 
-	-- Sons ambiants (placeholders)
 	local soundHost = LobbyUtil.part(
 		"AmbientSoundHost",
 		Vector3.new(2, 2, 2),
@@ -965,7 +1216,6 @@ local function refreshLeaderboards(root: Model)
 	table.sort(rowsElo, function(a, b)
 		return a.mmr > b.mmr
 	end)
-	-- Placeholders si peu de joueurs
 	local placeholders = {
 		{ name = "LameDuCiel", mmr = 1520, rank = "Diamond" },
 		{ name = "AstraNova", mmr = 1380, rank = "Platinum" },
@@ -1047,7 +1297,6 @@ local function syncPlayerLeaderboardAttrs()
 end
 
 function LobbyBuilder.getSpawnCFrame(): CFrame
-	-- Face nord (−Z) vers les pads
 	return LobbyUtil.cf(Vector3.new(0, 4, 4)) * CFrame.Angles(0, math.rad(180), 0)
 end
 
@@ -1097,7 +1346,6 @@ function LobbyBuilder.ensure(parent: Instance): Model
 	buildGalleryAndDioramas(root)
 	buildAmbience(root)
 
-	-- PrimaryPart pour Pivot
 	local primary = root:FindFirstChild("CompassRose", true)
 	if primary and primary:IsA("BasePart") then
 		root.PrimaryPart = primary
