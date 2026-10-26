@@ -402,7 +402,7 @@ function CombatHud.start()
 	scoreLabel.Font = Theme.FontTitle
 	scoreLabel.TextSize = 20
 	scoreLabel.TextColor3 = Theme.Bone
-	scoreLabel.Text = "BO3 — 0 : 0"
+	scoreLabel.Text = "Amical · Manche 0 · 0 — 0 (FT2)"
 	scoreLabel.Parent = scorePlate
 
 	arenaLabel = Instance.new("TextLabel")
@@ -553,8 +553,11 @@ function CombatHud.start()
 			end
 		end
 
-		local mode = tostring(payload.mode or "Casual")
-		scoreLabel.Text = string.format("%s · R%d · %d : %d (FT%d)", mode, payload.roundNumber or 0, myWins, theirWins, payload.firstTo or 2)
+		local modeRaw = tostring(payload.mode or "Casual")
+		local modeFr = if modeRaw == "Ranked" then "Classé" else "Amical"
+		local roundN = payload.roundNumber or 0
+		local ft = payload.firstTo or 2
+		scoreLabel.Text = string.format("%s · Manche %d · %d — %d (FT%d)", modeFr, roundN, myWins, theirWins, ft)
 		arenaLabel.Text = tostring(payload.arenaName or payload.arenaId or "")
 		if payload.fairKit then
 			fairKitBadge.Visible = true
@@ -575,9 +578,16 @@ function CombatHud.start()
 		local phase = tostring(payload.phase)
 		local arenaBase = tostring(payload.arenaName or payload.arenaId or "")
 		if phase == "Lobby" then
-			arenaLabel.Text = if (payload.queueCount or 0) > 0
-				then string.format("%s · file %d", arenaBase, payload.queueCount)
-				else (if arenaBase ~= "" then arenaBase .. " · salon" else "Salon · duel auto sous peu")
+			local q = payload.queueCount or 0
+			if q > 0 then
+				arenaLabel.Text = if arenaBase ~= ""
+					then string.format("%s · file d'attente · %d joueur%s", arenaBase, q, if q > 1 then "s" else "")
+					else string.format("Salon · file d'attente · %d", q)
+			else
+				arenaLabel.Text = if arenaBase ~= ""
+					then arenaBase .. " · salon · duel auto sous peu"
+					else "Salon Concord · en attente d'un adversaire"
+			end
 			if versusPlate.Visible then
 				hideVersus()
 			end
@@ -586,7 +596,7 @@ function CombatHud.start()
 			rematchAnnounced = false
 		elseif phase == "Countdown" and payload.countdown then
 			local ceilN = math.max(1, math.ceil(payload.countdown))
-			arenaLabel.Text = arenaBase
+			arenaLabel.Text = if arenaBase ~= "" then arenaBase .. " · prêt…" else "Prêt…"
 			if lastPhase ~= "Countdown" then
 				local left = resolveFighterName(player.UserId)
 				local right = resolveFighterName(theirId or -9001)
@@ -608,7 +618,7 @@ function CombatHud.start()
 			end
 		elseif phase == "Fighting" and lastPhase == "Countdown" then
 			hideVersus()
-			arenaLabel.Text = arenaBase
+			arenaLabel.Text = if arenaBase ~= "" then arenaBase .. " · en duel" else "En duel"
 			countdownLabel.Text = "ALLEZ !"
 			countdownLabel.TextColor3 = Theme.Accent
 			countdownLabel.TextTransparency = 0
@@ -625,14 +635,14 @@ function CombatHud.start()
 			end
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
-			arenaLabel.Text = arenaBase .. " · entre deux rounds…"
+			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "entre deux manches…"
 		elseif phase == "MatchEnd" then
 			if versusPlate.Visible then
 				hideVersus()
 			end
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
-			arenaLabel.Text = arenaBase .. " · fin · revanche auto"
+			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "match terminé · revanche auto"
 			rematchAnnounced = true
 		elseif phase ~= "Countdown" then
 			if versusPlate.Visible then

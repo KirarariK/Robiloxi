@@ -491,9 +491,9 @@ function MetaHud.start()
 		y += mkSection(
 			content,
 			"Matchmaking",
-			"Casual = stats full · Ranked = " .. RankedConfig.FairKitBadge
+			"Amical = stats full · Classé = " .. RankedConfig.FairKitBadge
 		)
-		mkButton(content, "Queue Casual", y, function()
+		mkButton(content, "File Amical", y, function()
 			metaRemotes.QueueMatch:FireServer({ mode = "Casual" })
 		end, Theme.InkSoft)
 		y += 38
@@ -528,11 +528,11 @@ function MetaHud.start()
 		fairBody.TextWrapped = true
 		fairBody.TextColor3 = Theme.Muted
 		fairBody.Text =
-			"En Ranked, les passifs stats sont plafonnés Rare. Épique / Légendaire restent cosmétiques (pas de P2W)."
+			"En Classé, les passifs stats sont plafonnés Rare. Épique / Légendaire restent cosmétiques (pas de P2W)."
 		fairBody.Parent = fair
 		y += 76
 
-		mkButton(content, "Queue Ranked (Fair Kit)", y, function()
+		mkButton(content, "File Classé (Fair Kit)", y, function()
 			metaRemotes.QueueMatch:FireServer({ mode = "Ranked" })
 		end, Color3.fromRGB(30, 50, 48))
 		y += 44
