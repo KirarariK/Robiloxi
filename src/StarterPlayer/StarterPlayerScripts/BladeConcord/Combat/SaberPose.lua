@@ -16,11 +16,6 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 local Theme = require(Shared:WaitForChild("Theme"))
 local SaberBuilder = require(ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual"):WaitForChild("SaberBuilder"))
 
-local SoundHooks: any = nil
-pcall(function()
-	SoundHooks = require(script.Parent.Parent:WaitForChild("Audio"):WaitForChild("SoundHooks"))
-end)
-
 local SaberPose = {}
 
 local combatListenerEnabled = true
@@ -160,9 +155,7 @@ function SaberPose.applyMotorFallback(character: Model, actionId: string, attack
 		duration = if heavy then 0.1 else 0.065
 		easing = Enum.EasingStyle.Back
 		dir = Enum.EasingDirection.Out
-		if SoundHooks and character == Players.LocalPlayer.Character then
-			SoundHooks.play("Swing")
-		end
+		-- Swing SFX : CombatAnimator.playLocalSfx (évite double avec fallback Motor)
 	elseif actionId == "Startup" then
 		duration = if heavy then 0.2 else 0.13
 		easing = Enum.EasingStyle.Quad

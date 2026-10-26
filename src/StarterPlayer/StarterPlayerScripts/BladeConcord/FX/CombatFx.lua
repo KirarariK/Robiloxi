@@ -508,7 +508,7 @@ function CombatFx.start()
 				dashTrail(root, if kind == "FocusDash" then Theme.BladeFocus else Theme.BladeDash)
 			end
 			if SoundHooks then
-				SoundHooks.play("Dash")
+				SoundHooks.play(if kind == "FocusDash" then "FocusDash" else "Dash")
 			end
 		elseif kind == "ClashSparks" then
 			-- déjà géré via HitResolved ; bonus tip burst

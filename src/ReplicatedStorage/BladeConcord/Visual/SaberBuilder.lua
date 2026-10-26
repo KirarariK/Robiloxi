@@ -372,15 +372,11 @@ function SaberBuilder.attach(character: Model, bladeColor: Color3?): SaberBuild
 	clash.LightInfluence = 0
 	clash.Parent = tipAtt
 
-	local hum = attachSound(grip, "SaberHum", 0.12, true)
-	attachSound(blade, "SaberSwing", 0.4)
-	attachSound(blade, "SaberClash", 0.55)
-	attachSound(blade, "SaberHit", 0.5)
-	task.defer(function()
-		if hum.Parent and hum.SoundId ~= "" then
-			hum:Play()
-		end
-	end)
+	-- Sons attachés = stubs spatiaux (vol 0) — mix joué via SoundHooks (BC_Combat / Hum)
+	attachSound(grip, "SaberHum", 0, true)
+	attachSound(blade, "SaberSwing", 0)
+	attachSound(blade, "SaberClash", 0)
+	attachSound(blade, "SaberHit", 0)
 
 	model.PrimaryPart = grip
 

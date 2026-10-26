@@ -20,6 +20,7 @@ local ProceduralPlayer = require(Blade:WaitForChild("Animation"):WaitForChild("P
 
 local SaberPose = require(script.Parent:WaitForChild("SaberPose"))
 local AnimDebugOverlay = require(script.Parent:WaitForChild("AnimDebugOverlay"))
+local SoundHooks = require(script.Parent.Parent:WaitForChild("Audio"):WaitForChild("SoundHooks"))
 
 local CombatAnimator = {}
 
@@ -29,6 +30,13 @@ local useAnimatorPath = false
 local feintArmed: { [number]: boolean } = {}
 -- Showcase (touche P) : ignore CombatState pour ne pas écraser le cycle démo
 local combatPaused = false
+
+local function playLocalSfx(name: string, userId: number)
+	local lp = Players.LocalPlayer
+	if lp and userId == lp.UserId then
+		SoundHooks.play(name)
+	end
+end
 
 local function resolveCharacter(userId: number): Model?
 	if userId == -9001 then
@@ -184,6 +192,7 @@ local function applyState(userId: number, snap: any)
 			SaberPose.applyVisuals(character, actionId, attackKind)
 			character:SetAttribute("BC_AnimSet", setDef.id)
 			character:SetAttribute("BC_AnimClip", "Feint")
+			playLocalSfx("Feint", userId)
 			local playedFeint = playClip(character, setDef.id, "Feint", actionId)
 			if not playedFeint then
 				SaberPose.applyMotorFallback(character, "Guard", attackKind)
@@ -241,6 +250,11 @@ local function applyState(userId: number, snap: any)
 
 	character:SetAttribute("BC_AnimSet", setDef.id)
 	character:SetAttribute("BC_AnimClip", clipName)
+
+	-- Swing SFX : chemin Animator (SaberPose listener désactivé → plus de Swing via MotorFallback)
+	if actionId == "Active" then
+		playLocalSfx("Swing", userId)
+	end
 
 	local played = playClip(character, setDef.id, clipName, actionId)
 
