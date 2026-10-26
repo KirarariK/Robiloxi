@@ -111,6 +111,8 @@ LobbyConfig.Tags = {
 	CrystalSpin = "BC_CrystalSpin",
 	PortalPulse = "BC_PortalPulse",
 	AmbientHost = "BC_LobbyAmbient",
+	-- VFX polish : strips néon hall → NeonFx.bindTaggedStrips (budget emitters partagé)
+	NeonStrip = "BC_NeonStrip",
 }
 
 LobbyConfig.AmbientSoundIds = {

@@ -23,17 +23,23 @@
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LobbyConfig = require(script.Parent:WaitForChild("LobbyConfig"))
 local LobbyUtil = require(script.Parent:WaitForChild("LobbyUtil"))
 local LobbyLighting = require(script.Parent:WaitForChild("LobbyLighting"))
 local LobbyProps = require(script.Parent:WaitForChild("LobbyProps"))
 
+local NeonFx = require(
+	ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual"):WaitForChild("NeonFx")
+)
+
 local LobbyBuilder = {}
 
 local built: Model? = nil
 local padBound = false
 local duelBound = false
+local neonBound = false
 local duelPadsByIndex: { [number]: BasePart } = {}
 
 local C = LobbyConfig.Colors
@@ -144,7 +150,7 @@ local function buildAlleyDecor(root: Model)
 				{ canCollide = false, reflectance = 0.25 }
 			)
 		end
-		-- Portique néon occasionnel
+		-- Portique néon occasionnel (+ tag BC_NeonStrip pour VFX polish)
 		if i % 2 == 0 then
 			LobbyUtil.part(
 				"Overhang",
@@ -154,7 +160,7 @@ local function buildAlleyDecor(root: Model)
 				decor,
 				Enum.Material.Metal
 			)
-			LobbyUtil.part(
+			local strip = LobbyUtil.part(
 				"OverhangNeon",
 				Vector3.new(40, 0.25, 0.35),
 				LobbyUtil.cf(Vector3.new(0, 15.5, z)),
@@ -163,6 +169,9 @@ local function buildAlleyDecor(root: Model)
 				Enum.Material.Neon,
 				{ canCollide = false, transparency = 0.35, castShadow = false }
 			)
+			if strip then
+				LobbyProps.attachNeonStrip(strip, strip.Color)
+			end
 		end
 	end
 	-- Fin d’allée : portail simple
@@ -333,6 +342,8 @@ function LobbyBuilder.ensure(parent: Instance): Model
 				end
 			end
 		end
+		-- VFX : binders strips même si géométrie déjà posée (idempotent)
+		LobbyBuilder.bindNeonStrips()
 		return existing
 	end
 	if existing then
@@ -369,9 +380,30 @@ function LobbyBuilder.ensure(parent: Instance): Model
 
 	built = root
 	LobbyBuilder.applyLobbyLighting()
+	LobbyBuilder.bindNeonStrips()
 	LobbyUtil.warnBudget("ConcordHall")
 
 	return root
+end
+
+--[[
+	Attache NeonFx sur tous les BC_NeonStrip du hall (idempotent, budget restant).
+	Safe à rappeler après hydrate ArtPass existant.
+]]
+function LobbyBuilder.bindNeonStrips()
+	local root = built
+	if not root then
+		return
+	end
+	local hooks = NeonFx.hooksFromCounters(LobbyUtil.remainingEmitters, LobbyUtil.noteEmitter)
+	local n = NeonFx.bindTaggedStrips(root, hooks, NeonFx.HallStripEmitterCap)
+	if not neonBound then
+		neonBound = true
+		NeonFx.watchTaggedStrips(root, hooks, NeonFx.HallStripEmitterCap)
+	end
+	if n > 0 then
+		print(string.format("[BladeConcord] NeonFx strips bound=%d remainingEmitters=%d", n, LobbyUtil.remainingEmitters()))
+	end
 end
 
 function LobbyBuilder.bindQueuePads(enqueueFn: (Player, string) -> ())

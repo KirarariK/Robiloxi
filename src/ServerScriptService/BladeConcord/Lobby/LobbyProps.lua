@@ -4,14 +4,34 @@
 	colonnes ornées or, arches-vues, braseros, cristaux, bannières factions,
 	bassins, portails, piédestaux, balcons, vitrine arsenal, forge.
 	Lumières optionnelles — budget PointLight géré par LobbyUtil.
+	FX néon strips : LobbyProps.attachNeonStrip → Visual/NeonFx (tag BC_NeonStrip).
 ]]
 
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LobbyConfig = require(script.Parent:WaitForChild("LobbyConfig"))
 local LobbyUtil = require(script.Parent:WaitForChild("LobbyUtil"))
 
+local NeonFx = require(
+	ReplicatedStorage:WaitForChild("BladeConcord"):WaitForChild("Visual"):WaitForChild("NeonFx")
+)
+
 local LobbyProps = {}
 local C = LobbyConfig.Colors
+
+local function neonBudgetHooks()
+	return NeonFx.hooksFromCounters(LobbyUtil.remainingEmitters, LobbyUtil.noteEmitter)
+end
+
+--[[
+	Tag BC_NeonStrip + ParticleEmitter drift (budget LobbyUtil ≤30).
+	À appeler depuis World après pose d’un strip Neon Material.
+]]
+function LobbyProps.attachNeonStrip(part: BasePart, color: Color3?): ParticleEmitter?
+	NeonFx.tagStrip(part)
+	LobbyUtil.tag(part, LobbyConfig.Tags.NeonStrip)
+	return NeonFx.attachStripEmitter(part, color or part.Color, nil, neonBudgetHooks())
+end
 
 function LobbyProps.column(
 	parent: Instance,
@@ -199,6 +219,7 @@ function LobbyProps.grandArch(
 	)
 	if neon then
 		LobbyUtil.tag(neon, LobbyConfig.Tags.PortalPulse)
+		LobbyProps.attachNeonStrip(neon, col)
 		if withLight then
 			LobbyUtil.pointLight(neon, col, 0.55, 16)
 		end

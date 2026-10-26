@@ -54,9 +54,11 @@ check "RankedService" "src/ServerScriptService/BladeConcord/Meta/RankedService.l
 echo "-- Shared / visual / FX --"
 check "CombatConfig" "src/ReplicatedStorage/BladeConcord/Shared/CombatConfig.lua"
 check "SaberBuilder" "src/ReplicatedStorage/BladeConcord/Visual/SaberBuilder.lua"
+check "NeonFx" "src/ReplicatedStorage/BladeConcord/Visual/NeonFx.lua"
 check "AnimationSets" "src/ReplicatedStorage/BladeConcord/Animation/AnimationSets.lua"
 check "ProceduralPlayer" "src/ReplicatedStorage/BladeConcord/Animation/ProceduralPlayer.lua"
 check "CombatFx" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/FX/CombatFx.lua"
+check "LobbyNeon" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/FX/LobbyNeon.client.lua"
 check "CombatHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/Combat/CombatHud.lua"
 check "MetaHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/MetaHud.lua"
 check "LobbyHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/LobbyHud.lua"
@@ -99,6 +101,8 @@ pattern_check "DoubleJump MobilityIntent" "src/ServerScriptService/BladeConcord/
 pattern_check "Force Push F" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/Combat/InputCombat.lua" "KeyCode.F"
 pattern_check "LobbySpawn prefer" "src/ServerScriptService/BladeConcord/Combat/ArenaService.lua" "LobbySpawn"
 pattern_check "toClientSnapshot nil-safe" "src/ServerScriptService/BladeConcord/Data/PlayerDataService.lua" "PlayerProfile?"
+pattern_check "NeonStrip tag" "src/ServerScriptService/BladeConcord/Lobby/LobbyConfig.lua" "BC_NeonStrip"
+pattern_check "NeonFx bind" "src/ServerScriptService/BladeConcord/Lobby/LobbyBuilder.lua" "bindNeonStrips"
 
 echo
 echo "Result: $PASS ok · $FAIL missing · pattern_fail=$PATTERN_FAIL"

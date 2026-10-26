@@ -99,6 +99,21 @@ function LobbyUtil.pointLight(parent: BasePart, color: Color3, brightness: numbe
 	return light
 end
 
+function LobbyUtil.remainingEmitters(): number
+	return math.max(0, LobbyConfig.Budget.MaxEmitters - budget.emitters)
+end
+
+--[[
+	Réserve 1 slot emitter (NeonFx / helpers externes). False si budget plein.
+]]
+function LobbyUtil.noteEmitter(): boolean
+	if budget.emitters >= LobbyConfig.Budget.MaxEmitters then
+		return false
+	end
+	budget.emitters += 1
+	return true
+end
+
 function LobbyUtil.emitter(
 	parent: BasePart,
 	name: string,
@@ -114,7 +129,7 @@ function LobbyUtil.emitter(
 		lightEmission: number?,
 	}
 ): ParticleEmitter?
-	if budget.emitters >= LobbyConfig.Budget.MaxEmitters then
+	if not LobbyUtil.noteEmitter() then
 		return nil
 	end
 	local att = parent:FindFirstChildOfClass("Attachment")
@@ -147,7 +162,6 @@ function LobbyUtil.emitter(
 	pe.LightInfluence = 0.25
 	pe.LockedToPart = false
 	pe.Parent = att
-	budget.emitters += 1
 	return pe
 end
 
