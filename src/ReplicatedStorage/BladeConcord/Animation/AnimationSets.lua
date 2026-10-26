@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Catalogue des ≥20 sets d'animations Blade Concord (28 au Pass fluidité).
+	Catalogue des ≥20 sets d'animations Blade Concord (32 au Pass continue).
 	Un set = Idle combat + Startup + Active + Recovery (+ Guard).
 	Sélection runtime : forme × rareté, ou set nommé (riposte, focus, KO…).
 ]]
@@ -673,6 +673,91 @@ local SETS: { AnimationSetDef } = {
 			priority = Enum.AnimationPriority.Movement,
 		}),
 	},
+	-- 29–32 Pass continue — situations vraiment distinctes
+	{
+		id = "Concord_RiposteBrace",
+		index = 29,
+		displayName = "Concord · Brace Riposte",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "riposte", "lock" },
+		covers = "RiposteLock — garde figée haute, pointe avant, micro-breath tendu",
+		style = style({
+			anticipation = 0.35,
+			swingArc = 0.55,
+			planeBias = 0.2,
+			followThrough = 0.15,
+			guardPitch = -0.95,
+			idleLean = 0.12,
+			torsoTwist = 0.08,
+			offhand = 0.55,
+			tempo = 0.85,
+			priority = Enum.AnimationPriority.Action3,
+		}),
+	},
+	{
+		id = "Concord_AegisAbsorb",
+		index = 30,
+		displayName = "Concord · Absorb Aegis",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "aegis", "guard" },
+		covers = "Garde Aegis Légendaire — stance basse, épaules lourdes, absorb avant counter",
+		style = style({
+			anticipation = 0.9,
+			swingArc = 0.8,
+			planeBias = 0.7,
+			followThrough = 0.45,
+			guardPitch = -0.35,
+			idleLean = -0.06,
+			torsoTwist = 0.12,
+			offhand = 0.65,
+			tempo = 0.72,
+			priority = Enum.AnimationPriority.Action,
+		}),
+	},
+	{
+		id = "Concord_ExhaustDrift",
+		index = 31,
+		displayName = "Concord · Dérive d'Épuisement",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "exhaust" },
+		covers = "Idle exhaustion — breath lourd, lame basse, lean affaissé",
+		style = style({
+			anticipation = 0.4,
+			swingArc = 0.7,
+			planeBias = 0.5,
+			followThrough = 0.7,
+			guardPitch = -0.25,
+			idleLean = -0.18,
+			torsoTwist = 0.08,
+			offhand = 0.2,
+			tempo = 0.65,
+			priority = Enum.AnimationPriority.Idle,
+		}),
+	},
+	{
+		id = "Concord_MurWindup",
+		index = 32,
+		displayName = "Concord · Wind-up Mur",
+		formId = nil,
+		rarity = nil,
+		tags = { "universal", "aegis", "heavy" },
+		covers = "Startup Heavy Aegis Légendaire — chambre basse explosive avant counter",
+		style = style({
+			anticipation = 1.55,
+			swingArc = 1.6,
+			planeBias = 0.88,
+			followThrough = 0.95,
+			guardPitch = -0.4,
+			idleLean = -0.04,
+			torsoTwist = 0.25,
+			offhand = 0.7,
+			tempo = 0.82,
+			priority = Enum.AnimationPriority.Action2,
+		}),
+	},
 }
 
 local byId: { [string]: AnimationSetDef } = {}
@@ -727,7 +812,7 @@ function AnimationSets.resolveForSnapshot(snap: {
 	attackKind: string?,
 	formId: string?,
 	formRarity: string?,
-	flags: { riposteBuff: boolean?, stagger: boolean? }?,
+	flags: { riposteBuff: boolean?, stagger: boolean?, exhausted: boolean? }?,
 }): (AnimationSetDef, ClipName)
 	local actionId = snap.actionId or "Idle"
 	local formSet = AnimationSets.getByForm(snap.formId, snap.formRarity)
@@ -755,10 +840,15 @@ function AnimationSets.resolveForSnapshot(snap: {
 	if actionId == "Dash" then
 		return byId.Concord_MobilityWeave, "Dash"
 	end
-	if actionId == "RiposteLock" or (snap.flags and snap.flags.riposteBuff and actionId == "Startup") then
-		if snap.flags and snap.flags.riposteBuff then
-			return byId.Concord_RiposteThrust, "Riposte"
+	-- RiposteLock : brace figée (set 29) — distinct du thrust Startup riposteBuff
+	if actionId == "RiposteLock" then
+		local brace = byId.Concord_RiposteBrace
+		if brace then
+			return brace, "Guard"
 		end
+	end
+	if snap.flags and snap.flags.riposteBuff and actionId == "Startup" then
+		return byId.Concord_RiposteThrust, "Riposte"
 	end
 
 	local heavy = snap.attackKind == "Heavy"
@@ -767,6 +857,13 @@ function AnimationSets.resolveForSnapshot(snap: {
 		local clash = byId.Concord_ClashRebound
 		if clash then
 			return clash, "ActiveHeavy"
+		end
+	end
+	-- Wind-up Mur : Startup Heavy Aegis Legendary
+	if actionId == "Startup" and heavy and snap.formId == "Aegis" and snap.formRarity == "Legendary" then
+		local mur = byId.Concord_MurWindup
+		if mur then
+			return mur, "StartupHeavy"
 		end
 	end
 	-- Pression de fil : Startup Light Legendary (tempo/lean distincts de la forme)
@@ -784,7 +881,13 @@ function AnimationSets.resolveForSnapshot(snap: {
 	elseif actionId == "Recovery" then
 		return formSet, if heavy then "RecoveryHeavy" else "RecoveryLight"
 	elseif actionId == "Guard" then
-		-- Parade brace : Duelant Epic garde déjà ChipWard ; ParryBrace pour Guard + stagger flag clear
+		if snap.formId == "Aegis" and snap.formRarity == "Legendary" then
+			local absorb = byId.Concord_AegisAbsorb
+			if absorb then
+				return absorb, "Guard"
+			end
+		end
+		-- Parade brace : Duelant Legendary
 		if snap.formId == "Duelant" and snap.formRarity == "Legendary" then
 			local brace = byId.Concord_ParryBrace
 			if brace then
@@ -793,6 +896,12 @@ function AnimationSets.resolveForSnapshot(snap: {
 		end
 		return formSet, "Guard"
 	elseif actionId == "Idle" then
+		if snap.flags and snap.flags.exhausted then
+			local drift = byId.Concord_ExhaustDrift
+			if drift then
+				return drift, "Idle"
+			end
+		end
 		return formSet, "Idle"
 	end
 

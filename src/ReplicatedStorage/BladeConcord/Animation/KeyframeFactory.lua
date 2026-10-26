@@ -3,14 +3,32 @@
 	Construit des KeyframeSequence R15 (+ HiltGrip + jambes) à partir des StyleParams.
 	Pass fluidité : densification Active/Startup/Recovery, ease curves, shoulder roll,
 	weight shift LowerTorso, ancrage RightUpperLeg/LeftUpperLeg (Dodge/Dash/Heavy).
+	Pass continue : Idle breathing, Guard enter/exit densifiés, Feint 8 KF,
+	Track Length = CombatConfig Light/Heavy (frame data).
 	Sources : docs Pose / KeyframeSequence / KeyframeSequenceProvider.
 ]]
 
+local Shared = script.Parent.Parent:WaitForChild("Shared")
+local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local AnimationSets = require(script.Parent:WaitForChild("AnimationSets"))
 
 export type JointMap = { [string]: CFrame }
 
 local KeyframeFactory = {}
+
+-- Durées attaque = frame data serveur (tempo n'étire plus Startup/Active/Recovery)
+local function attackPhaseDuration(clipName: string): number
+	local heavy = string.find(clipName, "Heavy") ~= nil
+	local cfg = if heavy then CombatConfig.Heavy else CombatConfig.Light
+	if string.sub(clipName, 1, 7) == "Startup" then
+		return cfg.Startup
+	elseif string.sub(clipName, 1, 6) == "Active" then
+		return cfg.Active
+	elseif string.sub(clipName, 1, 8) == "Recovery" then
+		return cfg.Recovery
+	end
+	return 0.3
+end
 
 local function ang(xDeg: number, yDeg: number, zDeg: number): CFrame
 	return CFrame.Angles(math.rad(xDeg), math.rad(yDeg), math.rad(zDeg))
@@ -179,32 +197,45 @@ local function sampleJoints(
 	local joints: JointMap = {}
 
 	if phaseKind == "Idle" then
+		-- Dual channel : breath (UpperTorso) + micro-sway (phase décalée) — Animation Editor feel
 		local bob = math.sin(a * math.pi * 2)
 		local bobEase = easeInOut((bob + 1) * 0.5) * 2 - 1
-		joints.LowerTorso = ang(2 + lean * 20, lean * 15, bobEase * 1.5) * CFrame.new(lean * 0.02, bobEase * 0.01, 0)
-		joints.UpperTorso = ang(-3 + bobEase * 4, lean * 10, bobEase * 5)
-		joints.Head = ang(-4, lean * -8, bobEase * 2)
-		joints.RightUpperArm = ang(-25 + bobEase * 5, -15, 20 + lean * 20 + bobEase * 3)
-		joints.RightLowerArm = ang(-35, 10, bobEase * 2)
-		joints.RightHand = ang(0, 0, 8 + bobEase * 2)
-		joints.HiltGrip = ang(bobEase * 6, bobEase * 4, bobEase * 2)
-		joints.LeftUpperArm = ang(-15, 20, -off * 25)
+		local breath = math.sin(a * math.pi * 2) -- inhale → exhale sur la boucle
+		local breathEase = easeInOut((breath + 1) * 0.5) * 2 - 1
+		local sway = math.sin(a * math.pi * 2 + 1.15)
+		local swayEase = easeInOut((sway + 1) * 0.5) * 2 - 1
+		joints.LowerTorso = ang(2 + lean * 20 + breathEase * 0.8, lean * 15 + swayEase * 1.2, bobEase * 1.2)
+			* CFrame.new(lean * 0.02 + swayEase * 0.008, 0.008 + breathEase * 0.014, swayEase * 0.004)
+		joints.UpperTorso = ang(-3 + breathEase * 3.2 + bobEase * 1.2, lean * 10 + swayEase * 2.5, bobEase * 3 + swayEase * 2)
+		joints.Head = ang(-4 + breathEase * 1.5, lean * -8 + swayEase * -1.5, bobEase * 1.5)
+		joints.RightUpperArm = ang(-25 + bobEase * 4 + breathEase * 1.5, -15 + swayEase * 2, 20 + lean * 20 + bobEase * 2.5)
+		joints.RightLowerArm = ang(-35, 10, bobEase * 1.5)
+		joints.RightHand = ang(0, 0, 8 + bobEase * 1.5)
+		joints.HiltGrip = ang(bobEase * 4 + breathEase * 2, bobEase * 3 + swayEase * 2, bobEase * 1.5)
+		joints.LeftUpperArm = ang(-15 + breathEase * 1.2, 20 + swayEase * 2, -off * 25)
 		joints.LeftLowerArm = ang(-40, -10, 0)
-		joints.RightUpperLeg = ang(bobEase * 1.5, 0, lean * 4)
-		joints.LeftUpperLeg = ang(-bobEase * 1.5, 0, -lean * 4)
+		joints.RightUpperLeg = ang(bobEase * 1.2 + breathEase * 0.4, swayEase * 0.8, lean * 4)
+		joints.LeftUpperLeg = ang(-bobEase * 1.2 - breathEase * 0.4, -swayEase * 0.8, -lean * 4)
 	elseif phaseKind == "Guard" then
-		local g = easeOutQuad(a)
-		joints.LowerTorso = ang(4 + g * 1, -twist * 20, hipShift * 4) * CFrame.new(-hipShift * 0.03, 0, 0)
-		joints.UpperTorso = ang(-6, twist * 25, -shoulderRoll * 0.15)
-		joints.Head = ang(-8, -twist * 10, 0)
-		joints.RightUpperArm = ang(s.guardPitch * 70 - 20, -55, 35 + shoulderRoll * 0.25)
-		joints.RightLowerArm = ang(-70, 25, 8)
-		joints.RightHand = ang(10, 0, -15)
-		joints.HiltGrip = ang(-25, 20, -10)
-		joints.LeftUpperArm = ang(-40, 50, -off * 40)
-		joints.LeftLowerArm = ang(-55, 0, 0)
-		joints.RightUpperLeg = ang(3, 4, 2)
-		joints.LeftUpperLeg = ang(2, -6, -3)
+		-- a : 0 = enter (depuis Idle-ish), 1 = hold ; micro-breath en fin de boucle
+		local g = easeOutCubic(a)
+		local holdBreath = math.sin(a * math.pi * 2) * 0.35 * easeInOut(math.clamp((a - 0.55) / 0.45, 0, 1))
+		joints.LowerTorso = ang(4 + g * 1.2 + holdBreath * 0.6, -twist * 20 * g, hipShift * 4 * g)
+			* CFrame.new(-hipShift * 0.03 * g, holdBreath * 0.008, 0)
+		joints.UpperTorso = ang(-6 * g - holdBreath * 1.2, twist * 25 * g, -shoulderRoll * 0.15 * g + holdBreath * 1.5)
+		joints.Head = ang(-8 * g, -twist * 10 * g, holdBreath * 0.8)
+		joints.RightUpperArm = ang(
+			lerpNumber(-25, s.guardPitch * 70 - 20, g) + holdBreath * 2,
+			lerpNumber(-15, -55, g),
+			lerpNumber(20, 35 + shoulderRoll * 0.25, g)
+		)
+		joints.RightLowerArm = ang(lerpNumber(-35, -70, g), lerpNumber(10, 25, g), 8 * g)
+		joints.RightHand = ang(10 * g, 0, lerpNumber(8, -15, g))
+		joints.HiltGrip = ang(lerpNumber(0, -25, g), lerpNumber(0, 20, g), lerpNumber(0, -10, g))
+		joints.LeftUpperArm = ang(lerpNumber(-15, -40, g), lerpNumber(20, 50, g), -off * 40 * g)
+		joints.LeftLowerArm = ang(lerpNumber(-40, -55, g), 0, 0)
+		joints.RightUpperLeg = ang(3 * g, 4 * g, 2 * g)
+		joints.LeftUpperLeg = ang(2 * g, -6 * g, -3 * g)
 	elseif phaseKind == "Antici" then
 		local e = easeInCubic(a)
 		local chamberPitch = -55 - ant * 40 * plane
@@ -333,11 +364,18 @@ local function sampleJoints(
 		joints.RightUpperLeg = ang(-15 * d, 8 * d, 10 * d)
 		joints.LeftUpperLeg = ang(-10 * d, -6 * d, -8 * d)
 	elseif phaseKind == "Feint" then
-		local early = a < 0.45
-		if early then
-			return sampleJoints(s, "Antici", easeOutQuad(a / 0.45), false)
+		-- Chambre → fake peak → abort → snap Guard (plus de KF lisibles)
+		if a < 0.38 then
+			return sampleJoints(s, "Antici", easeOutQuad(a / 0.38), false)
+		elseif a < 0.48 then
+			-- Hold fake au pic anticipation
+			return sampleJoints(s, "Antici", 1, false)
+		elseif a < 0.62 then
+			local ant = sampleJoints(s, "Antici", 1, false)
+			local mid = sampleJoints(s, "Guard", 0.35, false)
+			return lerpJoints(ant, mid, easeInCubic((a - 0.48) / 0.14))
 		end
-		return sampleJoints(s, "Guard", easeInOut((a - 0.45) / 0.55), false)
+		return sampleJoints(s, "Guard", easeOutCubic((a - 0.62) / 0.38), false)
 	elseif phaseKind == "Riposte" then
 		local e = easeOutCubic(a)
 		joints.LowerTorso = ang(6 * e, 0, 0) * CFrame.new(0, 0, -0.04 * e)
@@ -378,11 +416,20 @@ function KeyframeFactory.buildClip(
 
 	if clipName == "Idle" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Idle, true)
-		local dur = 1.2 / tempo
-		-- 8 keyframes — bob fluide
-		for i = 0, 7 do
-			local u = i / 8
-			local name = if i == 0 then "Idle0" elseif i == 4 then "IdleMid" elseif i == 8 then "IdleEnd" else nil
+		local dur = 1.6 / tempo -- cycle breath un peu plus lent = lisible
+		-- 12 segments + close — breathing UpperTorso + micro-sway
+		for i = 0, 11 do
+			local u = i / 12
+			local name: string? = nil
+			if i == 0 then
+				name = "Idle0"
+			elseif i == 3 then
+				name = "IdleInhale"
+			elseif i == 6 then
+				name = "IdleMid"
+			elseif i == 9 then
+				name = "IdleExhale"
+			end
 			addKeyframe(seq, dur * u, sampleJoints(style, "Idle", u, false), name)
 		end
 		addKeyframe(seq, dur, sampleJoints(style, "Idle", 1, false), "IdleEnd")
@@ -391,14 +438,30 @@ function KeyframeFactory.buildClip(
 
 	if clipName == "Guard" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action, true)
-		local dur = 0.9 / tempo
-		addKeyframe(seq, 0, sampleJoints(style, "Guard", 0, false), "GuardIn")
-		addKeyframe(seq, dur * 0.2, sampleJoints(style, "Guard", 0.35, false))
-		addKeyframe(seq, dur * 0.5, sampleJoints(style, "Guard", 0.7, false), "GuardSettle")
-		addKeyframe(seq, dur * 0.75, sampleJoints(style, "Guard", 0.9, false))
-		addKeyframe(seq, dur, sampleJoints(style, "Guard", 1, false), "GuardHold")
+		local dur = 1.05 / tempo
+		--[[
+			Boucle seamless (KF0 ≈ KF end) : hold + micro-breath densifié.
+			Enter / exit = fadeIn 0.16 / fadeOut 0.18 (CombatAnimator) depuis/vers Idle —
+			évite un pop Raise→Hold à chaque loop.
+		]]
+		local function guardBreath(phase: number): JointMap
+			-- phase 0..1 → alpha hold 0.88..1.0 avec oscillation
+			local wave = math.sin(phase * math.pi * 2)
+			local alpha = 0.9 + 0.1 * easeInOut((wave + 1) * 0.5)
+			return sampleJoints(style, "Guard", alpha, false)
+		end
+		addKeyframe(seq, 0, guardBreath(0), "GuardHoldA")
+		addKeyframe(seq, dur * 0.1, guardBreath(0.1), "GuardMicro1")
+		addKeyframe(seq, dur * 0.22, guardBreath(0.22), "GuardBreathIn")
+		addKeyframe(seq, dur * 0.35, guardBreath(0.35), "GuardMicro2")
+		addKeyframe(seq, dur * 0.5, guardBreath(0.5), "GuardSettle")
+		addKeyframe(seq, dur * 0.62, guardBreath(0.62), "GuardMicro3")
+		addKeyframe(seq, dur * 0.75, guardBreath(0.75), "GuardBreathOut")
+		addKeyframe(seq, dur * 0.88, guardBreath(0.88), "GuardMicro4")
+		addKeyframe(seq, dur, guardBreath(1), "GuardHoldB") -- ≈ GuardHoldA
 		return seq
 	end
+
 
 	if clipName == "Dodge" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Movement, false)
@@ -456,14 +519,19 @@ function KeyframeFactory.buildClip(
 
 	if clipName == "Feint" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action2, false)
-		local dur = 0.32 / tempo
+		-- Aligné fenêtre feinte (cancel Startup Light avant Active ≈ CombatConfig.Light.Startup)
+		local dur = math.max(0.22, CombatConfig.Light.Startup * 0.95) / math.max(0.85, math.min(tempo, 1.35))
 		addKeyframe(seq, 0, sampleJoints(style, "Feint", 0, false), "FeintStart")
-		addKeyframe(seq, dur * 0.2, sampleJoints(style, "Feint", 0.25, false))
+		addKeyframe(seq, dur * 0.12, sampleJoints(style, "Feint", 0.18, false), "FeintWind")
+		addKeyframe(seq, dur * 0.26, sampleJoints(style, "Feint", 0.32, false), "FeintChamber")
 		addKeyframe(seq, dur * 0.4, sampleJoints(style, "Feint", 0.42, false), "FeintFake")
-		addKeyframe(seq, dur * 0.65, sampleJoints(style, "Feint", 0.7, false))
+		addKeyframe(seq, dur * 0.5, sampleJoints(style, "Feint", 0.5, false), "FeintAbort")
+		addKeyframe(seq, dur * 0.62, sampleJoints(style, "Feint", 0.65, false), "FeintSnap")
+		addKeyframe(seq, dur * 0.8, sampleJoints(style, "Feint", 0.85, false), "FeintSettle")
 		addKeyframe(seq, dur, sampleJoints(style, "Feint", 1, false), "FeintGuard")
 		return seq
 	end
+
 
 	if clipName == "Riposte" then
 		local seq = emptySequence(seqName, Enum.AnimationPriority.Action3, false)
@@ -484,7 +552,7 @@ function KeyframeFactory.buildClip(
 
 	if isStartup then
 		local seq = emptySequence(seqName, priority, false)
-		local dur = (if heavy then 0.4 else 0.2) / tempo
+		local dur = attackPhaseDuration(clipName) -- = CombatConfig Light/Heavy.Startup
 		-- Idle → Antici avec ease : pas de cut (6–7 KFs)
 		local idle0 = sampleJoints(style, "Idle", 0, heavy)
 		local ant025 = sampleJoints(style, "Antici", 0.25, heavy)
@@ -504,7 +572,7 @@ function KeyframeFactory.buildClip(
 
 	if isActive then
 		local seq = emptySequence(seqName, priority, false)
-		local dur = (if heavy then 0.18 else 0.14) / tempo
+		local dur = attackPhaseDuration(clipName) -- = CombatConfig Light/Heavy.Active
 		addKeyframe(seq, 0, sampleJoints(style, "Antici", 1.0, heavy), "SwingRelease")
 		if style.doubleBeat then
 			addKeyframe(seq, dur * 0.12, sampleJoints(style, "Contact", 0.35, heavy), "Beat1In")
@@ -529,7 +597,7 @@ function KeyframeFactory.buildClip(
 
 	if isRecovery then
 		local seq = emptySequence(seqName, priority, false)
-		local dur = (if heavy then 0.5 else 0.3) / tempo
+		local dur = attackPhaseDuration(clipName) -- = CombatConfig Light/Heavy.Recovery
 		local follow0 = sampleJoints(style, "Follow", 0.5, heavy)
 		local followMid = sampleJoints(style, "Follow", 0.8, heavy)
 		local idleBlend = sampleJoints(style, "Idle", 0.35, heavy)
@@ -542,6 +610,7 @@ function KeyframeFactory.buildClip(
 		addKeyframe(seq, dur, idle0, "RecIdle")
 		return seq
 	end
+
 
 	local seq = emptySequence(seqName, Enum.AnimationPriority.Idle, true)
 	addKeyframe(seq, 0, sampleJoints(style, "Idle", 0, false))
@@ -565,8 +634,13 @@ function KeyframeFactory.samplePose(
 	if clipName == "Idle" then
 		return sampleJoints(style, "Idle", n, false)
 	elseif clipName == "Guard" then
-		return sampleJoints(style, "Guard", easeOutQuad(n), false)
+		-- Hold + micro-breath (enter/exit via fade CombatAnimator)
+		local wave = math.sin(n * math.pi * 2)
+		local alpha = 0.9 + 0.1 * easeInOut((wave + 1) * 0.5)
+		return sampleJoints(style, "Guard", alpha, false)
 	elseif clipName == "Dodge" then
+
+
 		if n < 0.4 then
 			return sampleJoints(style, "Dodge", easeOutCubic(n / 0.4), false)
 		end
@@ -592,6 +666,7 @@ function KeyframeFactory.samplePose(
 	elseif clipName == "Dead" then
 		return sampleJoints(style, "Dead", easeInOut(n), false)
 	elseif clipName == "Feint" then
+		-- Courbe densifiée (fake hold + abort) — sampleJoints Feint gère les seuils
 		return sampleJoints(style, "Feint", n, false)
 	elseif clipName == "Riposte" then
 		if n < 0.18 then

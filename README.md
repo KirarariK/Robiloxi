@@ -83,7 +83,7 @@ src/
   ReplicatedStorage/BladeConcord/
     Shared/     CombatConfig, Theme, Remotes, Form/Economy/Ranked/QuestConfig
     Visual/     SaberBuilder (Constructible)
-    Animation/  24 sets KeyframeSequence (AnimationSets, KeyframeFactory, Registry, Procedural)
+    Animation/  32 sets KeyframeSequence (AnimationSets, KeyframeFactory, Registry, Procedural)
     Remotes/    créés au runtime (Combat + Meta)
   ServerScriptService/BladeConcord/
     Combat/     services + ArenaService art pass
@@ -114,7 +114,7 @@ src/
 ## Notes assets
 
 Sabre / arènes / VFX / UI : **Constructible Studio-native** (voir `docs/visual-polish-notes.md` dans l’Agent Store).  
-**Animations** : **24 sets** KeyframeSequence R15 générés en Luau (`Animation/`) — Studio via `KeyframeSequenceProvider:RegisterKeyframeSequence` + `Animator:LoadAnimation` ; hors Studio / sans upload → `ProceduralPlayer` (Motor6D.Transform) ; `SaberPose` reste fallback lame. Détail playtest : Agent Store `docs/animation-sets-notes.md`.  
+**Animations** : **32 sets** KeyframeSequence R15 générés en Luau (`Animation/`) — Studio via `KeyframeSequenceProvider:RegisterKeyframeSequence` + `Animator:LoadAnimation` ; hors Studio / sans upload → `ProceduralPlayer` (Motor6D.Transform) ; `SaberPose` reste fallback lame. Track Length Light/Heavy = `CombatConfig` frame data. Détail playtest : Agent Store `docs/animation-sets-notes.md`.  
 SoundIds et meshes importés restent optionnels. La **logique** serveur P0–P3 est inchangée.
 
 ---

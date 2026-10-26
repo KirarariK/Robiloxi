@@ -3,6 +3,7 @@
 	Chemin principal animations combat : Animator:LoadAnimation (Studio Register)
 	ou ProceduralPlayer (Motor6D.Transform) — SaberPose = fallback lame / visuals.
 	Branche sur CombatState (Idle/Startup/Active/Recovery/Guard/Dodge/Dash/Focus/KO).
+	Pass continue : fades Guard enter/exit, sync speed ↔ CombatConfig, nil-safe Animator.
 ]]
 
 local Players = game:GetService("Players")
@@ -11,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Blade = ReplicatedStorage:WaitForChild("BladeConcord")
 local Shared = Blade:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local AnimationSets = require(Blade:WaitForChild("Animation"):WaitForChild("AnimationSets"))
 local AnimationRegistry = require(Blade:WaitForChild("Animation"):WaitForChild("AnimationRegistry"))
 local ProceduralPlayer = require(Blade:WaitForChild("Animation"):WaitForChild("ProceduralPlayer"))
@@ -44,6 +46,11 @@ local function getOrLoadTrack(character: Model, setId: string, clipName: string)
 	if not useAnimatorPath then
 		return nil
 	end
+	-- Stress : pas de Humanoid → pas d'Animator ; bascule Procedural (bot simplifié OK)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return nil
+	end
 	local bag = tracksByChar[character]
 	if not bag then
 		bag = {}
@@ -65,23 +72,48 @@ local function getOrLoadTrack(character: Model, setId: string, clipName: string)
 end
 
 local function fadeTimesFor(clipName: string, actionId: string): (number, number)
-	-- fadeIn, fadeOut — Idle↔Startup plus long pour éviter cut
+	-- fadeIn, fadeOut — Idle↔Startup / Guard enter-exit plus longs
 	if actionId == "Active" then
 		return 0.05, 0.1
 	elseif actionId == "Startup" then
 		return 0.14, 0.12 -- crossfade depuis Idle
 	elseif actionId == "Recovery" then
 		return 0.1, 0.14
-	elseif actionId == "Guard" then
-		return 0.12, 0.14
+	elseif actionId == "Guard" or actionId == "RiposteLock" then
+		return 0.16, 0.18 -- enter / exit Guard densifiés
 	elseif actionId == "Idle" then
-		return 0.16, 0.14 -- settle doux depuis Recovery
+		return 0.18, 0.14 -- settle doux depuis Guard/Recovery
 	elseif actionId == "Dodge" or actionId == "Dash" then
 		return 0.06, 0.1
 	elseif clipName == "Feint" then
 		return 0.08, 0.12
 	end
 	return 0.1, 0.12
+end
+
+--[[
+	Vitesse de playback pour coller Track.Length à la frame data CombatConfig
+	quand Register/estimate diverge légèrement (tempo Idle inchangé).
+]]
+local function playbackSpeedFor(clipName: string, trackLength: number): number
+	local heavy = string.find(clipName, "Heavy") ~= nil
+	local cfg = if heavy then CombatConfig.Heavy else CombatConfig.Light
+	local target: number? = nil
+	if string.sub(clipName, 1, 7) == "Startup" then
+		target = cfg.Startup
+	elseif string.sub(clipName, 1, 6) == "Active" then
+		target = cfg.Active
+	elseif string.sub(clipName, 1, 8) == "Recovery" then
+		target = cfg.Recovery
+	elseif clipName == "Feint" then
+		target = math.max(0.22, CombatConfig.Light.Startup * 0.95)
+	end
+	if not target or trackLength <= 0.001 then
+		return 1
+	end
+	-- Length/Speed = target  ⇒  Speed = Length / target
+	local speed = trackLength / target
+	return math.clamp(speed, 0.75, 1.35)
 end
 
 local function stopCompeting(character: Model, fadeOut: number, keepTrack: AnimationTrack?)
@@ -100,7 +132,7 @@ local function playClip(character: Model, setId: string, clipName: string, actio
 	local fadeIn, fadeOut = fadeTimesFor(clipName, actionId)
 	local track = getOrLoadTrack(character, setId, clipName)
 	if track then
-		-- Crossfade : Stop avec fadeOut = fadeIn du nouveau (Idle↔Startup propre)
+		-- Crossfade : Stop avec fadeOut = fadeIn du nouveau (Idle↔Startup / Guard exit)
 		stopCompeting(character, fadeOut, track)
 		local bag = tracksByChar[character]
 		if bag then
@@ -110,13 +142,22 @@ local function playClip(character: Model, setId: string, clipName: string, actio
 				end
 			end
 		end
-		track:Play(fadeIn, 1, 1)
+		local length = track.Length
+		if length <= 0 then
+			-- Length 0 tant que non chargé — fallback lengthHint registry
+			local clip = AnimationRegistry.getClip(setId, clipName)
+			length = if clip then clip.lengthHint else 0.3
+		end
+		local speed = playbackSpeedFor(clipName, length)
+		track:Play(fadeIn, 1, speed)
 		return true
 	end
 
-	-- Procedural path (live / Register indisponible) — fade-out croisé
-	ProceduralPlayer.play(character, setId, clipName, fadeIn, 1, fadeOut)
-	return true
+	-- Procedural path (live / Register indisponible / pas d'Animator) — jamais nil-crash
+	local ok, handle = pcall(function()
+		return ProceduralPlayer.play(character, setId, clipName, fadeIn, 1, fadeOut)
+	end)
+	return ok and handle ~= nil
 end
 
 local function applyState(userId: number, snap: any)
@@ -139,12 +180,15 @@ local function applyState(userId: number, snap: any)
 			SaberPose.applyVisuals(character, actionId, attackKind)
 			character:SetAttribute("BC_AnimSet", setDef.id)
 			character:SetAttribute("BC_AnimClip", "Feint")
-			playClip(character, setDef.id, "Feint", actionId)
-			if useAnimatorPath then
+			local playedFeint = playClip(character, setDef.id, "Feint", actionId)
+			if not playedFeint then
 				SaberPose.applyMotorFallback(character, "Guard", attackKind)
+			elseif useAnimatorPath then
+				-- Animator path OK — pas de double C1
 			end
 			return
 		end
+		-- Pas de character / set : laisser le path Guard normal
 	end
 	if actionId == "Startup" and attackKind == "Light" then
 		feintArmed[userId] = true
@@ -199,9 +243,6 @@ local function applyState(userId: number, snap: any)
 	-- Fallback Motor6D C1 si ni Animator ni Procedural n'ont pu jouer
 	if not played then
 		SaberPose.applyMotorFallback(character, actionId, attackKind)
-	elseif useAnimatorPath then
-		-- Animator anime le corps ; garder un micro offset lame via SaberPose léger
-		-- (HiltGrip Pose devrait suffire — pas de double tween C1)
 	end
 end
 
@@ -228,7 +269,11 @@ function CombatAnimator.start()
 		end
 		for _, snap in payload.fighters do
 			if typeof(snap) == "table" and typeof(snap.userId) == "number" then
-				applyState(snap.userId, snap)
+				-- Bot (-9001) + joueur : même pipeline ; character manquant = no-op soft
+				local ok, err = pcall(applyState, snap.userId, snap)
+				if not ok then
+					warn("[BladeConcord] CombatAnimator applyState failed:", err)
+				end
 			end
 		end
 	end)
