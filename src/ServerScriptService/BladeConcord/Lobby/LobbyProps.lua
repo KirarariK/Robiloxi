@@ -848,4 +848,243 @@ function LobbyProps.godRay(parent: Instance, localPos: Vector3, color: Color3, h
 	return ray
 end
 
+export type DuelSlotSpec = {
+	index: number,
+	x: number,
+	z: number,
+	side: string,
+	color: Color3,
+}
+
+--[[
+	Ring 1v1 + pad claim (réf allée).
+	Retourne le ClaimPad (BasePart) tagué BC_DuelSlotPad / BC_DuelSlot.
+]]
+function LobbyProps.duelSlot(parent: Instance, spec: DuelSlotSpec, withLight: boolean?): BasePart?
+	local idx = spec.index
+	local center = Vector3.new(spec.x, 0, spec.z)
+	local towardAlley = if spec.side == "Left" then 1 else -1 -- pad décalé vers X=0
+	local yaw = if spec.side == "Left" then 90 else -90
+	local ringSize = LobbyConfig.SlotRingSize
+	local matColor = if idx % 2 == 1 then C.RingMatA else C.RingMatB
+
+	local zone = LobbyUtil.model("DuelSlot_" .. idx, parent, "DuelSlot")
+	zone:SetAttribute("BC_DuelSlot", idx)
+	zone:SetAttribute("BC_DuelSlotSide", spec.side)
+
+	-- Plateforme ring
+	local floor = LobbyUtil.part(
+		"RingFloor",
+		ringSize,
+		LobbyUtil.cf(center + Vector3.new(0, ringSize.Y * 0.5, 0), yaw),
+		matColor,
+		zone,
+		Enum.Material.Fabric,
+		{ reflectance = 0.04 }
+	)
+	LobbyUtil.part(
+		"RingSkirt",
+		Vector3.new(ringSize.X + 1.5, 0.6, ringSize.Z + 1.5),
+		LobbyUtil.cf(center + Vector3.new(0, 0.2, 0), yaw),
+		C.Ink700,
+		zone,
+		Enum.Material.Slate
+	)
+
+	-- 4 poteaux coins
+	local halfX = ringSize.X * 0.5 - 0.8
+	local halfZ = ringSize.Z * 0.5 - 0.8
+	local postH = 8
+	local corners = {
+		Vector3.new(-halfX, 0, -halfZ),
+		Vector3.new(halfX, 0, -halfZ),
+		Vector3.new(-halfX, 0, halfZ),
+		Vector3.new(halfX, 0, halfZ),
+	}
+	for i, off in corners do
+		LobbyUtil.part(
+			"Post" .. i,
+			Vector3.new(1.1, postH, 1.1),
+			LobbyUtil.cf(center + Vector3.new(off.X, postH * 0.5 + 1, off.Z), yaw),
+			C.Ink900,
+			zone,
+			Enum.Material.Metal,
+			{ reflectance = 0.1 }
+		)
+	end
+
+	-- Cordes (3 hauteurs × 4 côtés) — Neon lisible
+	local ropeColors = { Color3.fromRGB(255, 70, 80), Color3.fromRGB(70, 140, 255), Color3.fromRGB(255, 70, 80) }
+	for layer = 1, 3 do
+		local y = 2.2 + (layer - 1) * 2.0
+		local col = ropeColors[layer]
+		-- avant / arrière (le long de X local ring)
+		LobbyUtil.part(
+			"RopeF" .. layer,
+			Vector3.new(ringSize.X - 2, 0.25, 0.25),
+			LobbyUtil.cf(center + Vector3.new(0, y, -halfZ), yaw),
+			col,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, castShadow = false }
+		)
+		LobbyUtil.part(
+			"RopeB" .. layer,
+			Vector3.new(ringSize.X - 2, 0.25, 0.25),
+			LobbyUtil.cf(center + Vector3.new(0, y, halfZ), yaw),
+			col,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, castShadow = false }
+		)
+		LobbyUtil.part(
+			"RopeL" .. layer,
+			Vector3.new(0.25, 0.25, ringSize.Z - 2),
+			LobbyUtil.cf(center + Vector3.new(-halfX, y, 0), yaw),
+			col,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, castShadow = false }
+		)
+		LobbyUtil.part(
+			"RopeR" .. layer,
+			Vector3.new(0.25, 0.25, ringSize.Z - 2),
+			LobbyUtil.cf(center + Vector3.new(halfX, y, 0), yaw),
+			col,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, castShadow = false }
+		)
+	end
+
+	-- Pad claim vers l’allée
+	local padSize = LobbyConfig.SlotPadSize
+	local padPos = center + Vector3.new(towardAlley * (halfX + padSize.X * 0.55 + 2), 0, 0)
+	local pad = LobbyUtil.part(
+		"ClaimPad",
+		padSize,
+		LobbyUtil.cf(padPos + Vector3.new(0, 0.55, 0), yaw),
+		spec.color,
+		zone,
+		Enum.Material.Neon,
+		{ canCollide = false, transparency = 0.25, castShadow = false }
+	)
+	if not pad then
+		return nil
+	end
+	pad:SetAttribute("BC_DuelSlot", idx)
+	pad:SetAttribute("BC_DuelSlotSide", spec.side)
+	LobbyUtil.tag(pad, LobbyConfig.Tags.DuelSlotPad)
+
+	LobbyUtil.part(
+		"PadRim",
+		Vector3.new(padSize.X + 1.2, 0.2, padSize.Z + 1.2),
+		LobbyUtil.cf(padPos + Vector3.new(0, 0.35, 0), yaw),
+		spec.color,
+		zone,
+		Enum.Material.Neon,
+		{ canCollide = false, transparency = 0.55, castShadow = false }
+	)
+
+	if withLight then
+		LobbyUtil.pointLight(pad, spec.color, 1.2, 22)
+	end
+	LobbyUtil.emitter(pad, "SlotEnergy", {
+		rate = 4,
+		lifetime = NumberRange.new(0.8, 1.8),
+		speed = NumberRange.new(0.8, 2.2),
+		accel = Vector3.new(0, 5, 0),
+		color = ColorSequence.new(spec.color, C.Bone),
+		lightEmission = 0.75,
+	})
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "ClaimPrompt"
+	prompt.ActionText = "Rejoindre Slot " .. idx
+	prompt.ObjectText = "1v1"
+	prompt.HoldDuration = 0.12
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.Parent = pad
+
+	local touch = LobbyUtil.part(
+		"TouchVolume",
+		Vector3.new(padSize.X + 2, 6, padSize.Z + 2),
+		LobbyUtil.cf(padPos + Vector3.new(0, 3.2, 0), yaw),
+		spec.color,
+		zone,
+		Enum.Material.ForceField,
+		{ canCollide = false, transparency = 1, castShadow = false }
+	)
+	if touch then
+		touch:SetAttribute("BC_DuelSlot", idx)
+		LobbyUtil.tag(touch, LobbyConfig.Tags.DuelSlotPad)
+	end
+
+	-- Panneau SurfaceGui « Slot N »
+	local board = LobbyUtil.part(
+		"SlotSign",
+		Vector3.new(10, 6, 0.6),
+		LobbyUtil.cf(center + Vector3.new(-towardAlley * (halfX + 1.5), 8, 0), yaw + 180),
+		C.Ink900,
+		zone,
+		Enum.Material.Metal,
+		{ reflectance = 0.08 }
+	)
+	if board then
+		LobbyUtil.part(
+			"SignNeon",
+			Vector3.new(10.4, 6.4, 0.25),
+			board.CFrame * CFrame.new(0, 0, -0.4),
+			spec.color,
+			zone,
+			Enum.Material.Neon,
+			{ canCollide = false, transparency = 0.4, castShadow = false }
+		)
+		if LobbyUtil.noteSurfaceGui() then
+			local sg = Instance.new("SurfaceGui")
+			sg.Name = "SlotLabelGui"
+			sg.Face = Enum.NormalId.Front
+			sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			sg.PixelsPerStud = 25
+			sg.Parent = board
+			board:SetAttribute("BC_DuelSlot", idx)
+			local frame = Instance.new("Frame")
+			frame.Name = "Frame"
+			frame.Size = UDim2.fromScale(1, 1)
+			frame.BackgroundColor3 = C.Ink900
+			frame.BackgroundTransparency = 0.15
+			frame.Parent = sg
+			local title = Instance.new("TextLabel")
+			title.Name = "Title"
+			title.Size = UDim2.new(1, -12, 0.45, 0)
+			title.Position = UDim2.fromOffset(6, 8)
+			title.BackgroundTransparency = 1
+			title.Font = Enum.Font.GothamBlack
+			title.TextSize = 36
+			title.TextColor3 = spec.color
+			title.Text = "SLOT " .. idx
+			title.Parent = frame
+			local sub = Instance.new("TextLabel")
+			sub.Name = "Status"
+			sub.Size = UDim2.new(1, -12, 0.35, 0)
+			sub.Position = UDim2.new(0, 6, 0.5, 0)
+			sub.BackgroundTransparency = 1
+			sub.Font = Enum.Font.GothamMedium
+			sub.TextSize = 18
+			sub.TextColor3 = C.Bone
+			sub.Text = "1v1 — libre"
+			sub.Parent = frame
+		end
+	end
+
+	if floor then
+		LobbyUtil.billboard(floor, "Slot " .. idx, spec.color, Vector2.new(120, 28), 10)
+	end
+
+	return pad
+end
+
 return LobbyProps
+
