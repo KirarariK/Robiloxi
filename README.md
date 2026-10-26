@@ -131,6 +131,13 @@ SoundIds et meshes importés restent optionnels. La **logique** serveur P0–P3 
 | `ProceduralPlayer` | Fallback Motor6D.Transform (live / Register fail) |
 | `CombatAnimator` | Branche CombatState → set/clip ; attrs `BC_AnimSet` / `BC_AnimClip` |
 | `AnimDebugOverlay` | **F8** ou `BC_AnimDebug` → HUD set+clip |
+| `AnimationShowcase` | Touche **P** — cycle auto 32 sets (clip filmage) |
+
+**Showcase / clip**
+
+1. Play Solo → **P** → banner SHOWCASE, caméra 3/4, labels Billboard (doc Agent Store `animation-showcase.md`)
+2. Capture Studio : `tools/record-anim-showcase.sh [out.mp4]` (ffmpeg x11grab)
+3. Sans Studio : `python3 tools/render_anim_showcase_clip.py -o media/anim-showcase-clip.mp4` (preview 2D StyleParams)
 
 **Playtest Studio**
 
@@ -140,6 +147,7 @@ SoundIds et meshes importés restent optionnels. La **logique** serveur P0–P3 
 4. LMB Idle→Startup→Active→Recovery (pas de cut) ; hold LMB Heavy ; RMB Guard ; Startup→RMB Feinte
 5. Q/E Dodge · Shift Dash · F/G Focus · KO bot → `Concord_KOCollapse`
 6. Touche **M** : Legendary / Duelant / Aegis / Epic pour overrides Concord (EdgePressure, ParryBrace, ClashRebound, AegisAbsorb, MurWindup)
+7. Touche **P** : Showcase filmage (re-**P** pour quitter)
 
 Détail catalogue + Pass quality : Agent Store `docs/animation-sets-notes.md`.
 
