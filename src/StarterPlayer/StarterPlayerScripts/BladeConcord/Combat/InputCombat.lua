@@ -103,11 +103,38 @@ function InputCombat.setEnabled(value: boolean)
 	end
 end
 
-local function bindMobileButton(name: string, title: string, handler)
+--[[
+	Layout tactile bas-droite (pouce) — Focus/Dash plus grands, non empilés.
+	Colonnes : primaire (Attaque/Parade) | mobilité | Focus.
+]]
+local MOBILE_LAYOUT = {
+	BC_Attack = { title = "Attaque", pos = UDim2.new(1, -78, 1, -118), size = UDim2.fromOffset(72, 72) },
+	BC_Guard = { title = "Parade", pos = UDim2.new(1, -168, 1, -118), size = UDim2.fromOffset(68, 68) },
+	BC_Dodge = { title = "Esquive", pos = UDim2.new(1, -78, 1, -218), size = UDim2.fromOffset(64, 64) },
+	BC_Dash = { title = "Dash", pos = UDim2.new(1, -168, 1, -218), size = UDim2.fromOffset(72, 72) },
+	BC_Push = { title = "Poussée", pos = UDim2.new(1, -78, 1, -318), size = UDim2.fromOffset(76, 76) },
+	BC_FocusDash = { title = "Dash Focus", pos = UDim2.new(1, -178, 1, -318), size = UDim2.fromOffset(84, 84) },
+}
+
+local function bindMobileButton(name: string, handler)
+	local spec = MOBILE_LAYOUT[name]
+	local title = if spec then spec.title else name
 	ContextActionService:BindAction(name, handler, true)
 	ContextActionService:SetTitle(name, title)
 	pcall(function()
-		ContextActionService:SetPosition(name, UDim2.new(1, -90, 1, -180))
+		if spec then
+			ContextActionService:SetPosition(name, spec.pos)
+		end
+	end)
+	-- Agrandir Focus/Dash (et le reste) pour cibles tactiles utilisables
+	task.defer(function()
+		pcall(function()
+			local btn = ContextActionService:GetButton(name)
+			if btn and spec then
+				btn.Size = spec.size
+				btn.AnchorPoint = Vector2.new(0.5, 0.5)
+			end
+		end)
 	end)
 end
 
@@ -222,12 +249,12 @@ function InputCombat.start()
 			return Enum.ContextActionResult.Sink
 		end
 
-		bindMobileButton("BC_Attack", "Attaque", mobileAttack)
-		bindMobileButton("BC_Guard", "Parade", mobileGuard)
-		bindMobileButton("BC_Dodge", "Esquive", mobileDodge)
-		bindMobileButton("BC_Dash", "Dash", mobileDash)
-		bindMobileButton("BC_Push", "Poussée", mobilePush)
-		bindMobileButton("BC_FocusDash", "Dash Focus", mobileFocusDash)
+		bindMobileButton("BC_Attack", mobileAttack)
+		bindMobileButton("BC_Guard", mobileGuard)
+		bindMobileButton("BC_Dodge", mobileDodge)
+		bindMobileButton("BC_Dash", mobileDash)
+		bindMobileButton("BC_Push", mobilePush)
+		bindMobileButton("BC_FocusDash", mobileFocusDash)
 	end
 
 	player.CharacterRemoving:Connect(function()
