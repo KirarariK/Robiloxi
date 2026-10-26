@@ -14,6 +14,12 @@ local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local CombatTypes = require(Shared:WaitForChild("CombatTypes"))
 local Theme = require(Shared:WaitForChild("Theme"))
 local SaberBuilder = require(Visual:WaitForChild("SaberBuilder"))
+
+-- Cosmétiques démo bot (runtime apply — distinct du azure joueur par défaut)
+local BOT_COSMETICS = {
+	bladeColor = "blade_ember",
+	aura = "aura_eclipse",
+}
 local FighterState = require(script.Parent:WaitForChild("FighterState"))
 local AttackService = require(script.Parent:WaitForChild("AttackService"))
 local GuardService = require(script.Parent:WaitForChild("GuardService"))
@@ -123,7 +129,9 @@ local function ensureBotModel(spawnCf: CFrame): Model
 
 	model.Parent = workspace
 	local build = SaberBuilder.attach(model, Theme.Danger)
+	SaberBuilder.applyCosmetics(build, BOT_COSMETICS)
 	model:SetAttribute("BC_HasSaber", build.blade ~= nil)
+	model:SetAttribute("BC_BotCosmetics", true)
 	botModel = model
 	return model
 end
@@ -149,7 +157,11 @@ function BotStub.enable(spawnCf: CFrame)
 	end
 	if not blade then
 		local rebuild = SaberBuilder.attach(model, Theme.Danger)
+		SaberBuilder.applyCosmetics(rebuild, BOT_COSMETICS)
 		blade = rebuild.blade
+	else
+		-- Re-apply runtime blade/aura si le modèle existait déjà
+		SaberBuilder.applyCosmeticsFromModel(model, BOT_COSMETICS)
 	end
 	botFighter.bladePart = blade
 	botFighter.hurtboxes = {}
