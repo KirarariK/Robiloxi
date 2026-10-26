@@ -58,6 +58,10 @@ check "CombatHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/Combat/Co
 check "MetaHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/MetaHud.lua"
 check "LobbyHud" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/LobbyHud.lua"
 check "TutorialTips" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/TutorialTips.lua"
+check "UIKit" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/Kit/init.lua"
+check "FormsScreen" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/Screens/FormsScreen.lua"
+check "MatchEndScreen" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/UI/Screens/MatchEndScreen.lua"
+check "Theme" "src/ReplicatedStorage/BladeConcord/Shared/Theme.lua"
 check "SoundHooks" "src/StarterPlayer/StarterPlayerScripts/BladeConcord/Audio/SoundHooks.lua"
 
 echo "-- Project / tools --"
