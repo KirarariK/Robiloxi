@@ -243,11 +243,13 @@ end
 function CombatService.step(dt: number)
 	MatchService.step(dt)
 
-	-- Enable bot for solo practice on countdown/fight
+	-- Enable bot once for solo practice (ne pas reset chaque frame — bug QA)
 	if MatchService.isSoloPractice() then
 		local _, spawnB = ArenaService.getSpawnCFrames()
 		if MatchService.getPhase() == "Countdown" or MatchService.getPhase() == "Fighting" then
-			BotStub.enable(spawnB)
+			if not BotStub.isEnabled() then
+				BotStub.enable(spawnB)
+			end
 		end
 	elseif BotStub.isEnabled() and #Players:GetPlayers() >= 2 then
 		BotStub.disable()
