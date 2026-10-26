@@ -4,6 +4,7 @@
 	Pass 3 : countdown 3-2-1 + versus plaque, vignette faction optionnelle.
 	Sprint : copy FR countdown / CONTRE / ALLEZ / REVANCHE + hooks audio.
 	Vague 5 : recap manche / mort (plaque score + vignette KO).
+	Vague 6 : bouton REVANCHE clair + cooldown anti-spam.
 ]]
 
 local Players = game:GetService("Players")
@@ -43,11 +44,15 @@ local recapTitle: TextLabel
 local recapScore: TextLabel
 local recapSub: TextLabel
 local deathVeil: Frame
+local rematchButton: TextButton
+local rematchHint: TextLabel
 local lastCountdownCeil: number? = nil
 local playerFaction: string? = nil
 local lastPhase: string? = nil
 local rematchAnnounced = false
 local recapToken = 0
+local rematchCooldownUntil = 0
+local rematchBusy = false
 
 local function corner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -202,6 +207,23 @@ local function flashBanner(text: string, color: Color3)
 	TweenService:Create(vignette, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
 end
 
+local function setRematchVisible(visible: boolean)
+	if not rematchButton then
+		return
+	end
+	rematchButton.Visible = visible
+	rematchHint.Visible = visible
+	if visible then
+		rematchButton.TextTransparency = 0
+		rematchButton.BackgroundTransparency = 0.08
+		rematchHint.TextTransparency = 0.1
+		rematchButton.Size = UDim2.new(0, 200, 0, 44)
+		TweenService:Create(rematchButton, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, 240, 0, 52),
+		}):Play()
+	end
+end
+
 local function hideRecap()
 	recapToken += 1
 	if not recapPlate.Visible then
@@ -251,7 +273,7 @@ local function showRecap(opts: {
 	recapTitle.TextColor3 = opts.color
 	recapScore.Text = string.format("%d  —  %d", opts.myWins, opts.theirWins)
 	if opts.matchOver then
-		recapSub.Text = if opts.lost then "Match terminé · revanche auto…" else "Victoire · revanche auto…"
+		recapSub.Text = if opts.lost then "Match terminé · touche REVANCHE" else "Victoire · touche REVANCHE"
 	else
 		recapSub.Text = "Prochaine manche…"
 	end
@@ -542,6 +564,72 @@ function CombatHud.start()
 	recapSub.ZIndex = 50
 	recapSub.Parent = recapPlate
 
+	-- Bouton REVANCHE (MatchEnd) — clair + cooldown client
+	rematchButton = Instance.new("TextButton")
+	rematchButton.Name = "RematchButton"
+	rematchButton.AnchorPoint = Vector2.new(0.5, 0.5)
+	rematchButton.Position = UDim2.fromScale(0.5, 0.68)
+	rematchButton.Size = UDim2.new(0, 240, 0, 52)
+	rematchButton.BackgroundColor3 = Theme.Accent
+	rematchButton.BackgroundTransparency = 0.08
+	rematchButton.BorderSizePixel = 0
+	rematchButton.Font = Theme.FontTitle
+	rematchButton.TextSize = 22
+	rematchButton.TextColor3 = Theme.Ink
+	rematchButton.Text = "REVANCHE"
+	rematchButton.Visible = false
+	rematchButton.AutoButtonColor = true
+	rematchButton.ZIndex = 55
+	rematchButton.Parent = root
+	corner(rematchButton, 12)
+	stroke(rematchButton, Theme.Bone, 1.6)
+
+	rematchHint = Instance.new("TextLabel")
+	rematchHint.Name = "RematchHint"
+	rematchHint.AnchorPoint = Vector2.new(0.5, 0)
+	rematchHint.Position = UDim2.new(0.5, 0, 0.68, 32)
+	rematchHint.Size = UDim2.new(0, 280, 0, 18)
+	rematchHint.BackgroundTransparency = 1
+	rematchHint.Font = Theme.FontBody
+	rematchHint.TextSize = 12
+	rematchHint.TextColor3 = Theme.Muted
+	rematchHint.Text = "ou revanche auto sous peu"
+	rematchHint.Visible = false
+	rematchHint.ZIndex = 55
+	rematchHint.Parent = root
+
+	rematchButton.MouseButton1Click:Connect(function()
+		if lastPhase ~= "MatchEnd" then
+			return
+		end
+		local now = os.clock()
+		local cd = CombatConfig.Match.RematchClientCooldown or 1.4
+		if rematchBusy or now < rematchCooldownUntil then
+			rematchHint.Text = "Patiente… (anti-spam)"
+			rematchHint.TextColor3 = Theme.AccentHot
+			return
+		end
+		rematchBusy = true
+		rematchCooldownUntil = now + cd
+		rematchButton.Text = "…"
+		rematchButton.BackgroundColor3 = Theme.InkSoft
+		rematchButton.TextColor3 = Theme.Muted
+		rematchHint.Text = "Lancement…"
+		rematchHint.TextColor3 = Theme.Muted
+		SoundHooks.play("Rematch")
+		remotes.RequestRematch:FireServer()
+		task.delay(cd, function()
+			rematchBusy = false
+			if rematchButton.Visible and lastPhase == "MatchEnd" then
+				rematchButton.Text = "REVANCHE"
+				rematchButton.BackgroundColor3 = Theme.Accent
+				rematchButton.TextColor3 = Theme.Ink
+				rematchHint.Text = "ou revanche auto sous peu"
+				rematchHint.TextColor3 = Theme.Muted
+			end
+		end)
+	end)
+
 	statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
 	statusLabel.Position = UDim2.new(0.02, 0, 0, 110)
@@ -776,12 +864,15 @@ function CombatHud.start()
 				hideVersus()
 			end
 			hideRecap()
+			setRematchVisible(false)
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
 			rematchAnnounced = false
+			rematchBusy = false
 		elseif phase == "Countdown" and payload.countdown then
 			local ceilN = math.max(1, math.ceil(payload.countdown))
 			arenaLabel.Text = if arenaBase ~= "" then arenaBase .. " · prêt…" else "Prêt…"
+			setRematchVisible(false)
 			if lastPhase ~= "Countdown" then
 				hideRecap()
 				local left = resolveFighterName(player.UserId)
@@ -805,6 +896,7 @@ function CombatHud.start()
 		elseif phase == "Fighting" and lastPhase == "Countdown" then
 			hideVersus()
 			hideRecap()
+			setRematchVisible(false)
 			arenaLabel.Text = if arenaBase ~= "" then arenaBase .. " · en duel" else "En duel"
 			countdownLabel.Text = "ALLEZ !"
 			countdownLabel.TextColor3 = Theme.Accent
@@ -820,6 +912,7 @@ function CombatHud.start()
 			if versusPlate.Visible then
 				hideVersus()
 			end
+			setRematchVisible(false)
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
 			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "entre deux manches…"
@@ -829,12 +922,20 @@ function CombatHud.start()
 			end
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
-			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "match terminé · revanche auto"
+			arenaLabel.Text = (if arenaBase ~= "" then arenaBase .. " · " else "") .. "match terminé · REVANCHE"
 			rematchAnnounced = true
+			rematchBusy = false
+			rematchButton.Text = "REVANCHE"
+			rematchButton.BackgroundColor3 = Theme.Accent
+			rematchButton.TextColor3 = Theme.Ink
+			rematchHint.Text = "ou revanche auto sous peu"
+			rematchHint.TextColor3 = Theme.Muted
+			setRematchVisible(true)
 		elseif phase ~= "Countdown" then
 			if versusPlate.Visible then
 				hideVersus()
 			end
+			setRematchVisible(false)
 			countdownLabel.TextTransparency = 1
 			lastCountdownCeil = nil
 			arenaLabel.Text = arenaBase

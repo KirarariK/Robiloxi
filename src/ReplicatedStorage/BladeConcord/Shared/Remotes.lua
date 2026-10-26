@@ -17,6 +17,7 @@ local COMBAT_REMOTE_NAMES = {
 	"RoundEnded",
 	"MatchState",
 	"FxEvent",
+	"RequestRematch",
 }
 
 local META_REMOTE_NAMES = {
@@ -39,6 +40,7 @@ export type CombatRemotes = {
 	RoundEnded: RemoteEvent,
 	MatchState: RemoteEvent,
 	FxEvent: RemoteEvent,
+	RequestRematch: RemoteEvent,
 }
 
 export type MetaRemotes = {

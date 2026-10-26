@@ -31,6 +31,7 @@ local soloPractice = false
 local soloLobbyWait = 0
 local onMatchEndHook: ((winner: Player?, loser: Player?, mode: CombatTypes.MatchMode) -> ())? = nil
 local onRoundEndHook: ((winner: Player?) -> ())? = nil
+local lastRematchRequestAt: { [number]: number } = {} -- userId → clock
 
 local function broadcast()
 	local scoreboard = {}
@@ -188,7 +189,7 @@ function MatchService.onRoundWinner(winner: Player?, winnerUserIdOverride: numbe
 
 	if matchWinnerId then
 		phase = "MatchEnd"
-		phaseTimer = 3
+		phaseTimer = CombatConfig.Match.MatchEndDelay or 5
 		local loser: Player? = nil
 		for _, p in activePair do
 			if p.UserId ~= matchWinnerId then
@@ -296,8 +297,35 @@ function MatchService.rematch()
 				FighterState.resetMatch(f)
 			end
 		end
+		lastRematchRequestAt = {}
 		MatchService.beginCountdown()
 	end
+end
+
+--[[ Demande client REVANCHE — MatchEnd only + cooldown anti-spam. ]]
+function MatchService.requestRematch(player: Player): boolean
+	if phase ~= "MatchEnd" then
+		return false
+	end
+	local inPair = false
+	for _, p in activePair do
+		if p == player then
+			inPair = true
+			break
+		end
+	end
+	if not inPair and not (soloPractice and activePair[1] == player) then
+		return false
+	end
+	local cd = CombatConfig.Match.RematchServerCooldown or 2
+	local now = os.clock()
+	local last = lastRematchRequestAt[player.UserId]
+	if last and (now - last) < cd then
+		return false
+	end
+	lastRematchRequestAt[player.UserId] = now
+	MatchService.rematch()
+	return true
 end
 
 function MatchService.isSoloPractice(): boolean
@@ -367,6 +395,10 @@ function MatchService.start()
 			m = "Casual"
 		end
 		MatchService.enqueue(player, m)
+	end)
+
+	remotes.RequestRematch.OnServerEvent:Connect(function(player)
+		MatchService.requestRematch(player)
 	end)
 
 	broadcast()

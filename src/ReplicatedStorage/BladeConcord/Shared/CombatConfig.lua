@@ -101,6 +101,10 @@ local CombatConfig = {
 		SoftLockMaxDistance = 80,
 		SoftLockLerp = 0.12,
 		Offset = Vector3.new(2.5, 3.5, 10),
+		-- Soft spectate (mort) jusqu'au reset manche
+		SpectatorLerp = 0.07,
+		SpectatorOffset = Vector3.new(0, 6.5, 14),
+		SpectatorHeightBias = 1.2,
 	},
 
 	AntiCheat = {
@@ -125,6 +129,9 @@ local CombatConfig = {
 		FirstTo = 2,
 		InterRoundDelay = 2.5,
 		LobbyCountdown = 3,
+		MatchEndDelay = 5, -- fenêtre bouton REVANCHE (auto fallback)
+		RematchClientCooldown = 1.4,
+		RematchServerCooldown = 2.0,
 	},
 
 	Arena = {
