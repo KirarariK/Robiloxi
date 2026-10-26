@@ -8,6 +8,7 @@ local CombatPredict = require(script.Parent:WaitForChild("CombatPredict"))
 local CombatHud = require(script.Parent:WaitForChild("CombatHud"))
 local SaberPose = require(script.Parent:WaitForChild("SaberPose"))
 local CombatAnimator = require(script.Parent:WaitForChild("CombatAnimator"))
+local AnimationShowcase = require(script.Parent:WaitForChild("AnimationShowcase"))
 local SoftLockCamera = require(script.Parent.Parent:WaitForChild("Camera"):WaitForChild("SoftLockCamera"))
 local CameraShake = require(script.Parent.Parent:WaitForChild("Camera"):WaitForChild("CameraShake"))
 local CombatFx = require(script.Parent.Parent:WaitForChild("FX"):WaitForChild("CombatFx"))
@@ -25,11 +26,12 @@ CombatPredict.start()
 InputCombat.start()
 SoftLockCamera.start()
 MetaHud.start()
+AnimationShowcase.bind() -- touche P → BC_Showcase
 SoundHooks.startHum()
 
 print(
 	string.format(
-		"[BladeConcord] Client ready — %d anim sets · LMB/RMB · Q/E esquive · Shift dash · F/G Focus · M méta",
+		"[BladeConcord] Client ready — %d anim sets · LMB/RMB · Q/E esquive · Shift dash · F/G Focus · M méta · P showcase",
 		CombatAnimator.getSetCount()
 	)
 )

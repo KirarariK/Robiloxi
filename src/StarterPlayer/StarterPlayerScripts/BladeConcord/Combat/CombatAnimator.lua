@@ -27,6 +27,8 @@ local lastKey: { [number]: string } = {}
 local tracksByChar: { [Model]: { [string]: AnimationTrack } } = {}
 local useAnimatorPath = false
 local feintArmed: { [number]: boolean } = {}
+-- Showcase (touche P) : ignore CombatState pour ne pas écraser le cycle démo
+local combatPaused = false
 
 local function resolveCharacter(userId: number): Model?
 	if userId == -9001 then
@@ -269,6 +271,9 @@ function CombatAnimator.start()
 
 	local remotes = Remotes.get()
 	remotes.CombatState.OnClientEvent:Connect(function(payload)
+		if combatPaused then
+			return
+		end
 		if typeof(payload) ~= "table" or typeof(payload.fighters) ~= "table" then
 			return
 		end
@@ -282,6 +287,66 @@ function CombatAnimator.start()
 			end
 		end
 	end)
+end
+
+--[[ Pause écoute CombatState (mode Showcase BC_Showcase). ]]
+function CombatAnimator.setPaused(paused: boolean)
+	combatPaused = paused
+	if not paused then
+		-- Force re-apply au prochain CombatState
+		table.clear(lastKey)
+		table.clear(feintArmed)
+	end
+end
+
+function CombatAnimator.isPaused(): boolean
+	return combatPaused
+end
+
+--[[ Joue un clip nommé hors CombatState (Showcase / debug). ]]
+function CombatAnimator.playDirect(character: Model, setId: string, clipName: string, actionId: string?): boolean
+	local action = actionId or "Idle"
+	if string.sub(clipName, 1, 7) == "Startup" then
+		action = "Startup"
+	elseif string.sub(clipName, 1, 6) == "Active" then
+		action = "Active"
+	elseif string.sub(clipName, 1, 8) == "Recovery" then
+		action = "Recovery"
+	elseif clipName == "Guard" or clipName == "Riposte" then
+		action = "Guard"
+	elseif clipName == "Dodge" then
+		action = "Dodge"
+	elseif clipName == "Dash" then
+		action = "Dash"
+	elseif clipName == "FocusPush" then
+		action = "FocusPush"
+	elseif clipName == "FocusDash" then
+		action = "FocusDash"
+	elseif clipName == "Stagger" then
+		action = "Stagger"
+	elseif clipName == "Dead" then
+		action = "Dead"
+	elseif clipName == "Feint" then
+		action = "Guard"
+	end
+
+	local attackKind: string? = nil
+	if string.find(clipName, "Heavy") then
+		attackKind = "Heavy"
+	elseif string.find(clipName, "Light") or clipName == "Feint" or clipName == "Riposte" then
+		attackKind = "Light"
+	end
+
+	SaberPose.applyVisuals(character, action, attackKind)
+	character:SetAttribute("BC_AnimSet", setId)
+	character:SetAttribute("BC_AnimClip", clipName)
+	character:SetAttribute("BC_Showcase", true)
+
+	local played = playClip(character, setId, clipName, action)
+	if not played then
+		SaberPose.applyMotorFallback(character, action, attackKind)
+	end
+	return played
 end
 
 function CombatAnimator.getSetCount(): number
