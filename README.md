@@ -33,6 +33,7 @@ DataStores : **mock automatique en Studio** (`DataStoreSafe`) ; en production Ro
 | F | **Poussée Focus** (knockback, 0 dmg, CD 14 s) |
 | G | **Dash Focus** (12 studs + i-frames 100 ms, CD 11 s) |
 | M | Panneau méta (shop / gacha / quêtes / queue) |
+| F8 | Overlay debug anim (set + clip) — ou attribut `BC_AnimDebug` |
 
 ### Mobile
 
@@ -114,8 +115,33 @@ src/
 ## Notes assets
 
 Sabre / arènes / VFX / UI : **Constructible Studio-native** (voir `docs/visual-polish-notes.md` dans l’Agent Store).  
-**Animations** : **32 sets** KeyframeSequence R15 générés en Luau (`Animation/`) — Studio via `KeyframeSequenceProvider:RegisterKeyframeSequence` + `Animator:LoadAnimation` ; hors Studio / sans upload → `ProceduralPlayer` (Motor6D.Transform) ; `SaberPose` reste fallback lame. Track Length Light/Heavy = `CombatConfig` frame data. Détail playtest : Agent Store `docs/animation-sets-notes.md`.  
 SoundIds et meshes importés restent optionnels. La **logique** serveur P0–P3 est inchangée.
+
+---
+
+## Animations (32 sets)
+
+**Count** : **32** sets (formes × rareté 1–16 + Concord situations 17–32) — qualité perçue prioritaire, pas de gonflage catalogue.
+
+| Chemin | Rôle |
+|--------|------|
+| `AnimationSets` | Catalogue + `resolveForSnapshot` |
+| `KeyframeFactory` | KeyframeSequence R15 + HiltGrip + jambes ; **smoothstep** ; **clamp** angles |
+| `AnimationRegistry` | `RegisterKeyframeSequence` (Studio) → `Animator:LoadAnimation` |
+| `ProceduralPlayer` | Fallback Motor6D.Transform (live / Register fail) |
+| `CombatAnimator` | Branche CombatState → set/clip ; attrs `BC_AnimSet` / `BC_AnimClip` |
+| `AnimDebugOverlay` | **F8** ou `BC_AnimDebug` → HUD set+clip |
+
+**Playtest Studio**
+
+1. `rojo serve default.project.json` → Rojo Connect → **Play Solo**
+2. Output : `AnimationRegistry: … 32 sets` · `CombatAnimator: 32 sets · path=…`
+3. **F8** (ou `LocalPlayer:SetAttribute("BC_AnimDebug", true)`) → lire set/clip live
+4. LMB Idle→Startup→Active→Recovery (pas de cut) ; hold LMB Heavy ; RMB Guard ; Startup→RMB Feinte
+5. Q/E Dodge · Shift Dash · F/G Focus · KO bot → `Concord_KOCollapse`
+6. Touche **M** : Legendary / Duelant / Aegis / Epic pour overrides Concord (EdgePressure, ParryBrace, ClashRebound, AegisAbsorb, MurWindup)
+
+Détail catalogue + Pass quality : Agent Store `docs/animation-sets-notes.md`.
 
 ---
 
@@ -126,7 +152,7 @@ Niveau cible : **proto showcase Roblox** jouable — pas un polish live AAA (pas
 | Zone | État |
 |------|------|
 | Sabre Constructible + trail dual + Beam | Showcase |
-| **24 sets** KeyframeSequence + CombatAnimator | Principal (SaberPose fallback) |
+| **32 sets** KeyframeSequence + CombatAnimator (R15 clamp) | Principal (SaberPose fallback) |
 | Hitstop client + sparks Perfect densifiés | Bon feeling |
 | Countdown 3-2-1 + plaque VS | Soigné |
 | KO orbit cam + restore soft-lock | Stub cinématique |
@@ -134,4 +160,4 @@ Niveau cible : **proto showcase Roblox** jouable — pas un polish live AAA (pas
 | HUD Theme + vignette faction optionnelle | Soigné |
 | Audio library IDs + ambiance map | Jouable (placeholders) |
 
-**Playtest Studio** : `rojo serve` → Play Solo → bot ~2 s → LMB/RMB/F/Shift → KO → touche **M** méta. Vérifier attributs `BC_AnimSet` / `BC_AnimClip` sur le personnage, trail Active, pas de caméra stuck post-KO.
+**Playtest Studio** : `rojo serve` → Play Solo → bot ~2 s → LMB/RMB/F/Shift → KO → **F8** overlay anim → touche **M** méta. Vérifier attributs `BC_AnimSet` / `BC_AnimClip`, trail Active, pas de caméra stuck post-KO.

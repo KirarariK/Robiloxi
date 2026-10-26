@@ -4,6 +4,7 @@
 	ou ProceduralPlayer (Motor6D.Transform) — SaberPose = fallback lame / visuals.
 	Branche sur CombatState (Idle/Startup/Active/Recovery/Guard/Dodge/Dash/Focus/KO).
 	Pass continue : fades Guard enter/exit, sync speed ↔ CombatConfig, nil-safe Animator.
+	Pass quality : AnimDebugOverlay (F8 / BC_AnimDebug) liste set+clip.
 ]]
 
 local Players = game:GetService("Players")
@@ -18,6 +19,7 @@ local AnimationRegistry = require(Blade:WaitForChild("Animation"):WaitForChild("
 local ProceduralPlayer = require(Blade:WaitForChild("Animation"):WaitForChild("ProceduralPlayer"))
 
 local SaberPose = require(script.Parent:WaitForChild("SaberPose"))
+local AnimDebugOverlay = require(script.Parent:WaitForChild("AnimDebugOverlay"))
 
 local CombatAnimator = {}
 
@@ -257,6 +259,9 @@ function CombatAnimator.start()
 			if useAnimatorPath then "Animator+KeyframeSequence" else "Procedural+SaberPoseFallback"
 		)
 	)
+
+	-- Overlay debug optionnel (F8 / attribut BC_AnimDebug)
+	AnimDebugOverlay.start()
 
 	-- SaberPose ne doit plus écouter CombatState (évite double tween)
 	SaberPose.setCombatListenerEnabled(false)
