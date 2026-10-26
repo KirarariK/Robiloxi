@@ -327,12 +327,23 @@ function AnimationShowcase.start()
 	CombatAnimator.setPaused(true)
 	InputCombat.setEnabled(false)
 
-	local character = Players.LocalPlayer.Character
-	if character then
-		character:SetAttribute("BC_Showcase", true)
-	end
-
-	task.spawn(runCycle, myGen)
+	task.spawn(function()
+		local player = Players.LocalPlayer
+		local character = player.Character
+		if not character then
+			-- CharacterAdded race : attendre spawn avant cycle (évite stop immédiat)
+			character = player.CharacterAdded:Wait()
+		end
+		if not active or myGen ~= generation then
+			return
+		end
+		character:WaitForChild("Humanoid", 8)
+		character:WaitForChild("HumanoidRootPart", 5)
+		if character.Parent then
+			character:SetAttribute("BC_Showcase", true)
+		end
+		runCycle(myGen)
+	end)
 end
 
 function AnimationShowcase.stop()

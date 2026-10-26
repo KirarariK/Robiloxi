@@ -66,19 +66,74 @@ local function ensureHurtboxes(character: Model): { BasePart }
 	return boxes
 end
 
+--[[ Attend main / HRP avant attach sabre — évite assert SaberBuilder si CharacterAdded trop tôt. ]]
+local function waitForGripAnchor(character: Model, timeout: number): BasePart?
+	local deadline = os.clock() + timeout
+	while os.clock() < deadline do
+		if not character.Parent then
+			return nil
+		end
+		local hand = character:FindFirstChild("RightHand")
+			or character:FindFirstChild("Right Arm")
+			or character:FindFirstChild("HumanoidRootPart")
+		if hand and hand:IsA("BasePart") then
+			return hand
+		end
+		task.wait(0.05)
+	end
+	return character:FindFirstChild("HumanoidRootPart") :: BasePart?
+end
+
+local function safeEnsureBlade(fighter: FighterState.Fighter, character: Model)
+	if not character.Parent then
+		return
+	end
+	if not waitForGripAnchor(character, 5) then
+		warn("[BladeConcord] bindCharacter: pas d'ancre grip — sabre reporté")
+		return
+	end
+	local ok, bladeOrErr = pcall(function()
+		return ensureBlade(character, fighter.player)
+	end)
+	if ok and bladeOrErr then
+		fighter.bladePart = bladeOrErr :: BasePart
+		fighter.hurtboxes = ensureHurtboxes(character)
+	else
+		warn("[BladeConcord] ensureBlade failed (CharacterAdded race):", bladeOrErr)
+		-- Retry soft une fois après un court délai (R15 parts tardives)
+		task.delay(0.35, function()
+			if not character.Parent or fighter.character ~= character then
+				return
+			end
+			if fighter.bladePart and fighter.bladePart.Parent then
+				return
+			end
+			local ok2, blade2 = pcall(function()
+				return ensureBlade(character, fighter.player)
+			end)
+			if ok2 and blade2 then
+				fighter.bladePart = blade2 :: BasePart
+				fighter.hurtboxes = ensureHurtboxes(character)
+			end
+		end)
+	end
+end
+
 function CombatService.bindCharacter(fighter: FighterState.Fighter, character: Model)
 	fighter.character = character
-	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
+	fighter.bladePart = nil :: any
+	local humanoid = character:WaitForChild("Humanoid", 8) :: Humanoid?
+	if not humanoid then
+		warn("[BladeConcord] bindCharacter: Humanoid nil après timeout")
+		return
+	end
 	fighter.walkSpeedBase = humanoid.WalkSpeed
 	humanoid.MaxHealth = CombatConfig.MaxHp
 	humanoid.Health = fighter.hp
 	humanoid.BreakJointsOnDeath = false
 
 	task.defer(function()
-		if character.Parent then
-			fighter.bladePart = ensureBlade(character, fighter.player)
-			fighter.hurtboxes = ensureHurtboxes(character)
-		end
+		safeEnsureBlade(fighter, character)
 	end)
 end
 
@@ -88,6 +143,8 @@ function CombatService.register(player: Player): FighterState.Fighter
 		CombatService.bindCharacter(fighter, player.Character)
 	end
 	player.CharacterAdded:Connect(function(character)
+		-- Invalide lame précédente (respawn mid-round)
+		fighter.bladePart = nil :: any
 		CombatService.bindCharacter(fighter, character)
 		local a, b = ArenaService.getSpawnCFrames()
 		local index = 1
@@ -100,7 +157,7 @@ function CombatService.register(player: Player): FighterState.Fighter
 		local cf = if index % 2 == 1 then a else b
 		task.defer(function()
 			local hrp = character:WaitForChild("HumanoidRootPart", 5) :: BasePart?
-			if hrp then
+			if hrp and character.Parent then
 				hrp.CFrame = cf
 			end
 		end)

@@ -141,6 +141,13 @@ local function stopCompeting(character: Model, fadeOut: number, keepTrack: Anima
 end
 
 local function playClip(character: Model, setId: string, clipName: string, actionId: string): boolean
+	if not character.Parent then
+		return false
+	end
+	-- Anti-nil race CharacterAdded : pas d'Animator / joints tant que Humanoid absent
+	if not character:FindFirstChildOfClass("Humanoid") then
+		return false
+	end
 	local fadeIn, fadeOut = fadeTimesFor(clipName, actionId)
 	local track = getOrLoadTrack(character, setId, clipName)
 	if track then
@@ -282,6 +289,26 @@ function CombatAnimator.start()
 	-- SaberPose ne doit plus écouter CombatState (évite double tween)
 	SaberPose.setCombatListenerEnabled(false)
 	SaberPose.startVisualOnly()
+
+	-- Respawn : invalide lastKey + cache tracks (évite stale Model / nil Humanoid race)
+	local lp = Players.LocalPlayer
+	if lp then
+		lp.CharacterAdded:Connect(function(character)
+			lastKey[lp.UserId] = nil
+			feintArmed[lp.UserId] = nil
+			-- Purge bag de l'ancien character (Destroying le fait aussi ; double-safe)
+			character.Destroying:Once(function()
+				tracksByChar[character] = nil
+			end)
+			-- Attendre Humanoid avant premier playClip (Animator path)
+			task.defer(function()
+				character:WaitForChild("Humanoid", 8)
+			end)
+		end)
+		if lp.Character then
+			lastKey[lp.UserId] = nil
+		end
+	end
 
 	local remotes = Remotes.get()
 	remotes.CombatState.OnClientEvent:Connect(function(payload)

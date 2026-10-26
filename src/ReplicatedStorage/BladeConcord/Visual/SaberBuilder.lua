@@ -88,10 +88,21 @@ function SaberBuilder.attach(character: Model, bladeColor: Color3?): SaberBuild
 		existing:Destroy()
 	end
 
-	local rightHand = character:FindFirstChild("RightHand")
+	-- CharacterAdded race : WaitForChild court avant assert (R15 RightHand tardif)
+	local rightHand: BasePart? = nil
+	local found = character:FindFirstChild("RightHand")
 		or character:FindFirstChild("Right Arm")
 		or character:FindFirstChild("HumanoidRootPart")
-	assert(rightHand and rightHand:IsA("BasePart"), "SaberBuilder: no hand/root")
+	if found and found:IsA("BasePart") then
+		rightHand = found
+	else
+		local waited = character:WaitForChild("RightHand", 3)
+			or character:WaitForChild("HumanoidRootPart", 2)
+		if waited and waited:IsA("BasePart") then
+			rightHand = waited
+		end
+	end
+	assert(rightHand and rightHand:IsA("BasePart"), "SaberBuilder: no hand/root (CharacterAdded race)")
 
 	local length = CombatConfig.Light.BladeLength
 	local color = bladeColor or Theme.BladeIdle
