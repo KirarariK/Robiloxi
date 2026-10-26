@@ -14,6 +14,7 @@ local CameraShake = require(script.Parent.Parent:WaitForChild("Camera"):WaitForC
 local CombatFx = require(script.Parent.Parent:WaitForChild("FX"):WaitForChild("CombatFx"))
 local SoundHooks = require(script.Parent.Parent:WaitForChild("Audio"):WaitForChild("SoundHooks"))
 local MetaHud = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MetaHud"))
+local TutorialTips = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("TutorialTips"))
 
 SoundHooks.start()
 CameraShake.start()
@@ -26,6 +27,7 @@ CombatPredict.start()
 InputCombat.start()
 SoftLockCamera.start()
 MetaHud.start()
+TutorialTips.start() -- tips FR LMB/RMB · P/M (première session)
 AnimationShowcase.bind() -- touche P → BC_Showcase
 SoundHooks.startHum()
 
