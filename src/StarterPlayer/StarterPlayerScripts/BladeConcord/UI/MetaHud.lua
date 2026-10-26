@@ -672,9 +672,10 @@ function MetaHud.start()
 		if payload.catalog then
 			catalog = payload.catalog
 		end
-		-- Feedback pull gacha
-		if payload.kind == "GachaResult" or payload.pulls or payload.results then
-			local results = payload.results or payload.pulls
+		-- Feedback pull gacha (FormService: kind=GachaResult, data.results)
+		if payload.kind == "GachaResult" then
+			local data = payload.data
+			local results = if typeof(data) == "table" then data.results else nil
 			if typeof(results) == "table" and #results > 0 then
 				local names = {}
 				for i, r in results do
@@ -687,6 +688,8 @@ function MetaHud.start()
 				if #results > 3 then
 					lastPullFlash ..= string.format(" (+%d)", #results - 3)
 				end
+			elseif typeof(data) == "table" and data.ok == false then
+				lastPullFlash = "Échec : " .. tostring(data.error or "?")
 			end
 		end
 		rebuild()
