@@ -323,4 +323,38 @@ function SnakeBuilder.build(name: string, look: Look): Model
 	return model
 end
 
+-- Effets d'ambiance (particules, lumière, feu) pour un modèle importé (voxels Blender) :
+-- la géométrie vient du FBX, les effets animés sont ajoutés ici selon le Look de l'espèce.
+function SnakeBuilder.decorate(model: Model, look: Look)
+	local host = model.PrimaryPart
+	if not host or model:GetAttribute("Decorated") then
+		return
+	end
+	model:SetAttribute("Decorated", true)
+	if has(look, "Flames") then
+		local fire = Instance.new("Fire")
+		fire.Size = 2
+		fire.Heat = 4
+		fire.Color = look.Accent
+		fire.SecondaryColor = Color3.fromRGB(255, 60, 20)
+		fire.Parent = host
+	end
+	if has(look, "Sparkle") or has(look, "Stars") then
+		emitter(host, { Texture = SPARKLE, Rate = 4, Lifetime = NumberRange.new(0.8, 1.4), Speed = NumberRange.new(0.3, 1), SpreadAngle = Vector2.new(180, 180), Size = NumberSequence.new(0.25, 0), Color = ColorSequence.new(look.Accent), LightEmission = 1 })
+	end
+	if has(look, "Bubbles") then
+		emitter(host, { Texture = SPARKLE, Rate = 3, Lifetime = NumberRange.new(1.2, 2), Speed = NumberRange.new(0.8, 1.4), EmissionDirection = Enum.NormalId.Top, Size = NumberSequence.new(0.18, 0.3), Color = ColorSequence.new(Color3.fromRGB(190, 255, 170)), Transparency = NumberSequence.new(0.3, 1) })
+	end
+	if has(look, "Ghost") then
+		emitter(host, { Texture = SMOKE, Rate = 3, Lifetime = NumberRange.new(1, 2), Speed = NumberRange.new(0.3, 0.8), Size = NumberSequence.new(0.6, 1.2), Color = ColorSequence.new(look.Accent), Transparency = NumberSequence.new(0.6, 1), LightEmission = 1 })
+	end
+	if look.Pattern == "Glow" or look.Material == "Neon" then
+		local l = Instance.new("PointLight")
+		l.Color = look.Accent
+		l.Range = 8
+		l.Brightness = 1.2
+		l.Parent = host
+	end
+end
+
 return SnakeBuilder

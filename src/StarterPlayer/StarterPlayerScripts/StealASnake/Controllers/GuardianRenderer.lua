@@ -78,12 +78,17 @@ local function newPart(name: string, size: Vector3, color: Color3, material: Enu
 	return p
 end
 
-local function headTemplate(): Model?
+-- Tête du gardien : modèle voxel Blender propre à la zone (GuardianHead_<n>), sinon tête générique.
+local function headTemplate(order: number): (Model?, boolean)
 	local root = ReplicatedStorage:FindFirstChild("StealASnake")
 	local assets = root and root:FindFirstChild("Assets")
 	local models = assets and assets:FindFirstChild("Models")
+	local own = models and models:FindFirstChild("GuardianHead_" .. order)
+	if own and own:IsA("Model") then
+		return own, true
+	end
 	local m = models and models:FindFirstChild("GuardianHead")
-	return if m and m:IsA("Model") then m else nil
+	return if m and m:IsA("Model") then m else nil, false
 end
 
 -- Tête en Parts (repli) : crâne, museau, mâchoire articulée, yeux néon, crocs.
@@ -239,7 +244,7 @@ local function build(model: Model)
 	local head: Model
 	local primary: BasePart
 	local jaw: BasePart? = nil
-	local tpl = headTemplate()
+	local tpl, ownHead = headTemplate(order)
 	if tpl then
 		head = tpl:Clone()
 		head:ScaleTo(head:GetScale() * s * 1.15)
@@ -263,7 +268,7 @@ local function build(model: Model)
 		end
 		head.PrimaryPart = primary
 		-- Le modèle est vert : on le teinte aux couleurs de la zone (garde les détails de texture)
-		if order > 1 then
+		if order > 1 and not ownHead then
 			local tint = Instance.new("Highlight")
 			tint.FillColor = pal.Body
 			tint.FillTransparency = 0.4
@@ -277,7 +282,26 @@ local function build(model: Model)
 		head, skull, jaw = buildPartHead(s, pal)
 		primary = skull
 	end
-	decorateHead(head, primary, s, pal)
+	if ownHead then
+		-- la tête voxel porte déjà sa signature : on n'ajoute que lumière / feu
+		if pal.Neon then
+			local l = Instance.new("PointLight")
+			l.Color = pal.Accent
+			l.Range = 18
+			l.Brightness = 2
+			l.Parent = primary
+		end
+		if pal.Feature == "Fire" then
+			local fire = Instance.new("Fire")
+			fire.Size = 6 * s
+			fire.Heat = 9
+			fire.Color = pal.Accent
+			fire.SecondaryColor = Color3.fromRGB(255, 50, 10)
+			fire.Parent = primary
+		end
+	else
+		decorateHead(head, primary, s, pal)
+	end
 	head.Parent = folder
 	-- jaw relatif au crâne (pour l'ouvrir autour de la charnière)
 	local jawBase: CFrame? = if jaw then primary.CFrame:ToObjectSpace(jaw.CFrame) else nil

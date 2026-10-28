@@ -15,7 +15,7 @@ local SnakeBuilder = require(ReplicatedStorage.StealASnake.Modules.SnakeBuilder)
 
 local ModelFactory = {}
 
-local SNAKE_SIZE = 3.4 -- plus grande dimension d'un serpent à l'échelle 1
+local SNAKE_SIZE = 4.2 -- plus grande dimension d'un serpent à l'échelle 1 (gros familiers voxel)
 
 local function models(): Instance?
 	local root = ReplicatedStorage:FindFirstChild("StealASnake")
@@ -168,6 +168,9 @@ function ModelFactory.coiledSnake(modelName: string, scale: number?): Model
 	if template then
 		m = cloneImported(template, modelName, false, false)
 		scaleToSize(m, SNAKE_SIZE * s * sizeMul)
+		if def then
+			SnakeBuilder.decorate(m, def.Look)
+		end
 	else
 		local proc = proceduralTemplate(modelName)
 		if proc then
