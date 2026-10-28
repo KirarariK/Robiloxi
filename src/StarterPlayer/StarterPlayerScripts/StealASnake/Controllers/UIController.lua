@@ -190,23 +190,23 @@ function UIController.start()
 	;(vignette2:FindFirstChildOfClass("UIGradient") :: UIGradient).Rotation = 90
 	vignette2.Parent = gui
 
-	-- Cartes de stats (gauche)
-	local stats = new("Frame", { Name = "Stats", Position = UDim2.new(0, 18, 0.5, -120), Size = UDim2.fromOffset(250, 240), BackgroundTransparency = 1, Parent = gui })
-	new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder, Parent = stats })
+	-- Compteurs façon Steal An Egg : gros chiffres contourés en bas à gauche (Vitesse au-dessus de l'Argent)
+	local stats = new("Frame", { Name = "Stats", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 16, 1, -14), Size = UDim2.fromOffset(380, 210), BackgroundTransparency = 1, Parent = gui })
+	new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Parent = stats })
 
 	local function statCard(order: number, icon: string, title: string, color: Color3): (TextLabel, TextLabel, UIScale)
-		local card = panel({ Name = title, LayoutOrder = order, Size = UDim2.fromOffset(250, 70) }, color)
-		card.Parent = stats
-		local sc = new("UIScale", { Parent = card })
-		local bubble = new("Frame", { Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(50, 50), BackgroundColor3 = color, Parent = card })
-		corner(bubble, 25)
-		gradient(bubble, Color3.new(1, 1, 1), Color3.fromRGB(160, 160, 160), 90)
-		stroke(bubble, color:Lerp(Color3.new(0, 0, 0), 0.5), 3)
-		label({ Size = UDim2.fromScale(1, 1), Text = icon, TextSize = 26, Parent = bubble })
-		label({ Position = UDim2.fromOffset(72, 8), Size = UDim2.new(1, -80, 0, 18), Text = string.upper(title), TextColor3 = C.Muted, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
-		local value = label({ Position = UDim2.fromOffset(72, 24), Size = UDim2.new(1, -80, 0, 28), Text = "0", FontFace = FONT_TITLE, TextSize = 28, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
-		textStroke(value, 2)
-		local sub = label({ Position = UDim2.fromOffset(72, 50), Size = UDim2.new(1, -80, 0, 14), Text = "", TextColor3 = C.Muted, TextSize = 12, FontFace = FONT_BODY, TextXAlignment = Enum.TextXAlignment.Left, Parent = card })
+		local big = order <= 2
+		local h = if big then 66 else 40
+		local row = new("Frame", { Name = title, LayoutOrder = -order, Size = UDim2.new(1, 0, 0, h), BackgroundTransparency = 1, Parent = stats })
+		local sc = new("UIScale", { Parent = row })
+		local ic = label({ Size = UDim2.fromOffset(h, h), Text = icon, TextSize = if big then 42 else 26, Parent = row })
+		textStroke(ic, 2)
+		local value = label({ Position = UDim2.fromOffset(h + 6, if big then -4 else 0), Size = UDim2.new(1, -h - 6, 0, if big then 50 else 30), Text = "0", FontFace = FONT_TITLE, TextSize = if big then 50 else 28, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Parent = row })
+		textStroke(value, if big then 4 else 3)
+		new("UIGradient", { Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(200, 200, 200)), Rotation = 90, Parent = value })
+		local sub = label({ Position = UDim2.fromOffset(h + 8, if big then 44 else 26), Size = UDim2.new(1, -h - 8, 0, 18), Text = "", TextColor3 = Color3.fromRGB(255, 255, 255), TextSize = if big then 15 else 12, FontFace = FONT_BOLD, TextXAlignment = Enum.TextXAlignment.Left, Parent = row })
+		textStroke(sub, 2)
+		local _ = title
 		return value, sub, sc
 	end
 
@@ -219,14 +219,13 @@ function UIController.start()
 		TweenService:Create(sc, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 	end
 
-	-- Logo (haut-droite)
-	local logo = label({ Name = "Logo", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -20, 0, 14), Size = UDim2.fromOffset(300, 46), Text = "STEAL A SNAKE", FontFace = FONT_TITLE, TextSize = 34, TextColor3 = C.Gold, TextXAlignment = Enum.TextXAlignment.Right, Parent = gui })
-	textStroke(logo, 3)
 
 	-- Objectif guidé (bas-gauche)
-	local objective = panel({ Name = "Objective", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 18, 1, -18), Size = UDim2.fromOffset(330, 52) }, C.Gold)
+	-- Objectif (haut-centre) : la consigne du moment, bien visible
+	local objective = panel({ Name = "Objective", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 10), Size = UDim2.fromOffset(520, 52) }, C.Gold)
 	objective.Parent = gui
-	local objText = label({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -24, 1, 0), Text = "", TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, Parent = objective })
+	local objText = label({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -28, 1, 0), Text = "", TextSize = 18, FontFace = FONT_BOLD, TextWrapped = true, Parent = objective })
+	textStroke(objText, 1.5)
 
 	-- Panneau de portage (haut-centre)
 	local carry = panel({ Name = "CarryGauge", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, -140), Size = UDim2.fromOffset(470, 118), Visible = false }, C.Danger)
@@ -247,7 +246,7 @@ function UIController.start()
 	end)
 
 	-- Bannière de poursuite
-	local chase = panel({ Name = "ChaseBanner", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 192), Size = UDim2.fromOffset(640, 54), Visible = false, BackgroundColor3 = Color3.fromRGB(140, 15, 20) }, Color3.fromRGB(255, 200, 80))
+	local chase = panel({ Name = "ChaseBanner", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 210), Size = UDim2.fromOffset(640, 54), Visible = false, BackgroundColor3 = Color3.fromRGB(140, 15, 20) }, Color3.fromRGB(255, 200, 80))
 	chase.Parent = gui
 	local chaseText = label({ Size = UDim2.fromScale(1, 1), Text = "", FontFace = FONT_TITLE, TextSize = 24, TextColor3 = Color3.fromRGB(255, 235, 140), Parent = chase })
 	textStroke(chaseText, 2)
@@ -295,7 +294,7 @@ function UIController.start()
 
 	-- Popup « +$ » qui monte près de la carte argent
 	local function floatText(text: string, color: Color3)
-		local l = label({ Position = UDim2.new(0, 280, 0.5, -105), Size = UDim2.fromOffset(200, 30), Text = text, FontFace = FONT_TITLE, TextSize = 26, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Parent = gui })
+		local l = label({ Position = UDim2.new(0, 300, 1, -110), Size = UDim2.fromOffset(220, 34), Text = text, FontFace = FONT_TITLE, TextSize = 30, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Parent = gui })
 		textStroke(l, 2)
 		TweenService:Create(l, TweenInfo.new(1.1, Enum.EasingStyle.Quad), { Position = l.Position - UDim2.fromOffset(0, 60), TextTransparency = 1 }):Play()
 		task.delay(1.15, function()
@@ -538,10 +537,10 @@ function UIController.start()
 				"💰  Étape 3/4 · Ton serpent rapporte de l'argent : marche sur le bouton vert pour récolter",
 				"🏃  Étape 4/4 · Monte sur ton tapis de course pour gagner de la Vitesse",
 			})[step] or ""
-			objective.Size = UDim2.fromOffset(380, 64)
+			objective.Size = UDim2.fromOffset(600, 60)
 			return
 		end
-		objective.Size = UDim2.fromOffset(330, 52)
+		objective.Size = UDim2.fromOffset(520, 52)
 		if carrying then
 			objText.Text = "🏠  Ramène le serpent sur la zone verte de ta base !"
 		elseif chasing then
@@ -624,7 +623,7 @@ function UIController.start()
 		penaltyText.Text = string.format("-%d%%", pen)
 		speedFill.Size = UDim2.fromScale(math.clamp(1 - pen / 100, 0.03, 1), 1)
 		carry.Visible = true
-		TweenService:Create(carry, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 62) }):Play()
+		TweenService:Create(carry, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 76) }):Play()
 		refreshObjective()
 	end)
 
