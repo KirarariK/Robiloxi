@@ -2,8 +2,11 @@
 --[[
 	MapBuilder — construit tout le monde de Steal A Snake au démarrage du serveur.
 
-	Île en Terrain (océan autour) · Hub avec 8 bases clôturées · route pavée (zone sûre)
-	· 5 biomes en canyon (Jungle, Désert, Marais, Volcan, Cosmos) avec décor, nid, porte-crâne.
+	Arène-hub murée façon « Steal An Egg » : 8 bases clôturées en rangée, bande ZONE SÉCURISÉE, stand VENDRE,
+	place centrale (statue, fontaines) et sortie vers la route · route murée (zone sûre) · 15 zones de 220 × 220
+	murées (BiomesConfig) avec décor par thème, nid, porte-crâne et gardien.
+	Anti-chute : murs visibles + barrières invisibles de 300 studs autour de tout le monde (BoundsService
+	ramène aussi à sa base tout joueur qui passerait sous le sol).
 
 	Contrat de noms (utilisés par les autres systèmes — ne pas renommer) :
 	  Map/SafeZone/SafePath (Part invisible : zone sûre) · Map/SafeZone/HubFloor
@@ -29,12 +32,15 @@ local rng = Random.new(1337) -- décor identique à chaque démarrage
 
 -- Géométrie globale
 local GROUND_Y = 1 -- dessus du sol (terrain)
-local ROAD_HALF = 14 -- demi-largeur de la route centrale
-local HUB_Z_MAX = 160
-local HUB_Z_MIN = -150
-local HUB_HALF_X = 160
-local WORLD_Z_MIN = -1090
-local CANYON_HALF_X = 82 -- falaises de part et d'autre des biomes
+local ROAD_HALF = 20 -- demi-largeur de la route centrale (et de la sortie de l'arène)
+local HUB_Z_MAX = 290 -- mur du fond de l'arène (derrière les bases)
+local HUB_Z_MIN = -40 -- mur avant de l'arène (sortie vers la route)
+local HUB_HALF_X = 330
+local LAST_BIOME = BiomesConfig[#BiomesConfig]
+local WORLD_Z_MIN = LAST_BIOME.Center.Z - LAST_BIOME.Size.Z / 2 - 30
+local CANYON_HALF_X = BiomesConfig[1].Size.X / 2 -- bord des zones
+local WALL_H = 60 -- murs visibles
+local BARRIER_H = 300 -- barrières invisibles (anti-sortie de map)
 
 --[[ ───────────────────────── Helpers ───────────────────────── ]]
 
@@ -219,7 +225,7 @@ end
 --[[ ───────────────────────── Terrain ───────────────────────── ]]
 
 local function setTerrainColors()
-	terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(96, 168, 74))
+	terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(104, 200, 60))
 	terrain:SetMaterialColor(Enum.Material.LeafyGrass, Color3.fromRGB(58, 140, 60))
 	terrain:SetMaterialColor(Enum.Material.Sand, Color3.fromRGB(230, 196, 120))
 	terrain:SetMaterialColor(Enum.Material.Mud, Color3.fromRGB(70, 82, 50))
@@ -238,46 +244,67 @@ end
 local function buildTerrainBase()
 	terrain:Clear()
 	setTerrainColors()
-	-- Océan peu profond + fond de sable
-	local oceanMinZ, oceanMaxZ = WORLD_Z_MIN - 250, HUB_Z_MAX + 250
-	local step = 400
-	local z = oceanMaxZ
-	while z > oceanMinZ do
-		local zNext = math.max(z - step, oceanMinZ)
-		local midZ = (z + zNext) / 2
-		local depth = z - zNext
-		fill(CFrame.new(0, -14, midZ), Vector3.new(900, 8, depth), Enum.Material.Sand)
-		fill(CFrame.new(0, -5, midZ), Vector3.new(900, 10, depth), Enum.Material.Water)
+	-- Sol de l'arène : herbe vive façon Steal An Egg
+	fill(CFrame.new(0, -4, (HUB_Z_MAX + HUB_Z_MIN) / 2), Vector3.new(HUB_HALF_X * 2 + 8, 6, HUB_Z_MAX - HUB_Z_MIN + 8), Enum.Material.Ground)
+	fill(CFrame.new(0, -0.5, (HUB_Z_MAX + HUB_Z_MIN) / 2), Vector3.new(HUB_HALF_X * 2 + 8, 3, HUB_Z_MAX - HUB_Z_MIN + 8), Enum.Material.Grass)
+	task.wait()
+	-- Route : socle + pavés, par tronçons (le terrain n'aime pas les blocs géants)
+	local z = HUB_Z_MIN + 4
+	while z > WORLD_Z_MIN do
+		local zNext = math.max(z - 300, WORLD_Z_MIN)
+		local mid, len = (z + zNext) / 2, z - zNext
+		fill(CFrame.new(0, -4, mid), Vector3.new(ROAD_HALF * 2 + 16, 6, len), Enum.Material.Ground)
+		fill(CFrame.new(0, -0.5, mid), Vector3.new(ROAD_HALF * 2 + 16, 3, len), Enum.Material.Grass)
+		fill(CFrame.new(0, 0.2, mid), Vector3.new(ROAD_HALF * 2, 2, len), Enum.Material.Cobblestone)
 		z = zNext
 		task.wait()
 	end
-	-- Île : socle de terre + herbe
-	local islandLen = HUB_Z_MAX + 30 - (WORLD_Z_MIN - 20)
-	local islandMid = (HUB_Z_MAX + 30 + WORLD_Z_MIN - 20) / 2
-	fill(CFrame.new(0, -6, islandMid), Vector3.new(HUB_HALF_X * 2 + 40, 10, islandLen), Enum.Material.Ground)
-	fill(CFrame.new(0, -1, islandMid), Vector3.new(HUB_HALF_X * 2 + 40, 4, islandLen), Enum.Material.Grass)
-	-- Plages arrondies autour de l'île
-	for i = 0, 12 do
-		local zz = HUB_Z_MAX + 30 - i * (islandLen / 12)
-		fill(CFrame.new(-(HUB_HALF_X + 26), -3, zz), Vector3.new(24, 4, islandLen / 12 + 4), Enum.Material.Sand)
-		fill(CFrame.new(HUB_HALF_X + 26, -3, zz), Vector3.new(24, 4, islandLen / 12 + 4), Enum.Material.Sand)
+end
+
+-- Mur : visible (hauteur WALL_H) + barrière invisible jusqu'à BARRIER_H. Retourne la partie visible.
+local function wall(parent: Instance, a: Vector3, b: Vector3, color: Color3, material: Enum.Material, thickness: number?): Part?
+	local t = thickness or 6
+	local len = (Vector3.new(b.X, 0, b.Z) - Vector3.new(a.X, 0, a.Z)).Magnitude
+	if len < 0.5 then
+		return nil
 	end
-	task.wait()
-	-- Route pavée tout du long (zone sûre = hors biomes)
-	fill(CFrame.new(0, 0.2, (HUB_Z_MAX - 10 + WORLD_Z_MIN) / 2), Vector3.new(ROAD_HALF * 2, 2, HUB_Z_MAX - 10 - WORLD_Z_MIN), Enum.Material.Cobblestone)
+	local mid = (a + b) / 2
+	local cf = CFrame.lookAt(Vector3.new(mid.X, 0, mid.Z), Vector3.new(b.X, 0, b.Z))
+	local visible = deco({
+		Name = "Wall",
+		Size = Vector3.new(t, WALL_H, len + t),
+		CFrame = cf + Vector3.new(0, GROUND_Y + WALL_H / 2 - 2, 0),
+		Color = color,
+		Material = material,
+		CanCollide = true,
+		Parent = parent,
+	})
+	part({
+		Name = "Barrier",
+		Size = Vector3.new(t, BARRIER_H, len + t),
+		CFrame = cf + Vector3.new(0, GROUND_Y + BARRIER_H / 2, 0),
+		Transparency = 1,
+		CanCollide = true,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Parent = parent,
+	})
+	return visible
 end
 
 --[[ ───────────────────────── Bases (Plots) ───────────────────────── ]]
 
 local PLOT_W, PLOT_D = 64, 58
 
+local PLOT_ROW_Z = 220 -- les 8 bases sont alignées au fond de l'arène, entrée face à la place
+
 local function plotCFrame(index: number): (CFrame, number)
-	local side = if index <= 4 then -1 else 1
-	local row = (index - 1) % 4
-	local origin = Vector3.new(side * 100, GROUND_Y, 112 - row * 70)
-	-- l'avant de la base regarde la route (x = 0)
-	local cf = CFrame.lookAt(origin, origin + Vector3.new(-side, 0, 0))
-	return cf, side
+	local x = -252 + (index - 1) * 72
+	local origin = Vector3.new(x, GROUND_Y, PLOT_ROW_Z)
+	-- l'avant de la base regarde la place centrale (−Z)
+	local cf = CFrame.lookAt(origin, origin + Vector3.new(0, 0, -1))
+	return cf, if x < 0 then -1 else 1
 end
 
 local function fence(parent: Instance, cf: CFrame, from: Vector3, to: Vector3)
@@ -354,16 +381,16 @@ local function buildPlot(parent: Folder, index: number)
 		Name = "PlotPad",
 		Size = Vector3.new(PLOT_W, 1, PLOT_D),
 		CFrame = at(0, 0, 0),
-		Color = Color3.fromRGB(176, 128, 82),
-		Material = Enum.Material.WoodPlanks,
+		Color = Color3.fromRGB(104, 196, 62),
+		Material = Enum.Material.Grass,
 		Parent = plot,
 	})
 	deco({
 		Name = "PadBorder",
 		Size = Vector3.new(PLOT_W + 8, 5, PLOT_D + 8),
 		CFrame = at(0, -2.05, 0), -- dessus à +0.45 : juste sous le plancher (+0.5)
-		Color = Color3.fromRGB(130, 125, 120),
-		Material = Enum.Material.Cobblestone,
+		Color = Color3.fromRGB(88, 170, 52),
+		Material = Enum.Material.Grass,
 		CanCollide = true,
 		Parent = plot,
 	})
@@ -617,20 +644,42 @@ local function buildHub(map: Folder, safe: Folder)
 	local hub = Instance.new("Folder")
 	hub.Name = "Hub"
 	hub.Parent = map
-	-- Place centrale ronde
-	fill(CFrame.new(0, 0.4, 20), Vector3.new(60, 2, 60), Enum.Material.Cobblestone)
-	terrain:FillCylinder(CFrame.new(0, 0.5, 20), 2, 30, Enum.Material.Cobblestone)
+
+	-- Murs de l'arène (briques orangées), sortie de ROAD_HALF*2 au centre du mur avant
+	local brick = Color3.fromRGB(214, 138, 82)
+	local x0, x1 = -HUB_HALF_X, HUB_HALF_X
+	wall(hub, Vector3.new(x0, 0, HUB_Z_MAX), Vector3.new(x1, 0, HUB_Z_MAX), brick, Enum.Material.Brick)
+	wall(hub, Vector3.new(x0, 0, HUB_Z_MIN), Vector3.new(x0, 0, HUB_Z_MAX), brick, Enum.Material.Brick)
+	wall(hub, Vector3.new(x1, 0, HUB_Z_MIN), Vector3.new(x1, 0, HUB_Z_MAX), brick, Enum.Material.Brick)
+	wall(hub, Vector3.new(x0, 0, HUB_Z_MIN), Vector3.new(-ROAD_HALF - 3, 0, HUB_Z_MIN), brick, Enum.Material.Brick)
+	wall(hub, Vector3.new(ROAD_HALF + 3, 0, HUB_Z_MIN), Vector3.new(x1, 0, HUB_Z_MIN), brick, Enum.Material.Brick)
+	-- Liseré vert en haut des murs (comme l'herbe qui dépasse)
+	for _, seg in { { x0, HUB_Z_MAX, x1, HUB_Z_MAX }, { x0, HUB_Z_MIN, x0, HUB_Z_MAX }, { x1, HUB_Z_MIN, x1, HUB_Z_MAX } } do
+		local a, b = Vector3.new(seg[1], 0, seg[2]), Vector3.new(seg[3], 0, seg[4])
+		local mid = (a + b) / 2
+		deco({ Name = "WallTop", Size = Vector3.new(8, 2, (b - a).Magnitude + 8), CFrame = CFrame.lookAt(mid, b) + Vector3.new(0, GROUND_Y + WALL_H - 1, 0), Color = Color3.fromRGB(90, 210, 60), Material = Enum.Material.Grass, Parent = hub })
+	end
+
+	-- Bande « ZONE SÉCURISÉE » devant les bases (lisible du ciel et du sol)
+	local safeZ = PLOT_ROW_Z - PLOT_D / 2 - 18
+	deco({ Name = "SafeStripe", Size = Vector3.new(HUB_HALF_X * 2 - 20, 0.2, 1.4), CFrame = CFrame.new(0, GROUND_Y + 0.15, safeZ - 6), Color = Color3.fromRGB(255, 80, 120), Material = Enum.Material.Neon, CastShadow = false, Parent = hub })
+	local safeSign = deco({ Name = "SafeSign", Size = Vector3.new(90, 0.2, 9), CFrame = CFrame.new(0, GROUND_Y + 0.12, safeZ), Transparency = 1, Parent = hub })
+	surfaceText(safeSign, Enum.NormalId.Top, "🛡️ ZONE SÉCURISÉE 🛡️", Color3.fromRGB(255, 255, 255))
+
+	-- Place centrale : statue dorée sur piédestal + titre
+	local plazaZ = 90
+	terrain:FillCylinder(CFrame.new(0, 0.5, plazaZ), 2, 34, Enum.Material.Cobblestone)
 	local pedestal = deco({
 		Name = "StatuePedestal",
 		Shape = Enum.PartType.Cylinder,
-		Size = Vector3.new(4, 14, 14),
-		CFrame = CFrame.new(0, 3, 20) * CFrame.Angles(0, 0, math.rad(90)),
+		Size = Vector3.new(4, 16, 16),
+		CFrame = CFrame.new(0, 3, plazaZ) * CFrame.Angles(0, 0, math.rad(90)),
 		Color = Color3.fromRGB(200, 195, 185),
 		Material = Enum.Material.Marble,
 		CanCollide = true,
 		Parent = hub,
 	})
-	local statue = placeTemplate("Celestial_Ouroboros", hub, Vector3.new(0, 5, 20), 3.2, math.rad(180), true)
+	local statue = placeTemplate("Celestial_Ouroboros", hub, Vector3.new(0, 5, plazaZ), 3.6, math.rad(180), true)
 	if statue then
 		for _, d in statue:GetDescendants() do
 			if d:IsA("BasePart") then
@@ -639,13 +688,13 @@ local function buildHub(map: Folder, safe: Folder)
 			end
 		end
 	end
-	light(pedestal, Color3.fromRGB(255, 215, 130), 30, 1.5)
-	-- Deux fontaines-serpents de part et d'autre de la place, avec jets d'eau
-	for _, fx in { -44, 44 } do
-		local f = placeTemplate("SnakeFountain", hub, Vector3.new(fx, GROUND_Y, 20), 1.3, math.rad(if fx < 0 then 90 else -90), true)
+	light(pedestal, Color3.fromRGB(255, 215, 130), 34, 1.5)
+	-- Fontaines-serpents de part et d'autre de la place
+	for _, fx in { -70, 70 } do
+		local f = placeTemplate("SnakeFountain", hub, Vector3.new(fx, GROUND_Y, plazaZ), 1.4, math.rad(if fx < 0 then 90 else -90), true)
 		if f then
 			local _, fs = f:GetBoundingBox()
-			local spout = deco({ Name = "FountainSpout", Size = Vector3.new(1, 1, 1), CFrame = CFrame.new(fx, GROUND_Y + fs.Y * 0.8, 20), Transparency = 1, Parent = f })
+			local spout = deco({ Name = "FountainSpout", Size = Vector3.new(1, 1, 1), CFrame = CFrame.new(fx, GROUND_Y + fs.Y * 0.8, plazaZ), Transparency = 1, Parent = f })
 			local water = Instance.new("ParticleEmitter")
 			water.Texture = "rbxasset://textures/particles/smoke_main.dds"
 			water.Rate = 40
@@ -658,30 +707,13 @@ local function buildHub(map: Folder, safe: Folder)
 			water.Color = ColorSequence.new(Color3.fromRGB(170, 230, 255))
 			water.Transparency = NumberSequence.new(0.3, 1)
 			water.Parent = spout
-			local sparkle = Instance.new("ParticleEmitter")
-			sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-			sparkle.Rate = 10
-			sparkle.Lifetime = NumberRange.new(0.8, 1.2)
-			sparkle.Speed = NumberRange.new(8, 12)
-			sparkle.SpreadAngle = Vector2.new(20, 20)
-			sparkle.EmissionDirection = Enum.NormalId.Top
-			sparkle.Acceleration = Vector3.new(0, -20, 0)
-			sparkle.Size = NumberSequence.new(0.4, 0)
-			sparkle.LightEmission = 1
-			sparkle.Parent = spout
 			light(spout, Color3.fromRGB(150, 220, 255), 18, 1)
 		end
 	end
-	local title = deco({
-		Name = "Title",
-		Size = Vector3.new(26, 6, 0.4),
-		CFrame = CFrame.new(0, 26, 20),
-		Transparency = 1,
-		Parent = hub,
-	})
+	local title = deco({ Name = "Title", Size = Vector3.new(26, 6, 0.4), CFrame = CFrame.new(0, 34, plazaZ), Transparency = 1, Parent = hub })
 	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.fromOffset(420, 90)
-	bb.MaxDistance = 260
+	bb.Size = UDim2.fromOffset(460, 100)
+	bb.MaxDistance = 400
 	bb.Parent = title
 	local tl = Instance.new("TextLabel")
 	tl.Size = UDim2.fromScale(1, 1)
@@ -696,33 +728,42 @@ local function buildHub(map: Folder, safe: Folder)
 	st.Color = Color3.fromRGB(60, 30, 10)
 	st.Parent = tl
 
-	-- Arbres autour du hub (hors bases et route)
-	for _ = 1, 26 do
-		local x = rng:NextNumber(-HUB_HALF_X + 10, HUB_HALF_X - 10)
-		local z = rng:NextNumber(HUB_Z_MIN + 10, HUB_Z_MAX - 10)
-		local inPlotLane = math.abs(math.abs(x) - 100) < 40
-		if math.abs(x) > 26 and not inPlotLane then
-			if not placeTemplate(if rng:NextNumber() < 0.5 then "PalmTree" else "JungleTree", hub, Vector3.new(x, GROUND_Y, z), rng:NextNumber(0.6, 0.9), rng:NextNumber(0, 6.28)) then
-				break
-			end
+	-- Stand VENDRE (rayé rouge/blanc) : vend le serpent porté sans passer par la base
+	local sellPos = Vector3.new(150, GROUND_Y, safeZ - 40)
+	local sellFolder = Instance.new("Folder")
+	sellFolder.Name = "SellStall"
+	sellFolder.Parent = hub
+	local counter = deco({ Name = "Counter", Size = Vector3.new(14, 3.5, 4), CFrame = CFrame.new(sellPos + Vector3.new(0, 1.75, 0)), Color = Color3.fromRGB(150, 100, 55), Material = Enum.Material.WoodPlanks, CanCollide = true, Parent = sellFolder })
+	for _, x in { -6.5, 6.5 } do
+		deco({ Name = "Pole", Size = Vector3.new(0.6, 9, 0.6), CFrame = CFrame.new(sellPos + Vector3.new(x, 4.5, 1.5)), Color = Color3.fromRGB(240, 240, 240), Material = Enum.Material.SmoothPlastic, Parent = sellFolder })
+	end
+	for k = 0, 6 do
+		deco({ Name = "Awning", Size = Vector3.new(2.1, 0.4, 7), CFrame = CFrame.new(sellPos + Vector3.new(-6.3 + k * 2.1, 9.2, 0.5)) * CFrame.Angles(math.rad(-14), 0, 0), Color = if k % 2 == 0 then Color3.fromRGB(230, 40, 50) else Color3.fromRGB(250, 250, 250), Material = Enum.Material.Fabric, Parent = sellFolder })
+	end
+	local sellRing = part({ Name = "SellZone", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 22, 22), CFrame = CFrame.new(sellPos + Vector3.new(0, 0.15, -7)) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(90, 255, 140), Material = Enum.Material.Neon, Transparency = 0.5, CanCollide = false, CastShadow = false, Parent = sellFolder })
+	sellRing:SetAttribute("IsSellZone", true)
+	signBillboard(counter, "💲 VENDRE", Color3.fromRGB(255, 90, 90), 9)
+
+	-- Grande arche de sortie vers les zones
+	for _, x in { -(ROAD_HALF + 6), ROAD_HALF + 6 } do
+		deco({ Name = "ArchPillar", Size = Vector3.new(6, 30, 6), CFrame = CFrame.new(x, GROUND_Y + 15, HUB_Z_MIN), Color = Color3.fromRGB(180, 110, 60), Material = Enum.Material.Brick, CanCollide = true, Parent = hub })
+	end
+	local archTop = deco({ Name = "ArchTop", Size = Vector3.new(ROAD_HALF * 2 + 18, 6, 6), CFrame = CFrame.new(0, GROUND_Y + 33, HUB_Z_MIN), Color = Color3.fromRGB(90, 210, 60), Material = Enum.Material.Grass, Parent = hub })
+	surfaceText(archTop, Enum.NormalId.Back, "🐍 LES 15 ZONES ➜", Color3.fromRGB(255, 240, 120))
+
+	-- Palmiers et arbres le long des murs latéraux
+	for k = 0, 9 do
+		for _, x in { -HUB_HALF_X + 18, HUB_HALF_X - 18 } do
+			placeTemplate(if k % 2 == 0 then "PalmTree" else "JungleTree", hub, Vector3.new(x, GROUND_Y, HUB_Z_MIN + 20 + k * 22), rng:NextNumber(0.7, 0.95), rng:NextNumber(0, 6.28))
 		end
 	end
-	-- Fleurs
-	for _ = 1, 60 do
-		local x = rng:NextNumber(-HUB_HALF_X, HUB_HALF_X)
-		local z = rng:NextNumber(HUB_Z_MIN, HUB_Z_MAX)
-		if math.abs(x) > 18 and math.abs(math.abs(x) - 100) > 36 then
-			local colors = { Color3.fromRGB(255, 120, 160), Color3.fromRGB(255, 230, 90), Color3.fromRGB(150, 140, 255), Color3.fromRGB(255, 255, 255) }
-			deco({
-				Name = "Flower",
-				Shape = Enum.PartType.Ball,
-				Size = Vector3.new(0.9, 0.9, 0.9),
-				CFrame = CFrame.new(x, GROUND_Y + 0.4, z),
-				Color = colors[rng:NextInteger(1, #colors)],
-				Material = Enum.Material.SmoothPlastic,
-				CastShadow = false,
-				Parent = hub,
-			})
+	-- Fleurs sur l'herbe de la place
+	local flowerColors = { Color3.fromRGB(255, 120, 160), Color3.fromRGB(255, 230, 90), Color3.fromRGB(150, 140, 255), Color3.fromRGB(255, 255, 255) }
+	for _ = 1, 70 do
+		local x = rng:NextNumber(-HUB_HALF_X + 10, HUB_HALF_X - 10)
+		local z = rng:NextNumber(HUB_Z_MIN + 10, safeZ - 12)
+		if math.abs(x) > ROAD_HALF + 4 and (Vector3.new(x, 0, z) - Vector3.new(0, 0, plazaZ)).Magnitude > 40 then
+			deco({ Name = "Flower", Shape = Enum.PartType.Ball, Size = Vector3.new(0.9, 0.9, 0.9), CFrame = CFrame.new(x, GROUND_Y + 0.4, z), Color = flowerColors[rng:NextInteger(1, #flowerColors)], Material = Enum.Material.SmoothPlastic, CastShadow = false, Parent = hub })
 		end
 	end
 
@@ -991,12 +1032,233 @@ local function cosmicProps(folder: Folder, center: Vector3, half: number)
 	pe.Parent = att
 end
 
-local STYLES: { [number]: BiomeStyle } = {
-	[1] = { Ground = Enum.Material.LeafyGrass, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = jungleProps },
-	[2] = { Ground = Enum.Material.Sand, Trail = Enum.Material.Sandstone, Cliff = Enum.Material.Sandstone, Props = desertProps },
-	[3] = { Ground = Enum.Material.Mud, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = swampProps },
-	[4] = { Ground = Enum.Material.Basalt, Trail = Enum.Material.Basalt, Cliff = Enum.Material.Basalt, Props = volcanoProps },
-	[5] = { Ground = Enum.Material.Asphalt, Trail = Enum.Material.Asphalt, Cliff = Enum.Material.Slate, Props = cosmicProps },
+-- Petits constructeurs réutilisés par les décors des zones
+local function pine(folder: Folder, pos: Vector3, s: number, leaf: Color3, snow: boolean)
+	deco({ Name = "PineTrunk", Size = Vector3.new(1.4, 6, 1.4) * s, CFrame = CFrame.new(pos + Vector3.new(0, 3 * s, 0)), Color = Color3.fromRGB(95, 65, 40), Material = Enum.Material.Wood, CanCollide = true, Parent = folder })
+	for k = 0, 2 do
+		local w = (7 - k * 2) * s
+		deco({ Name = "PineCone", Shape = Enum.PartType.Ball, Size = Vector3.new(w, 4 * s, w), CFrame = CFrame.new(pos + Vector3.new(0, (6 + k * 3) * s, 0)), Color = leaf, Material = Enum.Material.Grass, Parent = folder })
+		if snow then
+			deco({ Name = "Snow", Shape = Enum.PartType.Ball, Size = Vector3.new(w * 0.7, 1.4 * s, w * 0.7), CFrame = CFrame.new(pos + Vector3.new(0, (7.6 + k * 3) * s, 0)), Color = Color3.fromRGB(245, 250, 255), Material = Enum.Material.Snow, Parent = folder })
+		end
+	end
+end
+
+local function giantMushroom(folder: Folder, pos: Vector3, s: number, cap: Color3, glow: boolean)
+	deco({ Name = "MushStem", Shape = Enum.PartType.Cylinder, Size = Vector3.new(9 * s, 2.4 * s, 2.4 * s), CFrame = CFrame.new(pos + Vector3.new(0, 4.5 * s, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(240, 230, 210), Material = Enum.Material.SmoothPlastic, CanCollide = true, Parent = folder })
+	local c = deco({ Name = "MushCap", Shape = Enum.PartType.Ball, Size = Vector3.new(11, 5, 11) * s, CFrame = CFrame.new(pos + Vector3.new(0, 9.5 * s, 0)), Color = cap, Material = if glow then Enum.Material.Neon else Enum.Material.SmoothPlastic, CanCollide = true, Parent = folder })
+	for k = 0, 5 do
+		local a = k / 6 * math.pi * 2
+		deco({ Name = "CapDot", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 0.8, 1.6) * s, CFrame = CFrame.new(pos + Vector3.new(math.cos(a) * 3 * s, 11.6 * s, math.sin(a) * 3 * s)), Color = Color3.new(1, 1, 1), Material = Enum.Material.SmoothPlastic, Parent = folder })
+	end
+	if glow then
+		light(c, cap, 20, 1.2)
+	end
+end
+
+local function crystalCluster(folder: Folder, pos: Vector3, s: number, color: Color3)
+	for k = 0, 4 do
+		local h = rng:NextNumber(5, 12) * s
+		local p = deco({ Name = "Crystal", Size = Vector3.new(1.6 * s, h, 1.6 * s), CFrame = CFrame.new(pos + Vector3.new(rng:NextNumber(-2, 2) * s, h / 2, rng:NextNumber(-2, 2) * s)) * CFrame.Angles(rng:NextNumber(-0.35, 0.35), k * 1.2, rng:NextNumber(-0.35, 0.35)), Color = color, Material = Enum.Material.Glass, CanCollide = true, Parent = folder })
+		p.Transparency = 0.15
+		if k == 0 then
+			light(p, color, 22, 1.4)
+		end
+	end
+end
+
+local function cloud(folder: Folder, pos: Vector3, s: number)
+	for k = 0, 4 do
+		deco({ Name = "Cloud", Shape = Enum.PartType.Ball, Size = Vector3.new(8, 6, 8) * s * rng:NextNumber(0.7, 1.2), CFrame = CFrame.new(pos + Vector3.new((k - 2) * 3.5 * s, rng:NextNumber(0, 2) * s, rng:NextNumber(-2, 2) * s)), Color = Color3.fromRGB(255, 255, 255), Material = Enum.Material.SmoothPlastic, Parent = folder })
+	end
+end
+
+local function tundraProps(folder: Folder, center: Vector3, half: number)
+	scatter(26, center, half - 6, 24, function(pos, _yaw, s)
+		pine(folder, pos, s, Color3.fromRGB(40, 100, 70), true)
+	end)
+	scatter(10, center, half - 6, 22, function(pos, yaw, s)
+		crystalCluster(folder, pos, s * 0.8, Color3.fromRGB(170, 230, 255))
+		local _ = yaw
+	end)
+	scatter(6, center, half - 10, 26, function(pos, _yaw, s)
+		for k = 0, 2 do
+			deco({ Name = "Snowman", Shape = Enum.PartType.Ball, Size = Vector3.new(1, 1, 1) * (4 - k) * s, CFrame = CFrame.new(pos + Vector3.new(0, (1.6 + k * 2.6) * s, 0)), Color = Color3.fromRGB(250, 252, 255), Material = Enum.Material.Snow, CanCollide = true, Parent = folder })
+		end
+	end)
+	terrain:FillCylinder(CFrame.new(center + Vector3.new(50, -0.5, -40)), 2, 18, Enum.Material.Ice)
+end
+
+local function bambooProps(folder: Folder, center: Vector3, half: number)
+	scatter(40, center, half - 4, 22, function(pos, _yaw, s)
+		for k = 0, 3 do
+			local h = rng:NextNumber(12, 22) * s
+			local off = Vector3.new(rng:NextNumber(-2, 2), 0, rng:NextNumber(-2, 2))
+			deco({ Name = "Bamboo", Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, 0.9, 0.9), CFrame = CFrame.new(pos + off + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(120 + k * 10, 180, 70), Material = Enum.Material.SmoothPlastic, CanCollide = true, Parent = folder })
+		end
+	end)
+	scatter(10, center, half - 8, 26, function(pos, _yaw, s)
+		deco({ Name = "LanternPost", Size = Vector3.new(0.5, 6, 0.5) * s, CFrame = CFrame.new(pos + Vector3.new(0, 3 * s, 0)), Color = Color3.fromRGB(60, 40, 30), Material = Enum.Material.Wood, Parent = folder })
+		local lantern = deco({ Name = "Lantern", Shape = Enum.PartType.Ball, Size = Vector3.new(1.6, 2, 1.6) * s, CFrame = CFrame.new(pos + Vector3.new(0, 6.6 * s, 0)), Color = Color3.fromRGB(230, 50, 40), Material = Enum.Material.Neon, Parent = folder })
+		light(lantern, Color3.fromRGB(255, 120, 80), 16, 1.2)
+	end)
+	terrain:FillCylinder(CFrame.new(center + Vector3.new(-45, -0.5, 35)), 2.5, 16, Enum.Material.Water)
+end
+
+local function canyonProps(folder: Folder, center: Vector3, half: number)
+	for _ = 1, 9 do
+		local x = center.X + rng:NextNumber(-half + 12, half - 12)
+		local z = center.Z + rng:NextNumber(-half + 12, half - 12)
+		if not blocked(x, z, center, 30) then
+			local h = rng:NextNumber(16, 34)
+			fill(CFrame.new(x, h / 2, z), Vector3.new(rng:NextNumber(10, 18), h, rng:NextNumber(10, 18)), Enum.Material.Sandstone)
+		end
+	end
+	scatter(16, center, half - 6, 22, function(pos, yaw, s)
+		placeTemplate("Cactus", folder, pos, s, yaw, true)
+	end)
+	scatter(10, center, half - 6, 20, function(pos, yaw, s)
+		deco({ Name = "Skull", Shape = Enum.PartType.Ball, Size = Vector3.new(2, 1.6, 2.2) * s, CFrame = CFrame.new(pos + Vector3.new(0, 0.7 * s, 0)) * CFrame.Angles(0, yaw, 0), Color = Color3.fromRGB(240, 230, 210), Material = Enum.Material.SmoothPlastic, Parent = folder })
+	end)
+end
+
+local function mushroomProps(folder: Folder, center: Vector3, half: number)
+	local caps = { Color3.fromRGB(230, 40, 50), Color3.fromRGB(170, 90, 255), Color3.fromRGB(255, 120, 200), Color3.fromRGB(90, 230, 255) }
+	scatter(22, center, half - 8, 26, function(pos, _yaw, s)
+		giantMushroom(folder, pos, s * rng:NextNumber(0.8, 1.6), caps[rng:NextInteger(1, #caps)], rng:NextNumber() < 0.4)
+	end)
+	scatter(18, center, half - 4, 16, function(pos, yaw, s)
+		placeTemplate("Mushrooms", folder, pos, s * 0.8, yaw)
+	end)
+end
+
+local function reefProps(folder: Folder, center: Vector3, half: number)
+	local corals = { Color3.fromRGB(255, 110, 140), Color3.fromRGB(255, 160, 60), Color3.fromRGB(150, 90, 255), Color3.fromRGB(80, 220, 200) }
+	scatter(30, center, half - 6, 20, function(pos, yaw, s)
+		local c = corals[rng:NextInteger(1, #corals)]
+		for k = 0, 4 do
+			local h = rng:NextNumber(3, 7) * s
+			deco({ Name = "Coral", Shape = Enum.PartType.Cylinder, Size = Vector3.new(h, 0.8 * s, 0.8 * s), CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw + k * 1.3, 0) * CFrame.Angles(math.rad(rng:NextNumber(-35, 35)), 0, math.rad(90)) * CFrame.new(h / 2, 0, 0), Color = c, Material = Enum.Material.SmoothPlastic, Parent = folder })
+			deco({ Name = "CoralTip", Shape = Enum.PartType.Ball, Size = Vector3.new(1.4, 1.4, 1.4) * s, CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw + k * 1.3, 0) * CFrame.Angles(math.rad(rng:NextNumber(-35, 35)), 0, math.rad(90)) * CFrame.new(h, 0, 0), Color = c, Material = Enum.Material.Neon, Parent = folder })
+		end
+	end)
+	scatter(10, center, half - 6, 24, function(pos, yaw, s)
+		placeTemplate("PalmTree", folder, pos, s, yaw)
+	end)
+	for _ = 1, 4 do
+		local x = center.X + rng:NextNumber(-half + 20, half - 20)
+		local z = center.Z + rng:NextNumber(-half + 20, half - 20)
+		if not blocked(x, z, center, 30) then
+			terrain:FillCylinder(CFrame.new(x, -0.5, z), 2.5, rng:NextNumber(8, 14), Enum.Material.Water)
+		end
+	end
+end
+
+local function crystalProps(folder: Folder, center: Vector3, half: number)
+	local colors = { Color3.fromRGB(110, 220, 255), Color3.fromRGB(220, 120, 255), Color3.fromRGB(255, 140, 200), Color3.fromRGB(140, 255, 210) }
+	scatter(30, center, half - 6, 22, function(pos, _yaw, s)
+		crystalCluster(folder, pos, s * rng:NextNumber(0.8, 1.6), colors[rng:NextInteger(1, #colors)])
+	end)
+	scatter(14, center, half - 6, 22, function(pos, yaw, s)
+		placeTemplate("CosmicCrystal", folder, pos, s, yaw, true)
+	end)
+	for _ = 1, 10 do
+		local x = center.X + rng:NextNumber(-half + 10, half - 10)
+		local z = center.Z + rng:NextNumber(-half + 10, half - 10)
+		if not blocked(x, z, center, 28) then
+			fill(CFrame.new(x, 6, z) * CFrame.Angles(0, rng:NextNumber(0, 3), 0), Vector3.new(6, 14, 6), Enum.Material.Slate)
+		end
+	end
+end
+
+local function graveyardProps(folder: Folder, center: Vector3, half: number)
+	scatter(40, center, half - 6, 20, function(pos, yaw, s)
+		deco({ Name = "Tombstone", Size = Vector3.new(3, 4, 0.8) * s, CFrame = CFrame.new(pos + Vector3.new(0, 2 * s, 0)) * CFrame.Angles(math.rad(rng:NextNumber(-8, 8)), yaw, 0), Color = Color3.fromRGB(120, 125, 135), Material = Enum.Material.Slate, CanCollide = true, Parent = folder })
+	end)
+	scatter(14, center, half - 6, 24, function(pos, yaw, s)
+		if not placeTemplate("SwampTree", folder, pos, s, yaw) then
+			deco({ Name = "DeadTree", Size = Vector3.new(2, 14, 2), CFrame = CFrame.new(pos + Vector3.new(0, 7, 0)), Color = Color3.fromRGB(50, 45, 45), Material = Enum.Material.Wood, Parent = folder })
+		end
+	end)
+	scatter(12, center, half - 6, 18, function(pos, _yaw, s)
+		local pumpkin = deco({ Name = "Pumpkin", Shape = Enum.PartType.Ball, Size = Vector3.new(2.4, 1.8, 2.4) * s, CFrame = CFrame.new(pos + Vector3.new(0, 0.9 * s, 0)), Color = Color3.fromRGB(255, 130, 20), Material = Enum.Material.SmoothPlastic, Parent = folder })
+		light(pumpkin, Color3.fromRGB(255, 150, 50), 12, 1.2)
+	end)
+end
+
+local function templeProps(folder: Folder, center: Vector3, half: number)
+	-- Pyramide à degrés au fond de la zone
+	local base = center + Vector3.new(0, 0, -half + 40)
+	for k = 0, 5 do
+		local w = 44 - k * 7
+		deco({ Name = "PyramidStep", Size = Vector3.new(w, 4, w), CFrame = CFrame.new(base + Vector3.new(0, GROUND_Y + 2 + k * 4, 0)), Color = Color3.fromRGB(170 - k * 6, 140 - k * 6, 90), Material = Enum.Material.Cobblestone, CanCollide = true, Parent = folder })
+	end
+	scatter(14, center, half - 8, 26, function(pos, _yaw, s)
+		deco({ Name = "Pillar", Size = Vector3.new(3, 14, 3) * s, CFrame = CFrame.new(pos + Vector3.new(0, 7 * s, 0)), Color = Color3.fromRGB(190, 170, 120), Material = Enum.Material.Limestone, CanCollide = true, Parent = folder })
+	end)
+	scatter(14, center, half - 6, 24, function(pos, yaw, s)
+		placeTemplate("JungleTree", folder, pos, s, yaw)
+	end)
+end
+
+local function toxicProps(folder: Folder, center: Vector3, half: number)
+	for _ = 1, 8 do
+		local x = center.X + rng:NextNumber(-half + 10, half - 10)
+		local z = center.Z + rng:NextNumber(-half + 10, half - 10)
+		if not blocked(x, z, center, 28) then
+			local r = rng:NextNumber(5, 9)
+			local pool = deco({ Name = "ToxicPool", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, r * 2, r * 2), CFrame = CFrame.new(x, GROUND_Y + 0.15, z) * CFrame.Angles(0, 0, math.rad(90)), Color = Color3.fromRGB(150, 255, 40), Material = Enum.Material.Neon, Transparency = 0.2, CastShadow = false, Parent = folder })
+			light(pool, Color3.fromRGB(150, 255, 40), 20, 1.6)
+		end
+	end
+	scatter(24, center, half - 6, 20, function(pos, yaw, s)
+		local barrel = deco({ Name = "Barrel", Shape = Enum.PartType.Cylinder, Size = Vector3.new(3.4, 2.2, 2.2) * s, CFrame = CFrame.new(pos + Vector3.new(0, 1.7 * s, 0)) * CFrame.Angles(0, yaw, math.rad(if rng:NextNumber() < 0.3 then 0 else 90)), Color = Color3.fromRGB(230, 200, 30), Material = Enum.Material.Metal, CanCollide = true, Parent = folder })
+		local _ = barrel
+	end)
+	scatter(12, center, half - 6, 24, function(pos, yaw, s)
+		deco({ Name = "DeadTree", Size = Vector3.new(1.6, 12, 1.6) * s, CFrame = CFrame.new(pos + Vector3.new(0, 6 * s, 0)) * CFrame.Angles(0.15, yaw, 0.1), Color = Color3.fromRGB(60, 55, 45), Material = Enum.Material.Wood, Parent = folder })
+	end)
+end
+
+local function skyProps(folder: Folder, center: Vector3, half: number)
+	scatter(20, center, half - 6, 24, function(pos, _yaw, s)
+		cloud(folder, pos + Vector3.new(0, 2, 0), s)
+	end)
+	for k = 1, 10 do
+		local a = k / 10 * math.pi * 2
+		cloud(folder, center + Vector3.new(math.cos(a) * 70, 30 + rng:NextNumber(0, 20), math.sin(a) * 70), rng:NextNumber(1.2, 2))
+	end
+	scatter(12, center, half - 8, 26, function(pos, _yaw, s)
+		deco({ Name = "GoldPillar", Size = Vector3.new(3, 16, 3) * s, CFrame = CFrame.new(pos + Vector3.new(0, 8 * s, 0)), Color = Color3.fromRGB(255, 220, 120), Material = Enum.Material.Marble, CanCollide = true, Parent = folder })
+		local orb = deco({ Name = "PillarOrb", Shape = Enum.PartType.Ball, Size = Vector3.new(2.6, 2.6, 2.6) * s, CFrame = CFrame.new(pos + Vector3.new(0, 17.5 * s, 0)), Color = Color3.fromRGB(255, 240, 180), Material = Enum.Material.Neon, Parent = folder })
+		light(orb, Color3.fromRGB(255, 230, 160), 18, 1.4)
+	end)
+	-- Arc-en-ciel au-dessus de l'entrée
+	for k = 0, 5 do
+		for step = 0, 18 do
+			local a = step / 18 * math.pi
+			local r = 60 - k * 2.5
+			deco({ Name = "Rainbow", Size = Vector3.new(2.6, 2.6, 2.6), CFrame = CFrame.new(center + Vector3.new(math.cos(a) * r, math.sin(a) * r * 0.6, half - 30)), Color = Color3.fromHSV(k / 6, 0.7, 1), Material = Enum.Material.Neon, Transparency = 0.25, CastShadow = false, Parent = folder })
+		end
+	end
+end
+
+local STYLES: { [string]: BiomeStyle } = {
+	Jungle = { Ground = Enum.Material.LeafyGrass, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = jungleProps },
+	Desert = { Ground = Enum.Material.Sand, Trail = Enum.Material.Sandstone, Cliff = Enum.Material.Sandstone, Props = desertProps },
+	Swamp = { Ground = Enum.Material.Mud, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = swampProps },
+	Tundra = { Ground = Enum.Material.Snow, Trail = Enum.Material.Ice, Cliff = Enum.Material.Glacier, Props = tundraProps },
+	Bamboo = { Ground = Enum.Material.Grass, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = bambooProps },
+	Canyon = { Ground = Enum.Material.Sandstone, Trail = Enum.Material.Ground, Cliff = Enum.Material.Sandstone, Props = canyonProps },
+	Mushroom = { Ground = Enum.Material.Limestone, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = mushroomProps },
+	Reef = { Ground = Enum.Material.Salt, Trail = Enum.Material.Sand, Cliff = Enum.Material.Rock, Props = reefProps },
+	Volcano = { Ground = Enum.Material.Basalt, Trail = Enum.Material.Basalt, Cliff = Enum.Material.Basalt, Props = volcanoProps },
+	Crystal = { Ground = Enum.Material.Glacier, Trail = Enum.Material.Slate, Cliff = Enum.Material.Slate, Props = crystalProps },
+	Graveyard = { Ground = Enum.Material.Slate, Trail = Enum.Material.Ground, Cliff = Enum.Material.Slate, Props = graveyardProps },
+	Temple = { Ground = Enum.Material.Brick, Trail = Enum.Material.Cobblestone, Cliff = Enum.Material.Rock, Props = templeProps },
+	Toxic = { Ground = Enum.Material.Pavement, Trail = Enum.Material.Ground, Cliff = Enum.Material.Rock, Props = toxicProps },
+	Sky = { Ground = Enum.Material.Ice, Trail = Enum.Material.Marble, Cliff = Enum.Material.Ice, Props = skyProps },
+	Cosmic = { Ground = Enum.Material.Asphalt, Trail = Enum.Material.Asphalt, Cliff = Enum.Material.Slate, Props = cosmicProps },
 }
 
 local function buildBiome(parent: Folder, cfg: any)
@@ -1005,7 +1267,8 @@ local function buildBiome(parent: Folder, cfg: any)
 	folder:SetAttribute("BiomeOrder", cfg.Order)
 	folder:SetAttribute("GateSpeed", cfg.GateSpeed)
 	folder:SetAttribute("GateCash", cfg.GateCash)
-	local style = STYLES[cfg.Order] or STYLES[1]
+	local style = STYLES[cfg.Theme] or STYLES.Jungle
+	terrain:SetMaterialColor(cfg.Ground, cfg.GroundColor)
 	local center = Vector3.new(cfg.Center.X, GROUND_Y, cfg.Center.Z)
 	local half = cfg.Size.X / 2
 
@@ -1013,15 +1276,31 @@ local function buildBiome(parent: Folder, cfg: any)
 	fill(CFrame.new(center.X, -1, center.Z), Vector3.new(cfg.Size.X, 4, cfg.Size.Z), style.Ground)
 	fill(CFrame.new(center.X, -0.6, center.Z), Vector3.new(ROAD_HALF * 2, 4, cfg.Size.Z), style.Trail)
 
-	-- Falaises de canyon de chaque côté
+	-- Falaises de chaque côté (décor) + murs d'enceinte avec ouvertures pour la route (anti-chute)
 	for _, sx in { -1, 1 } do
 		local z = center.Z - half
 		while z <= center.Z + half do
-			terrain:FillBall(Vector3.new(sx * (CANYON_HALF_X + rng:NextNumber(0, 6)), rng:NextNumber(2, 8), z), rng:NextNumber(10, 16), style.Cliff)
+			terrain:FillBall(Vector3.new(sx * (CANYON_HALF_X - 4 + rng:NextNumber(0, 6)), rng:NextNumber(2, 10), z), rng:NextNumber(10, 16), style.Cliff)
 			z += 10
 		end
 	end
 	task.wait()
+	local walls = Instance.new("Folder")
+	walls.Name = "Walls"
+	walls.Parent = folder
+	local wallColor = cfg.GroundColor:Lerp(Color3.new(0, 0, 0), 0.25)
+	local zF, zB = center.Z + half, center.Z - half
+	local xL, xR = center.X - half - 3, center.X + half + 3
+	wall(walls, Vector3.new(xL, 0, zF), Vector3.new(xL, 0, zB), wallColor, Enum.Material.Rock)
+	wall(walls, Vector3.new(xR, 0, zF), Vector3.new(xR, 0, zB), wallColor, Enum.Material.Rock)
+	for _, zz in { zF, zB } do
+		if not (cfg.Order == #BiomesConfig and zz == zB) then
+			wall(walls, Vector3.new(xL, 0, zz), Vector3.new(-ROAD_HALF - 3, 0, zz), wallColor, Enum.Material.Rock)
+			wall(walls, Vector3.new(ROAD_HALF + 3, 0, zz), Vector3.new(xR, 0, zz), wallColor, Enum.Material.Rock)
+		else
+			wall(walls, Vector3.new(xL, 0, zz), Vector3.new(xR, 0, zz), wallColor, Enum.Material.Rock)
+		end
+	end
 
 	-- Marqueurs logiques
 	part({
@@ -1103,7 +1382,7 @@ local function buildBiome(parent: Folder, cfg: any)
 	local gateDeco = Instance.new("Folder")
 	gateDeco.Name = "Entrance"
 	gateDeco.Parent = folder
-	if not placeTemplate("SkullGate", gateDeco, Vector3.new(0, GROUND_Y, entranceZ + 2), 1, 0, false) then
+	if not placeTemplate("SkullGate", gateDeco, Vector3.new(0, GROUND_Y, entranceZ + 2), 1.35, 0, false) then
 		for _, x in { -16, 16 } do
 			deco({ Name = "Fang", Size = Vector3.new(4, 20, 4), CFrame = CFrame.new(x, 10, entranceZ + 2) * CFrame.Angles(0, 0, math.rad(x > 0 and 8 or -8)), Color = Color3.fromRGB(235, 228, 210), Parent = gateDeco, CanCollide = true })
 		end
@@ -1136,7 +1415,7 @@ local function buildBiome(parent: Folder, cfg: any)
 	req.Size = UDim2.fromScale(1, 0.38)
 	req.Position = UDim2.fromScale(0, 0.62)
 	req.BackgroundTransparency = 1
-	req.Text = if cfg.Order > 1 then string.format("⚡ %d Speed  ·  💵 $%s", cfg.GateSpeed, tostring(cfg.GateCash)) else "⚠️ Gardien : " .. cfg.GuardianName
+	req.Text = if cfg.Order > 1 then string.format("⚡ %d Vitesse  ·  💵 $%s", cfg.GateSpeed, tostring(cfg.GateCash)) else "⚠️ Gardien : " .. cfg.GuardianName
 	req.TextScaled = true
 	req.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
 	req.TextColor3 = Color3.fromRGB(255, 220, 120)
@@ -1183,24 +1462,34 @@ end
 
 --[[ ───────────────────────── Route (lampadaires) ───────────────────────── ]]
 
+-- Route entre l'arène et les zones : haies murées des deux côtés + lampadaires.
 local function buildRoadLamps(safe: Folder)
-	local z = HUB_Z_MIN - 6
-	while z > WORLD_Z_MIN do
-		local insideBiome = false
-		for _, cfg in BiomesConfig do
-			if math.abs(z - cfg.Center.Z) < cfg.Size.Z / 2 + 4 then
-				insideBiome = true
-				break
+	local hedge = Color3.fromRGB(70, 160, 60)
+	-- tronçons de route hors zones
+	local segments: { { number } } = {}
+	local zTop = HUB_Z_MIN
+	for _, cfg in BiomesConfig do
+		local front = cfg.Center.Z + cfg.Size.Z / 2
+		table.insert(segments, { zTop, front })
+		zTop = cfg.Center.Z - cfg.Size.Z / 2
+	end
+	for _, seg in segments do
+		for _, x in { -(ROAD_HALF + 3), ROAD_HALF + 3 } do
+			local v = wall(safe, Vector3.new(x, 0, seg[1]), Vector3.new(x, 0, seg[2]), hedge, Enum.Material.Grass, 4)
+			if v then
+				v.Size = Vector3.new(v.Size.X, 10, v.Size.Z)
+				v.CFrame = v.CFrame - Vector3.new(0, WALL_H / 2 - 5, 0)
 			end
 		end
-		if not insideBiome then
-			for _, x in { -(ROAD_HALF + 2), ROAD_HALF + 2 } do
+		local z = seg[1] - 6
+		while z > seg[2] + 2 do
+			for _, x in { -(ROAD_HALF - 1), ROAD_HALF - 1 } do
 				deco({ Name = "RoadLampPost", Size = Vector3.new(0.6, 8, 0.6), CFrame = CFrame.new(x, GROUND_Y + 4, z), Color = Color3.fromRGB(35, 35, 40), Material = Enum.Material.Metal, Parent = safe })
 				local bulb = deco({ Name = "RoadLamp", Shape = Enum.PartType.Ball, Size = Vector3.new(1.4, 1.4, 1.4), CFrame = CFrame.new(x, GROUND_Y + 8.6, z), Color = Color3.fromRGB(140, 255, 190), Material = Enum.Material.Neon, Parent = safe })
 				light(bulb, Color3.fromRGB(140, 255, 190), 22, 1.1)
 			end
+			z -= 14
 		end
-		z -= 12
 	end
 end
 
@@ -1210,6 +1499,7 @@ function MapBuilder.build()
 	MapBuilder.setupPhysics()
 	MapBuilder.setupLighting()
 
+	Workspace.FallenPartsDestroyHeight = -400
 	local old = Workspace:FindFirstChild("Map")
 	if old then
 		old:Destroy()

@@ -12,6 +12,8 @@ local RebirthsConfig = require(game.ReplicatedStorage.StealASnake.Config.Rebirth
 local ModelFactory = require(game.ServerStorage.StealASnake.Templates.ModelFactory)
 local VFXFactory = require(game.ReplicatedStorage.StealASnake.Modules.VFXFactory)
 local TutorialService = require(script.Parent.TutorialService)
+local MutationsConfig = require(game.ReplicatedStorage.StealASnake.Config.MutationsConfig)
+local FormatNumber = require(game.ReplicatedStorage.StealASnake.Modules.FormatNumber)
 
 type CarryState = {
 	SpeciesId: string,
@@ -192,6 +194,42 @@ function CarrySystem.tryDeposit(player: Player)
 	end
 end
 
+-- Stand VENDRE du hub : vend le serpent porté (même valeur que la vente depuis un vivarium : revenu × 25).
+local SELL_RADIUS = 12
+local function sellZone(): BasePart?
+	local map = Workspace:FindFirstChild("Map")
+	local hub = map and map:FindFirstChild("Hub")
+	local stall = hub and hub:FindFirstChild("SellStall")
+	local zone = stall and stall:FindFirstChild("SellZone")
+	return if zone and zone:IsA("BasePart") then zone else nil
+end
+
+function CarrySystem.trySell(player: Player)
+	local state = carrying[player.UserId]
+	local root = hrp(player)
+	local zone = sellZone()
+	if not state or not root or not zone then
+		return
+	end
+	local flat = root.Position - zone.Position
+	if Vector3.new(flat.X, 0, flat.Z).Magnitude > SELL_RADIUS then
+		return
+	end
+	local def = SnakesConfig.get(state.SpeciesId)
+	if not def then
+		return
+	end
+	local mut = MutationsConfig.Defs[state.Mutation] or MutationsConfig.Defs.Normal
+	local income = SpeedCalculator.income(def.BaseIncome, def.RarityMult, state.Weight, def.BaseWeight, mut.Multiplier, DataManager.rebirthMult(player))
+	local value = math.floor(income * 25)
+	local d = DataManager.get(player)
+	d.Cash += value
+	DataManager.markDirty(player)
+	CarrySystem.drop(player, "💲 Vendu ! +$" .. FormatNumber.short(value))
+	DataManager.push(player)
+	Network.event("VFX"):FireClient(player, "CashBurst", nil)
+end
+
 function CarrySystem.start()
 	Network.event("RequestSteal").OnServerEvent:Connect(function(player, snake)
 		if typeof(snake) ~= "Instance" or not snake:IsA("Model") then
@@ -256,6 +294,7 @@ function CarrySystem.start()
 			end
 			state.LastPos = root.Position
 			CarrySystem.tryDeposit(player)
+			CarrySystem.trySell(player)
 		end
 	end)
 end

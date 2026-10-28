@@ -10,6 +10,9 @@
 ]]
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local SnakesConfig = require(ReplicatedStorage.StealASnake.Config.SnakesConfig)
+local SnakeBuilder = require(ReplicatedStorage.StealASnake.Modules.SnakeBuilder)
+
 local ModelFactory = {}
 
 local SNAKE_SIZE = 3.4 -- plus grande dimension d'un serpent à l'échelle 1
@@ -137,15 +140,42 @@ local function partSnake(modelName: string, s: number): Model
 	return model
 end
 
+-- Cache des serpents procéduraux : un modèle par espèce, construit une fois puis cloné.
+local proceduralCache: { [string]: Model } = {}
+
+local function proceduralTemplate(speciesId: string): Model?
+	local cached = proceduralCache[speciesId]
+	if cached then
+		return cached
+	end
+	local def = SnakesConfig.get(speciesId)
+	if not def then
+		return nil
+	end
+	local built = SnakeBuilder.build(speciesId, def.Look)
+	proceduralCache[speciesId] = built
+	return built
+end
+
+-- `modelName` = Id d'espèce (SnakesConfig.ModelName). Priorité : modèle 3D importé portant ce nom,
+-- sinon serpent procédural (Look de l'espèce), sinon repli générique.
 function ModelFactory.coiledSnake(modelName: string, scale: number?): Model
 	local s = scale or 1
 	local template = importedTemplate({ modelName })
+	local def = SnakesConfig.get(modelName)
+	local sizeMul = if def then def.Look.Size else 1
 	local m: Model
 	if template then
 		m = cloneImported(template, modelName, false, false)
-		scaleToSize(m, SNAKE_SIZE * s)
+		scaleToSize(m, SNAKE_SIZE * s * sizeMul)
 	else
-		m = cloneImported(partSnake(modelName, s), modelName, false, false)
+		local proc = proceduralTemplate(modelName)
+		if proc then
+			m = cloneImported(proc, modelName, false, false)
+			scaleToSize(m, SNAKE_SIZE * s * sizeMul)
+		else
+			m = cloneImported(partSnake(modelName, s), modelName, false, false)
+		end
 	end
 	m:SetAttribute("IsSnake", true)
 	if m.PrimaryPart then

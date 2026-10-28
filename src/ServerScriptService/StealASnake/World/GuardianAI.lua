@@ -176,7 +176,7 @@ function GuardianAI.start()
 		local biomes = Workspace:WaitForChild("Map"):WaitForChild("Biomes")
 		local biome = biomes:WaitForChild(cfg.Id)
 		local spawn = biome:WaitForChild("GuardianSpawn") :: BasePart
-		local scale = 1 + (cfg.Order - 1) * 0.18
+		local scale = 1 + (cfg.Order - 1) * 0.1
 
 		local model = Instance.new("Model")
 		model.Name = "Guardian_" .. cfg.Id

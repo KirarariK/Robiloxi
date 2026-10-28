@@ -18,6 +18,8 @@ local Workspace = game:GetService("Workspace")
 local SnakesConfig = require(game.ReplicatedStorage.StealASnake.Config.SnakesConfig)
 local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
 local FormatNumber = require(game.ReplicatedStorage.StealASnake.Modules.FormatNumber)
+local BiomesConfig = require(game.ReplicatedStorage.StealASnake.Config.BiomesConfig)
+local RarityConfig = require(game.ReplicatedStorage.StealASnake.Config.RarityConfig)
 
 local AmbienceController = {}
 
@@ -26,13 +28,6 @@ local SPARKLE = "rbxasset://textures/particles/sparkles_main.dds"
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local FIRE = "rbxasset://textures/particles/fire_main.dds"
 
-local RARITY_COLORS: { [string]: Color3 } = {
-	Rare = Color3.fromRGB(70, 160, 255),
-	Epic = Color3.fromRGB(180, 90, 255),
-	Legendary = Color3.fromRGB(255, 190, 40),
-	Mythic = Color3.fromRGB(255, 70, 90),
-}
-local RANK = { Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Mythic = 6 }
 
 -- ───────────────────────── Ciel & post-process ─────────────────────────
 local function setupSky()
@@ -80,7 +75,7 @@ end
 
 -- ───────────────────────── Particules d'ambiance ─────────────────────────
 local anchor: Part
-local zoneEmitters: { [number]: { ParticleEmitter } } = {}
+local zoneEmitters: { [string]: { ParticleEmitter } } = {}
 
 local function emitter(parent: Instance, props: { [string]: any }): ParticleEmitter
 	local pe = Instance.new("ParticleEmitter")
@@ -105,7 +100,7 @@ local function buildAmbience()
 	anchor.Size = Vector3.new(90, 26, 90) -- les particules naissent dans tout ce volume autour du joueur
 	anchor.Parent = Workspace.CurrentCamera
 
-	local function pe(zone: number, props: { [string]: any })
+	local function pe(zone: string, props: { [string]: any })
 		zoneEmitters[zone] = zoneEmitters[zone] or {}
 		props.Shape = Enum.ParticleEmitterShape.Box
 		props.ShapeInOut = Enum.ParticleEmitterShapeInOut.Outward
@@ -113,47 +108,88 @@ local function buildAmbience()
 	end
 
 	-- 0 · Hub : pétales roses qui tombent en tournoyant + éclats de lumière
-	pe(0, { Rate = 14, Lifetime = NumberRange.new(6, 9), Speed = NumberRange.new(0.5, 1.5), Acceleration = Vector3.new(1.5, -1.2, 0.6),
+	pe("Hub", { Rate = 14, Lifetime = NumberRange.new(6, 9), Speed = NumberRange.new(0.5, 1.5), Acceleration = Vector3.new(1.5, -1.2, 0.6),
 		RotSpeed = NumberRange.new(-90, 90), Rotation = NumberRange.new(0, 360), Size = NumberSequence.new(0.6),
 		Color = ColorSequence.new(Color3.fromRGB(255, 170, 200), Color3.fromRGB(255, 225, 235)), Texture = SPARKLE,
 		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.15, 0.1), NumberSequenceKeypoint.new(0.85, 0.2), NumberSequenceKeypoint.new(1, 1) }) })
-	pe(0, { Rate = 5, Lifetime = NumberRange.new(3, 5), Speed = NumberRange.new(0.2, 0.6), Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.25), NumberSequenceKeypoint.new(1, 0) }),
+	pe("Hub", { Rate = 5, Lifetime = NumberRange.new(3, 5), Speed = NumberRange.new(0.2, 0.6), Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.25), NumberSequenceKeypoint.new(1, 0) }),
 		Color = ColorSequence.new(Color3.fromRGB(255, 245, 190)), Texture = SPARKLE, LightEmission = 1 })
 
 	-- 1 · Jungle : lucioles qui pulsent + feuilles
-	pe(1, { Rate = 22, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(0.3, 1), SpreadAngle = Vector2.new(180, 180),
+	pe("Jungle", { Rate = 22, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(0.3, 1), SpreadAngle = Vector2.new(180, 180),
 		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.3, 0.75), NumberSequenceKeypoint.new(0.6, 0.3), NumberSequenceKeypoint.new(1, 0) }),
 		Color = ColorSequence.new(Color3.fromRGB(200, 255, 120)), Texture = SPARKLE, LightEmission = 1 })
-	pe(1, { Rate = 6, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.5, 1), Acceleration = Vector3.new(0.8, -1.5, 0),
+	pe("Jungle", { Rate = 6, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.5, 1), Acceleration = Vector3.new(0.8, -1.5, 0),
 		RotSpeed = NumberRange.new(-120, 120), Size = NumberSequence.new(0.8), Color = ColorSequence.new(Color3.fromRGB(70, 160, 60), Color3.fromRGB(150, 200, 70)) })
 
 	-- 2 · Désert : sable porté par le vent + chaleur
-	pe(2, { Rate = 40, Lifetime = NumberRange.new(1.5, 3), Speed = NumberRange.new(14, 22), EmissionDirection = Enum.NormalId.Right, SpreadAngle = Vector2.new(8, 8),
+	pe("Desert", { Rate = 40, Lifetime = NumberRange.new(1.5, 3), Speed = NumberRange.new(14, 22), EmissionDirection = Enum.NormalId.Right, SpreadAngle = Vector2.new(8, 8),
 		Size = NumberSequence.new(0.22), Color = ColorSequence.new(Color3.fromRGB(235, 200, 140)), Transparency = NumberSequence.new(0.3, 1) })
-	pe(2, { Rate = 3, Lifetime = NumberRange.new(4, 6), Speed = NumberRange.new(8, 12), EmissionDirection = Enum.NormalId.Right,
+	pe("Desert", { Rate = 3, Lifetime = NumberRange.new(4, 6), Speed = NumberRange.new(8, 12), EmissionDirection = Enum.NormalId.Right,
 		Size = NumberSequence.new(6, 12), Texture = SMOKE, Color = ColorSequence.new(Color3.fromRGB(230, 195, 140)), Transparency = NumberSequence.new(0.85, 1) })
 
 	-- 3 · Marais : spores vertes + nappes de brume basse
-	pe(3, { Rate = 18, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.2, 0.8), Acceleration = Vector3.new(0, 0.4, 0),
+	pe("Swamp", { Rate = 18, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.2, 0.8), Acceleration = Vector3.new(0, 0.4, 0),
 		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.5), NumberSequenceKeypoint.new(1, 0) }),
 		Color = ColorSequence.new(Color3.fromRGB(150, 255, 110)), Texture = SPARKLE, LightEmission = 0.8 })
-	pe(3, { Rate = 6, Lifetime = NumberRange.new(6, 10), Speed = NumberRange.new(0.5, 1.5), EmissionDirection = Enum.NormalId.Bottom,
+	pe("Swamp", { Rate = 6, Lifetime = NumberRange.new(6, 10), Speed = NumberRange.new(0.5, 1.5), EmissionDirection = Enum.NormalId.Bottom,
 		Size = NumberSequence.new(10, 16), Texture = SMOKE, Color = ColorSequence.new(Color3.fromRGB(170, 200, 160)), Transparency = NumberSequence.new(0.8, 1) })
 
 	-- 4 · Volcan : braises qui montent + cendres
-	pe(4, { Rate = 35, Lifetime = NumberRange.new(2, 4), Speed = NumberRange.new(2, 5), EmissionDirection = Enum.NormalId.Top, SpreadAngle = Vector2.new(30, 30),
+	pe("Embers", { Rate = 35, Lifetime = NumberRange.new(2, 4), Speed = NumberRange.new(2, 5), EmissionDirection = Enum.NormalId.Top, SpreadAngle = Vector2.new(30, 30),
 		Acceleration = Vector3.new(0.5, 2, 0), Size = NumberSequence.new(0.5, 0), Texture = FIRE, LightEmission = 1,
 		Color = ColorSequence.new(Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 70, 20)) })
-	pe(4, { Rate = 16, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.5, 1.5), Acceleration = Vector3.new(0.4, -0.8, 0),
+	pe("Embers", { Rate = 16, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.5, 1.5), Acceleration = Vector3.new(0.4, -0.8, 0),
 		Size = NumberSequence.new(0.18), Color = ColorSequence.new(Color3.fromRGB(70, 65, 65)), Transparency = NumberSequence.new(0.2, 1) })
 
 	-- 5 · Cosmos : poussière d'étoiles multicolore + nébuleuses
-	pe(5, { Rate = 30, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(0.2, 1), SpreadAngle = Vector2.new(180, 180),
+	pe("Stars", { Rate = 30, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(0.2, 1), SpreadAngle = Vector2.new(180, 180),
 		Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.7), NumberSequenceKeypoint.new(1, 0) }),
 		Texture = SPARKLE, LightEmission = 1,
 		Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 120, 255)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(110, 230, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 120, 220)) }) })
-	pe(5, { Rate = 2, Lifetime = NumberRange.new(8, 12), Speed = NumberRange.new(0.2, 0.5), Size = NumberSequence.new(14, 22), Texture = SMOKE, LightEmission = 0.6,
+	pe("Stars", { Rate = 2, Lifetime = NumberRange.new(8, 12), Speed = NumberRange.new(0.2, 0.5), Size = NumberSequence.new(14, 22), Texture = SMOKE, LightEmission = 0.6,
 		Color = ColorSequence.new(Color3.fromRGB(120, 70, 220), Color3.fromRGB(60, 140, 255)), Transparency = NumberSequence.new(0.88, 1) })
+
+	local function twinkle(): any
+		return NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.5), NumberSequenceKeypoint.new(1, 0) })
+	end
+	-- Toundra : flocons qui tombent en tournoyant
+	pe("Snow", { Rate = 45, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(1, 3), EmissionDirection = Enum.NormalId.Bottom, Acceleration = Vector3.new(1, -1, 0),
+		RotSpeed = NumberRange.new(-60, 60), Size = NumberSequence.new(0.35), Texture = SPARKLE, Color = ColorSequence.new(Color3.fromRGB(240, 250, 255)) })
+	-- Bambouseraie : pétales de cerisier + brume
+	pe("Petals", { Rate = 18, Lifetime = NumberRange.new(6, 9), Speed = NumberRange.new(0.5, 1.5), Acceleration = Vector3.new(2, -1.2, 0.5),
+		RotSpeed = NumberRange.new(-120, 120), Size = NumberSequence.new(0.5), Texture = SPARKLE, Color = ColorSequence.new(Color3.fromRGB(255, 180, 210)) })
+	pe("Petals", { Rate = 4, Lifetime = NumberRange.new(6, 10), Speed = NumberRange.new(0.5, 1.5), Size = NumberSequence.new(12, 18), Texture = SMOKE,
+		Color = ColorSequence.new(Color3.fromRGB(230, 240, 230)), Transparency = NumberSequence.new(0.85, 1) })
+	-- Forêt champignon : spores lumineuses roses et cyan
+	pe("Spores", { Rate = 26, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.2, 0.8), Acceleration = Vector3.new(0, 0.5, 0), Size = twinkle(),
+		Texture = SPARKLE, LightEmission = 1, Color = ColorSequence.new(Color3.fromRGB(255, 120, 220), Color3.fromRGB(110, 255, 230)) })
+	-- Récif : bulles qui remontent
+	pe("Bubbles", { Rate = 22, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(1, 2.5), EmissionDirection = Enum.NormalId.Top, Size = NumberSequence.new(0.3, 0.6),
+		Texture = SPARKLE, Color = ColorSequence.new(Color3.fromRGB(200, 240, 255)), Transparency = NumberSequence.new(0.2, 0.9) })
+	-- Grotte de cristal : éclats prismatiques
+	pe("Crystal", { Rate = 24, Lifetime = NumberRange.new(3, 6), Speed = NumberRange.new(0.2, 0.8), SpreadAngle = Vector2.new(180, 180), Size = twinkle(),
+		Texture = SPARKLE, LightEmission = 1, Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 230, 255)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(230, 140, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)) }) })
+	-- Cimetière : brume verte et feux follets
+	pe("Ghost", { Rate = 6, Lifetime = NumberRange.new(6, 10), Speed = NumberRange.new(0.5, 1.5), EmissionDirection = Enum.NormalId.Bottom, Size = NumberSequence.new(12, 20), Texture = SMOKE,
+		Color = ColorSequence.new(Color3.fromRGB(150, 220, 190)), Transparency = NumberSequence.new(0.8, 1) })
+	pe("Ghost", { Rate = 8, Lifetime = NumberRange.new(3, 6), Speed = NumberRange.new(0.3, 1), SpreadAngle = Vector2.new(180, 180), Size = twinkle(),
+		Texture = SPARKLE, LightEmission = 1, Color = ColorSequence.new(Color3.fromRGB(110, 255, 180)) })
+	-- Temple : feuilles et poussière dorée
+	pe("Leaves", { Rate = 10, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.5, 1), Acceleration = Vector3.new(0.8, -1.5, 0), RotSpeed = NumberRange.new(-120, 120),
+		Size = NumberSequence.new(0.8), Color = ColorSequence.new(Color3.fromRGB(70, 160, 60), Color3.fromRGB(200, 170, 60)) })
+	pe("Leaves", { Rate = 8, Lifetime = NumberRange.new(3, 5), Speed = NumberRange.new(0.2, 0.6), Size = twinkle(), Texture = SPARKLE, LightEmission = 1,
+		Color = ColorSequence.new(Color3.fromRGB(255, 220, 120)) })
+	-- Terres toxiques : particules radioactives + gaz
+	pe("Toxic", { Rate = 30, Lifetime = NumberRange.new(3, 6), Speed = NumberRange.new(0.5, 1.5), Acceleration = Vector3.new(0, 0.8, 0), Size = twinkle(),
+		Texture = SPARKLE, LightEmission = 1, Color = ColorSequence.new(Color3.fromRGB(190, 255, 40)) })
+	pe("Toxic", { Rate = 5, Lifetime = NumberRange.new(6, 10), Speed = NumberRange.new(0.5, 1.5), Size = NumberSequence.new(10, 16), Texture = SMOKE,
+		Color = ColorSequence.new(Color3.fromRGB(150, 200, 60)), Transparency = NumberSequence.new(0.85, 1) })
+	-- Royaume céleste : plumes et lueurs dorées
+	pe("Feathers", { Rate = 14, Lifetime = NumberRange.new(6, 9), Speed = NumberRange.new(0.5, 1.2), Acceleration = Vector3.new(0.6, -0.8, 0.4), RotSpeed = NumberRange.new(-90, 90),
+		Size = NumberSequence.new(0.6), Texture = SPARKLE, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255)) })
+	pe("Feathers", { Rate = 10, Lifetime = NumberRange.new(3, 5), Speed = NumberRange.new(0.2, 0.6), Size = twinkle(), Texture = SPARKLE, LightEmission = 1,
+		Color = ColorSequence.new(Color3.fromRGB(255, 225, 140)) })
 end
 
 local activeZone = -1
@@ -162,14 +198,17 @@ local function setZone(z: number)
 		return
 	end
 	activeZone = z
-	for zone, list in zoneEmitters do
+	local cfg = BiomesConfig[z]
+	local preset = if cfg then cfg.Particles else "Hub"
+	for name, list in zoneEmitters do
 		for _, e in list do
-			e.Enabled = zone == z
+			e.Enabled = name == preset
 		end
 	end
 	local rays = Lighting:FindFirstChildOfClass("SunRaysEffect")
 	if rays then
-		TweenService:Create(rays, TweenInfo.new(1.5), { Intensity = if z == 2 or z == 0 or z == 1 then 0.08 else 0.02 }):Play()
+		local bright = cfg == nil or (cfg.Mood.ClockTime > 7 and cfg.Mood.ClockTime < 17.5)
+		TweenService:Create(rays, TweenInfo.new(1.5), { Intensity = if bright then 0.08 else 0.02 }):Play()
 	end
 end
 
@@ -187,8 +226,8 @@ local function addAura(m: Instance)
 			return
 		end
 		local def = SnakesConfig.get(id)
-		local rank = def and RANK[def.Rarity] or 1
-		local color = def and RARITY_COLORS[def.Rarity]
+		local rank = if def then RarityConfig.rank(def.Rarity) else 1
+		local color: Color3? = if def and rank >= 3 then RarityConfig.color(def.Rarity) else nil
 		local mutated = (m:GetAttribute("Mutation") or "Normal") ~= "Normal"
 		if rank < 3 and not mutated then
 			return

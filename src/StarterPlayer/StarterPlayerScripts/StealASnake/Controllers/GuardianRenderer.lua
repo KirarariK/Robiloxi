@@ -14,20 +14,20 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local BiomesConfig = require(ReplicatedStorage.StealASnake.Config.BiomesConfig)
+
 local GuardianRenderer = {}
 
 local SEGMENTS = 28
 local SPACING = 1.6 -- distance entre anneaux (× échelle) : anneaux qui se chevauchent = corps continu
 
-type Palette = { Body: Color3, Belly: Color3, Accent: Color3, Eye: Color3, Neon: boolean }
+type Palette = { Body: Color3, Belly: Color3, Accent: Color3, Eye: Color3, Neon: boolean, Feature: string }
 
-local PALETTES: { [number]: Palette } = {
-	[1] = { Body = Color3.fromRGB(46, 140, 60), Belly = Color3.fromRGB(190, 220, 110), Accent = Color3.fromRGB(25, 85, 35), Eye = Color3.fromRGB(255, 220, 40), Neon = false },
-	[2] = { Body = Color3.fromRGB(214, 160, 60), Belly = Color3.fromRGB(245, 220, 150), Accent = Color3.fromRGB(40, 30, 25), Eye = Color3.fromRGB(255, 80, 40), Neon = false },
-	[3] = { Body = Color3.fromRGB(70, 95, 55), Belly = Color3.fromRGB(150, 200, 70), Accent = Color3.fromRGB(150, 70, 200), Eye = Color3.fromRGB(150, 255, 60), Neon = false },
-	[4] = { Body = Color3.fromRGB(40, 32, 34), Belly = Color3.fromRGB(90, 60, 50), Accent = Color3.fromRGB(255, 110, 30), Eye = Color3.fromRGB(255, 160, 40), Neon = true },
-	[5] = { Body = Color3.fromRGB(45, 50, 150), Belly = Color3.fromRGB(150, 180, 255), Accent = Color3.fromRGB(170, 110, 255), Eye = Color3.fromRGB(120, 255, 255), Neon = true },
-}
+-- Apparence de chaque gardien : définie par zone dans BiomesConfig (15 gardiens différents).
+local function palette(order: number): Palette
+	local cfg = BiomesConfig[order] or BiomesConfig[1]
+	return cfg.Guardian :: any
+end
 
 type Visual = {
 	Model: Model,
@@ -116,6 +116,112 @@ local function buildPartHead(s: number, pal: Palette): (Model, BasePart, BasePar
 	return head, skull, jaw
 end
 
+-- Signature visuelle de chaque gardien (pièces ajoutées au modèle de tête : elles suivent la tête).
+local function decorateHead(head: Model, primary: BasePart, s: number, pal: Palette)
+	local base = primary.CFrame
+	local f = pal.Feature
+	local function add(name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material, shape: Enum.PartType?): Part
+		local p = newPart(name, size * s, color, material, shape)
+		p.CFrame = base * cf
+		p.Parent = head
+		return p
+	end
+	local mat = if pal.Neon then Enum.Material.Neon else Enum.Material.SmoothPlastic
+	if f == "Crest" then
+		for i = 0, 3 do
+			add("Crest", Vector3.new(0.3, 2.4 - i * 0.4, 1.4), CFrame.new(0, (1.8 - i * 0.1) * s, (0.4 + i * 1.1) * s), pal.Accent, mat)
+		end
+	elseif f == "Hood" then
+		local hood = add("Hood", Vector3.new(0.5, 8, 6), CFrame.new(0, -0.6 * s, 2.2 * s) * CFrame.Angles(0, math.rad(90), 0), pal.Body, Enum.Material.SmoothPlastic, Enum.PartType.Cylinder)
+		local mark = newPart("HoodMark", Vector3.new(0.55, 3.2, 2.4) * s, pal.Accent, mat, Enum.PartType.Cylinder)
+		mark.CFrame = hood.CFrame * CFrame.new(-0.05 * s, 0, 0)
+		mark.Parent = head
+	elseif f == "Horns" or f == "Rattle" then
+		for _, x in { -1, 1 } do
+			add("Horn", Vector3.new(0.6, 2.6, 0.6), CFrame.new(x * 1.4 * s, 1.9 * s, 0.6 * s) * CFrame.Angles(math.rad(-25), 0, math.rad(x * -20)), pal.Accent, mat)
+		end
+	elseif f == "Mane" then
+		for i = 0, 9 do
+			local a = i / 10 * math.pi * 2
+			add("Mane", Vector3.new(1.4, 1.4, 1.4), CFrame.new(math.cos(a) * 2.6 * s, math.sin(a) * 2 * s, 2 * s), pal.Accent, Enum.Material.Fabric, Enum.PartType.Ball)
+		end
+		for _, x in { -1, 1 } do
+			add("Whisker", Vector3.new(0.15, 0.15, 4.5), CFrame.new(x * 1.8 * s, -0.4 * s, -3.2 * s) * CFrame.Angles(0, math.rad(x * 25), 0), pal.Belly, Enum.Material.Neon)
+		end
+	elseif f == "Fins" then
+		for _, x in { -1, 1 } do
+			add("Fin", Vector3.new(0.2, 2.6, 2.8), CFrame.new(x * 2.3 * s, 0.4 * s, 0.8 * s) * CFrame.Angles(0, 0, math.rad(x * -60)), pal.Accent, mat)
+		end
+	elseif f == "Feathers" or f == "Wings" then
+		local colors = { pal.Accent, pal.Belly, pal.Body }
+		for i = 1, 7 do
+			add("Plume", Vector3.new(0.25, 4, 0.7), CFrame.new(0, 1.8 * s, 1.6 * s) * CFrame.Angles(math.rad(-35), 0, math.rad((i - 4) * 16)) * CFrame.new(0, 1.8 * s, 0), colors[(i - 1) % 3 + 1], if f == "Wings" then Enum.Material.Neon else Enum.Material.Fabric)
+		end
+		if f == "Wings" then
+			local halo = add("Halo", Vector3.new(0.3, 4.4, 4.4), CFrame.new(0, 3.6 * s, 0.8 * s) * CFrame.Angles(0, 0, math.rad(90)), pal.Accent, Enum.Material.Neon, Enum.PartType.Cylinder)
+			halo.Transparency = 0.2
+		end
+	elseif f == "Crystal" or f == "Frost" then
+		for i = 0, 4 do
+			local p = add("Crystal", Vector3.new(0.7, 3 - i * 0.3, 0.7), CFrame.new((i - 2) * 0.8 * s, 2.2 * s, (0.4 + math.abs(i - 2) * 0.5) * s) * CFrame.Angles(math.rad(-15), 0, math.rad((i - 2) * 14)), if f == "Frost" then Color3.fromRGB(220, 245, 255) else pal.Accent, Enum.Material.Glass)
+			p.Transparency = 0.15
+		end
+	elseif f == "Spores" then
+		local cap = add("Cap", Vector3.new(4.6, 2, 4.6), CFrame.new(0, 2.1 * s, 0.6 * s), pal.Accent, Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+		for i = 0, 5 do
+			local a = i / 6 * math.pi * 2
+			local dot = newPart("CapDot", Vector3.new(0.7, 0.4, 0.7) * s, Color3.new(1, 1, 1), Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+			dot.CFrame = cap.CFrame * CFrame.new(math.cos(a) * 1.4 * s, 0.75 * s, math.sin(a) * 1.4 * s)
+			dot.Parent = head
+		end
+	elseif f == "Fire" then
+		local fire = Instance.new("Fire")
+		fire.Size = 6 * s
+		fire.Heat = 9
+		fire.Color = pal.Accent
+		fire.SecondaryColor = Color3.fromRGB(255, 50, 10)
+		fire.Parent = primary
+	elseif f == "Ghost" then
+		for _, d in head:GetDescendants() do
+			if d:IsA("BasePart") then
+				d.Transparency = math.max(d.Transparency, 0.35)
+			end
+		end
+	elseif f == "Radioactive" or f == "Toxic" then
+		for _, x in { -1, 1 } do
+			add("Pustule", Vector3.new(1, 1, 1), CFrame.new(x * 1.6 * s, 1.2 * s, 0.8 * s), pal.Accent, Enum.Material.Neon, Enum.PartType.Ball)
+		end
+	elseif f == "Rainbow" then
+		for i = 0, 5 do
+			local ring = add("StarRing", Vector3.new(0.25, 6 + i * 0.6, 6 + i * 0.6), CFrame.new(0, 0.5 * s, 1 * s) * CFrame.Angles(math.rad(i * 30), 0, math.rad(90)), Color3.fromHSV(i / 6, 0.8, 1), Enum.Material.Neon, Enum.PartType.Cylinder)
+			ring.Transparency = 0.45
+		end
+	end
+	if pal.Neon then
+		local l = Instance.new("PointLight")
+		l.Color = pal.Accent
+		l.Range = 18
+		l.Brightness = 2
+		l.Parent = primary
+	end
+end
+
+-- Couleur / matière d'un anneau selon la signature du gardien.
+local function segmentLook(pal: Palette, i: number, n: number): (Color3, Enum.Material, number)
+	local f = pal.Feature
+	if f == "Rainbow" then
+		return Color3.fromHSV((i / n) % 1, 0.75, 1), Enum.Material.Neon, 0
+	elseif f == "Ghost" then
+		return if i % 3 == 0 then pal.Accent else pal.Body, if i % 3 == 0 then Enum.Material.Neon else Enum.Material.Glass, 0.45
+	elseif f == "Crystal" or f == "Frost" then
+		return if i % 3 == 0 then pal.Accent else pal.Body, Enum.Material.Glass, 0.1
+	elseif f == "Radioactive" then
+		return if i % 2 == 0 then pal.Accent else pal.Body, if i % 2 == 0 then Enum.Material.Neon else Enum.Material.Slate, 0
+	end
+	local accent = i % 3 == 0
+	return if accent then pal.Accent else pal.Body, if pal.Neon and accent then Enum.Material.Neon else Enum.Material.SmoothPlastic, 0
+end
+
 local function build(model: Model)
 	local root = model:WaitForChild("Root", 5)
 	if not root or not root:IsA("BasePart") then
@@ -123,7 +229,7 @@ local function build(model: Model)
 	end
 	local order = (model:GetAttribute("Order") :: number?) or 1
 	local s = (model:GetAttribute("Scale") :: number?) or 1
-	local pal = PALETTES[order] or PALETTES[1]
+	local pal = palette(order)
 
 	local folder = Instance.new("Folder")
 	folder.Name = model.Name
@@ -156,7 +262,7 @@ local function build(model: Model)
 			end
 		end
 		head.PrimaryPart = primary
-		-- Le modèle est vert : on le teinte aux couleurs du biome (garde les détails de texture)
+		-- Le modèle est vert : on le teinte aux couleurs de la zone (garde les détails de texture)
 		if order > 1 then
 			local tint = Instance.new("Highlight")
 			tint.FillColor = pal.Body
@@ -171,6 +277,7 @@ local function build(model: Model)
 		head, skull, jaw = buildPartHead(s, pal)
 		primary = skull
 	end
+	decorateHead(head, primary, s, pal)
 	head.Parent = folder
 	-- jaw relatif au crâne (pour l'ouvrir autour de la charnière)
 	local jawBase: CFrame? = if jaw then primary.CFrame:ToObjectSpace(jaw.CFrame) else nil
@@ -180,13 +287,38 @@ local function build(model: Model)
 	for i = 1, SEGMENTS do
 		local t = i / SEGMENTS
 		local r = (3.6 - 2.6 * t ^ 1.3) * s
-		local seg = newPart("Seg" .. i, Vector3.new(r, r * 0.9, r * 1.25), if i % 3 == 0 then pal.Accent else pal.Body, if pal.Neon and i % 3 == 0 then Enum.Material.Neon else Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+		local color, material, transparency = segmentLook(pal, i, SEGMENTS)
+		local seg = newPart("Seg" .. i, Vector3.new(r, r * 0.9, r * 1.25), color, material, Enum.PartType.Ball)
+		seg.Transparency = transparency
 		seg.Parent = folder
 		table.insert(segments, seg)
+		local f = pal.Feature
 		if i % 4 == 2 then
-			local spike = newPart("Spike", Vector3.new(0.5, 1.2, 0.5) * s * (1 - t * 0.6), pal.Accent, if pal.Neon then Enum.Material.Neon else Enum.Material.SmoothPlastic)
+			local spikeMat = if f == "Crystal" or f == "Frost" then Enum.Material.Glass elseif pal.Neon then Enum.Material.Neon else Enum.Material.SmoothPlastic
+			local spikeSize = if f == "Crystal" then Vector3.new(0.9, 2.4, 0.9) elseif f == "Fins" or f == "Crest" then Vector3.new(0.25, 1.8, 1.6) else Vector3.new(0.5, 1.2, 0.5)
+			local spike = newPart("Spike", spikeSize * s * (1 - t * 0.6), if f == "Frost" then Color3.fromRGB(220, 245, 255) else pal.Accent, spikeMat)
 			spike:SetAttribute("Follow", i)
 			spike.Parent = folder
+			if f == "Fire" and i % 8 == 2 then
+				local fire = Instance.new("Fire")
+				fire.Size = 3 * s
+				fire.Heat = 5
+				fire.Color = pal.Accent
+				fire.SecondaryColor = Color3.fromRGB(255, 50, 10)
+				fire.Parent = spike
+			elseif f == "Spores" then
+				spike.Shape = Enum.PartType.Ball
+				spike.Size = Vector3.new(1.6, 0.8, 1.6) * s * (1 - t * 0.5)
+				spike.Color = if i % 8 == 2 then pal.Accent else Color3.new(1, 1, 1)
+			end
+		end
+		if f == "Rattle" and i == SEGMENTS then
+			for k = 1, 3 do
+				local rattle = newPart("Rattle", Vector3.new(1.1, 0.9, 0.8) * s, Color3.fromRGB(225, 200, 150), Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+				rattle:SetAttribute("Follow", i)
+				rattle:SetAttribute("FollowOffset", CFrame.new(0, 0, (0.4 + k * 0.55) * s))
+				rattle.Parent = folder
+			end
 		end
 	end
 
@@ -327,7 +459,8 @@ local function step(v: Visual, dt: number, now: number)
 		if typeof(idx) == "number" and c:IsA("BasePart") then
 			local seg = v.Segments[idx]
 			if seg then
-				c.CFrame = seg.CFrame * CFrame.new(0, seg.Size.Y * 0.5, 0) * CFrame.Angles(math.rad(-20), 0, 0)
+				local off = c:GetAttribute("FollowOffset")
+				c.CFrame = if typeof(off) == "CFrame" then seg.CFrame * off else seg.CFrame * CFrame.new(0, seg.Size.Y * 0.5, 0) * CFrame.Angles(math.rad(-20), 0, 0)
 			end
 		end
 	end

@@ -9,25 +9,11 @@ local CarrySystem = require(script.Parent.Parent.Core.CarrySystem)
 local VFXFactory = require(game.ReplicatedStorage.StealASnake.Modules.VFXFactory)
 local FormatNumber = require(game.ReplicatedStorage.StealASnake.Modules.FormatNumber)
 local SpeedCalculator = require(game.ReplicatedStorage.StealASnake.Modules.SpeedCalculator)
+local RarityConfig = require(game.ReplicatedStorage.StealASnake.Config.RarityConfig)
+local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
 
 local NestSpawner = {}
 
-local RARITY_COLORS: { [string]: Color3 } = {
-	Common = Color3.fromRGB(190, 195, 205),
-	Uncommon = Color3.fromRGB(90, 220, 110),
-	Rare = Color3.fromRGB(70, 160, 255),
-	Epic = Color3.fromRGB(180, 90, 255),
-	Legendary = Color3.fromRGB(255, 190, 40),
-	Mythic = Color3.fromRGB(255, 70, 90),
-}
-local RARITY_FR: { [string]: string } = {
-	Common = "Commun",
-	Uncommon = "Peu commun",
-	Rare = "Rare",
-	Epic = "Épique",
-	Legendary = "Légendaire",
-	Mythic = "Mythique",
-}
 local folder: Folder? = nil
 
 local function wildFolder(): Folder
@@ -50,15 +36,9 @@ local function countInBiome(biomeId: string): number
 	return n
 end
 
--- Poids d'apparition par rareté (RNG pondérée) : plus c'est rare, moins ça sort.
-local RARITY_SPAWN_WEIGHT: { [string]: number } = {
-	Common = 100,
-	Uncommon = 55,
-	Rare = 25,
-	Epic = 10,
-	Legendary = 3,
-	Mythic = 1,
-}
+-- Plafond de serpents sauvages par zone (perf : 15 zones × 8 serpents procéduraux)
+local MAX_PER_BIOME = 8
+local REFILL_BELOW = 6
 
 local function pickSpecies(biomeOrder: number): string
 	local list = SnakesConfig.listForBiome(biomeOrder)
@@ -70,11 +50,11 @@ local function pickSpecies(biomeOrder: number): string
 	end)
 	local total = 0
 	for _, def in list do
-		total += RARITY_SPAWN_WEIGHT[def.Rarity] or 10
+		total += RarityConfig.get(def.Rarity).SpawnWeight
 	end
 	local roll = math.random() * total
 	for _, def in list do
-		roll -= RARITY_SPAWN_WEIGHT[def.Rarity] or 10
+		roll -= RarityConfig.get(def.Rarity).SpawnWeight
 		if roll <= 0 then
 			return def.Id
 		end
@@ -83,7 +63,7 @@ local function pickSpecies(biomeOrder: number): string
 end
 
 function NestSpawner.spawnAt(biomeCfg: any, spawnPart: BasePart)
-	if countInBiome(biomeCfg.Id) >= 10 then
+	if countInBiome(biomeCfg.Id) >= MAX_PER_BIOME then
 		return
 	end
 	local speciesId = pickSpecies(biomeCfg.Order)
@@ -131,14 +111,14 @@ function NestSpawner.spawnAt(biomeCfg: any, spawnPart: BasePart)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = card
-	local rarityColor = RARITY_COLORS[def.Rarity] or Color3.new(1, 1, 1)
+	local rarityColor = RarityConfig.color(def.Rarity)
 	local st = Instance.new("UIStroke")
 	st.Color = rarityColor
 	st.Thickness = 2
 	st.Parent = card
 	local lines = {
 		{ if mutation == "Normal" then def.DisplayName else ("✨ [" .. string.upper(mutDef.DisplayName) .. "] " .. def.DisplayName), if mutation == "Normal" then Color3.new(1, 1, 1) else mutDef.Color, 0.36 },
-		{ RARITY_FR[def.Rarity] or def.Rarity, rarityColor, 0.28 },
+		{ RarityConfig.name(def.Rarity), rarityColor, 0.28 },
 		{ string.format("⚖️ %.1f kg  ·  💰 $%s/s", weight, FormatNumber.short(incomePreview)), Color3.fromRGB(200, 255, 200), 0.3 },
 	}
 	local y = 0.03
@@ -160,6 +140,13 @@ function NestSpawner.spawnAt(biomeCfg: any, spawnPart: BasePart)
 
 	model.Parent = wildFolder()
 
+	-- Annonce serveur pour les raretés Légendaire / Mythique / Secret (comme les œufs secrets de Steal An Egg)
+	local rarity = RarityConfig.get(def.Rarity)
+	if rarity.Announce then
+		local mutText = if mutation == "Normal" then "" else " " .. mutDef.DisplayName
+		Network.event("Alert"):FireAllClients(string.format("✨ %s : %s%s est apparu dans %s !", rarity.DisplayName, def.DisplayName, mutText, biomeCfg.Name))
+	end
+
 	local prompt = model.PrimaryPart and model.PrimaryPart:FindFirstChildOfClass("ProximityPrompt")
 	if prompt then
 		prompt.Triggered:Connect(function(player)
@@ -179,7 +166,7 @@ function NestSpawner.start()
 					local sps = nest and nest:FindFirstChild("SpawnPoints")
 					if sps then
 						local points = sps:GetChildren()
-						if #points > 0 and countInBiome(cfg.Id) < 8 then
+						if #points > 0 and countInBiome(cfg.Id) < REFILL_BELOW then
 							local sp = points[math.random(1, #points)]
 							if sp:IsA("BasePart") then
 								NestSpawner.spawnAt(cfg, sp)

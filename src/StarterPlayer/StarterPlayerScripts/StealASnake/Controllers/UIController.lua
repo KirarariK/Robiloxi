@@ -18,6 +18,7 @@ local SnakesConfig = require(game.ReplicatedStorage.StealASnake.Config.SnakesCon
 local MutationsConfig = require(game.ReplicatedStorage.StealASnake.Config.MutationsConfig)
 local TreadmillsConfig = require(game.ReplicatedStorage.StealASnake.Config.TreadmillsConfig)
 local RebirthsConfig = require(game.ReplicatedStorage.StealASnake.Config.RebirthsConfig)
+local RarityConfig = require(game.ReplicatedStorage.StealASnake.Config.RarityConfig)
 local EnvironmentController = require(script.Parent.EnvironmentController)
 
 local UIController = {}
@@ -40,23 +41,6 @@ local C = {
 	Rebirth = Color3.fromRGB(190, 120, 255),
 	Danger = Color3.fromRGB(255, 70, 70),
 	Gold = Color3.fromRGB(255, 205, 70),
-}
-
-local RARITY_COLORS: { [string]: Color3 } = {
-	Common = Color3.fromRGB(190, 195, 205),
-	Uncommon = Color3.fromRGB(90, 220, 110),
-	Rare = Color3.fromRGB(70, 160, 255),
-	Epic = Color3.fromRGB(180, 90, 255),
-	Legendary = Color3.fromRGB(255, 190, 40),
-	Mythic = Color3.fromRGB(255, 70, 90),
-}
-local RARITY_FR: { [string]: string } = {
-	Common = "Commun",
-	Uncommon = "Peu commun",
-	Rare = "Rare",
-	Epic = "Épique",
-	Legendary = "Légendaire",
-	Mythic = "Mythique",
 }
 
 --[[ ───────────── Helpers ───────────── ]]
@@ -165,7 +149,7 @@ local function snakeTitle(speciesId: string, mutation: string?): (string, Color3
 	local mut = MutationsConfig.Defs[mutation or "Normal"] or MutationsConfig.Defs.Normal
 	local rarity = if def then def.Rarity else "Common"
 	local title = if mut.Id ~= "Normal" then string.format("✨ [%s] %s", string.upper(mut.DisplayName), name) else name
-	return title, RARITY_COLORS[rarity] or C.Text, RARITY_FR[rarity] or rarity
+	return title, RarityConfig.color(rarity), RarityConfig.name(rarity)
 end
 
 local function incomePerSec(d: any): number
