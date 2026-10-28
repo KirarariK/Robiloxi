@@ -260,13 +260,15 @@ local function build(model: Model)
 			end
 		end
 		primary = head.PrimaryPart or head:FindFirstChildWhichIsA("BasePart", true) :: BasePart
-		for _, d in head:GetDescendants() do
-			if d:IsA("BasePart") and d ~= jaw then
-				primary = d
-				break
+		if not ownHead or not head.PrimaryPart then
+			for _, d in head:GetDescendants() do
+				if d:IsA("BasePart") and d ~= jaw then
+					primary = d
+					break
+				end
 			end
+			head.PrimaryPart = primary
 		end
-		head.PrimaryPart = primary
 		-- Le modèle est vert : on le teinte aux couleurs de la zone (garde les détails de texture)
 		if order > 1 and not ownHead then
 			local tint = Instance.new("Highlight")

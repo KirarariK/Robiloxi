@@ -679,7 +679,7 @@ local function buildHub(map: Folder, safe: Folder)
 		CanCollide = true,
 		Parent = hub,
 	})
-	local statue = placeTemplate("Celestial_Ouroboros", hub, Vector3.new(0, 5, plazaZ), 3.6, math.rad(180), true)
+	local statue = placeTemplate("HubStatue", hub, Vector3.new(0, 5, plazaZ), 3.6, math.rad(180), true)
 	if statue then
 		for _, d in statue:GetDescendants() do
 			if d:IsA("BasePart") then
