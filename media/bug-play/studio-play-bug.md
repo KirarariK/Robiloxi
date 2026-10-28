@@ -1,8 +1,3 @@
----
-cursor:
-  subagentId: "bc-a3734e0a-69ad-540c-86e3-cd0f89912bd9"
----
-
 # Studio Play bug — diagnostic + fix
 
 **HEAD avant fix :** `38486b6`  

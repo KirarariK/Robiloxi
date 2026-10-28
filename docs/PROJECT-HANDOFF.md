@@ -1,4 +1,4 @@
-# Blade Concord — handoff Cursor PC
+# Blade Concord — handoff PC
 
 > Lis ce fichier en premier. Projet Roblox 1v1 sabre (Luau + Rojo). Langue user : **français**.
 
@@ -12,7 +12,7 @@ Checkout PC : `C:\Users\devaa\Desktop\robiloxiiiii` · place : `BladeConcord.rbx
 **Blade Concord** : duel compétitif 1v1 au sabre d’énergie (branding original Dawn/Dusk — pas de noms Star Wars). Combat skill-based (parade, dash, Focus), formes gacha + Fair Kit Ranked, boutique cosmétiques, quêtes, factions.
 
 GDD / TDD / roadmap (store Project, si monté) :
-- GDD, roadmap, TDD, limitations, direction UI : voir aussi `docs/` du repo (`docs/concord-hall.md`, etc.) et le Context Project Cursor.
+- GDD, roadmap, TDD, limitations, direction UI : voir aussi `docs/` du repo (`docs/concord-hall.md`, etc.).
 
 ---
 
@@ -28,19 +28,18 @@ GDD / TDD / roadmap (store Project, si monté) :
 
 ---
 
-## État actuel de la map (ArtPass 9)
+## État actuel de la map (ArtPass 13)
 
 | Élément | Détail |
 |--------|--------|
-| Lobby | Hall intérieur type croiseur (Metal/Neon), lighting **Future** |
-| Baie | Grande baie **Glass** pour spectate visuel |
-| Matchmaking | **Exactement 2 slots** devant la baie (`BC_DuelSlot` 1–2, ProximityPrompt + Touched) |
-| Arènes | **8** grandes (4 gauche / 4 droite), tag `BC_MatchArena`, floors ~120² |
+| Lobby | **Hall du Concord** intérieur (Granite/Marble/Metal/Neon), lighting **Future** sombre, DoF off |
+| Baie | Grande baie **Glass** 150×26 au bout de la galerie, vue sur les 8 arènes |
+| Matchmaking | **1 file, 2 pads** (`BC_DuelSlot=1`, sièges 1–2) juste devant la baie, ProximityPrompt + hitbox |
+| Arènes | **8** floors 160² (4 gauche / 4 droite), tag `BC_MatchArena`, pool « arène libre » + `resetArena` en fin de combat |
 | UI lobby | Rails **Classe** / **Boutique** (gauche) · **Reroll** (droite) |
 | VFX | `NeonFx.lua` + tags `BC_NeonStrip` |
-| Bug Play | Fix sons ambiance IDs non-Audio (Output rouge) — Ambient* vides / skip preload |
 
-**Polish restant** : densifier volumes (moins “strips dans le vide”), DoF faible/off, baie + arènes plus lisibles.
+Détails : `docs/concord-hall.md`. Limite : un seul match à la fois par serveur (phase globale `MatchService`).
 
 ---
 
@@ -86,21 +85,10 @@ Smoke : `bash tools/smoke-check.sh` (si dispo).
 
 ## MCP Roblox Studio (actif sur le PC)
 
-- Studio → Assistant → Manage MCP Servers → **Enable ON** · Quick connect **Cursor ON** · **1 client connecté**.
-- `C:\Users\devaa\.cursor\mcp.json` :
+- Studio → Assistant → Manage MCP Servers → **Enable ON** · **1 client connecté**.
+- Config MCP : app Claude (serveurs locaux Roblox_Studio + Blender).
 
-```json
-{
-  "mcpServers": {
-    "Roblox_Studio": {
-      "command": "cmd.exe",
-      "args": ["/c", "cd /d %LOCALAPPDATA%\\Roblox && .\\mcp.bat"]
-    }
-  }
-}
-```
-
-En chat Cursor **local** tu peux : `list_roblox_studios`, tree, `execute_luau`, play, `screen_capture`, `generate_mesh` / procedural…  
+Avec Claude tu peux : `list_roblox_studios`, tree, `execute_luau`, play, `screen_capture`, `generate_mesh` / procedural…  
 Skill : `.agents/skills/roblox-studio-mcp/SKILL.md`
 
 ---
@@ -114,7 +102,7 @@ Skill : `.agents/skills/roblox-studio-mcp/SKILL.md`
 
 ### Ponytail
 `ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`, `ponytail-help`  
-Hooks : `.cursor/hooks.json` · clone local : `%USERPROFILE%\tools\ponytail`
+Clone local : `%USERPROFILE%\tools\ponytail`
 
 ### OmniRoute
 `omni-auth`, `omni-models`, `omni-providers`, `omni-mcp`, `omni-combos-routing`, … + `cli-*`
@@ -123,7 +111,7 @@ Hooks : `.cursor/hooks.json` · clone local : `%USERPROFILE%\tools\ponytail`
 `vercel-react-best-practices`, `vercel-optimize`, `web-design-guidelines`, `writing-guidelines`, …
 
 ### Graphify
-Rule always-on : `.cursor/rules/graphify.mdc` · CLI : `graphify` · build : `/graphify .` → `graphify-out/`
+CLI : `graphify` · build : `/graphify .` → `graphify-out/`
 
 ### CLI
 `skills` + `ags` (`@agentskill.sh/cli`) — réinstall : voir `docs` / preferences tooling.
@@ -154,7 +142,7 @@ Rule always-on : `.cursor/rules/graphify.mdc` · CLI : `graphify` · build : `/g
 6. Allée slots → puis **croiseur** 2 slots + 8 arènes  
 7. Rails Classe / Boutique / Reroll  
 8. Tools permanents Ponytail / Graphify / OmniRoute / agent-skills  
-9. MCP Studio connecté Cursor PC  
+9. MCP Studio connecté (Claude)  
 10. Fix bug Play (sounds Ambient)
 
 ---
@@ -173,7 +161,6 @@ Rule always-on : `.cursor/rules/graphify.mdc` · CLI : `graphify` · build : `/g
 - `default.project.json` — Rojo  
 - `docs/concord-hall.md` — layout lobby  
 - `tools/smoke-check.sh`  
-- `.cursor/rules/graphify.mdc`  
 - `.agents/skills/**/SKILL.md`
 
 Fin du handoff — mets à jour ce fichier quand l’état map/MCP/skills change.

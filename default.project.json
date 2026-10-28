@@ -1,25 +1,25 @@
 {
-  "name": "Blade Concord",
+  "name": "Steal A Snake",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "BladeConcord": {
-        "$path": "src/ReplicatedStorage/BladeConcord"
+      "StealASnake": {
+        "$path": "src/ReplicatedStorage/StealASnake"
       }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
-      "BladeConcord": {
-        "$path": "src/ServerScriptService/BladeConcord"
+      "StealASnake": {
+        "$path": "src/ServerScriptService/StealASnake"
       }
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
-        "BladeConcord": {
-          "$path": "src/StarterPlayer/StarterPlayerScripts/BladeConcord"
+        "StealASnake": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/StealASnake"
         }
       }
     },
@@ -28,14 +28,14 @@
       "$properties": {
         "FilteringEnabled": true
       },
-      "Arenas": {
-        "$path": "src/Workspace/Arenas"
+      "StealASnake": {
+        "$path": "src/Workspace/StealASnake"
       }
     },
     "ServerStorage": {
       "$className": "ServerStorage",
-      "BladeConcord": {
-        "$path": "src/ServerStorage/BladeConcord"
+      "StealASnake": {
+        "$path": "src/ServerStorage/StealASnake"
       }
     }
   }
