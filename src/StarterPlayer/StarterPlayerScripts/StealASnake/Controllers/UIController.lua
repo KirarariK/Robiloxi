@@ -689,7 +689,7 @@ function UIController.start()
 		if chase.Visible then
 			chaseScale.Scale = 1 + math.sin(now * 8) * 0.03
 		end
-		local target = if chasing then 1 - math.clamp(aggroIntensity, 0, 1) * 0.65 - (math.sin(now * (6 + aggroIntensity * 8)) + 1) * 0.06 else 1
+		local target = if chasing then 1 - math.clamp(aggroIntensity, 0, 1) * 0.4 - (math.sin(now * (6 + aggroIntensity * 8)) + 1) * 0.04 else 1
 		vignette.BackgroundTransparency += (target - vignette.BackgroundTransparency) * 0.2
 		vignette2.BackgroundTransparency = vignette.BackgroundTransparency
 	end)
