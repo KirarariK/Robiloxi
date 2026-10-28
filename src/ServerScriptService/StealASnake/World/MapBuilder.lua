@@ -1499,7 +1499,6 @@ function MapBuilder.build()
 	MapBuilder.setupPhysics()
 	MapBuilder.setupLighting()
 
-	Workspace.FallenPartsDestroyHeight = -400
 	local old = Workspace:FindFirstChild("Map")
 	if old then
 		old:Destroy()
