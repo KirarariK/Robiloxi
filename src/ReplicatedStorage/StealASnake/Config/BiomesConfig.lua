@@ -60,7 +60,7 @@ export type BiomeDef = {
 }
 
 local SIZE = 220
-local FIRST_CENTER_Z = -200
+local FIRST_CENTER_Z = -155 -- sortie de l'arène à z = -15, 30 studs de route, puis la zone (110 de demi-taille)
 local SPACING = 260 -- 220 de zone + 40 de route entre deux zones
 
 local function rgb(r: number, g: number, b: number): Color3

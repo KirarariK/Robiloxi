@@ -55,6 +55,8 @@ local function sendAggro(player: Player, active: boolean, intensity: number)
 	Network.event("GuardianAggro"):FireClient(player, active, intensity)
 end
 
+-- Morsure : plus de mort ni de réapparition. Le gardien POUSSE le joueur (éjection vers l'arrière,
+-- en direction de la sortie de la zone), le fait trébucher un court instant et lui fait lâcher le serpent.
 local function biteKnockback(player: Player, from: Vector3)
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -65,11 +67,14 @@ local function biteKnockback(player: Player, from: Vector3)
 	local away = hrp.Position - from
 	away = Vector3.new(away.X, 0, away.Z)
 	local dir = if away.Magnitude > 0.1 then away.Unit else Vector3.new(0, 0, 1)
-	hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-	hrp.AssemblyLinearVelocity = dir * 90 + Vector3.new(0, 55, 0)
-	task.delay(0.6, function()
-		if hum.Parent then
-			hum.Health = 0
+	-- biais vers +Z (la route / l'arène) pour sortir le joueur du nid
+	dir = (dir + Vector3.new(0, 0, 0.6)).Unit
+	hum:ChangeState(Enum.HumanoidStateType.FallingDown)
+	hrp.AssemblyLinearVelocity = dir * 120 + Vector3.new(0, 45, 0)
+	Network.event("VFX"):FireClient(player, "Bite", from)
+	task.delay(0.9, function()
+		if hum.Parent and hum.Health > 0 then
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 		end
 	end)
 end
@@ -264,7 +269,7 @@ function GuardianAI.start()
 						g.Target = nil
 						local from = g.Pos
 						task.delay(BITE_WINDUP, function()
-							CarrySystem.drop(target, "Le gardien t'a eu !")
+							CarrySystem.drop(target, "💥 Le gardien t'a repoussé ! Tu as lâché le serpent")
 							sendAggro(target, false, 0)
 							biteKnockback(target, from)
 						end)

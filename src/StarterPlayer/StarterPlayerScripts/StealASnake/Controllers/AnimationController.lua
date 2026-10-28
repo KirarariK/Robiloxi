@@ -2,8 +2,9 @@
 --[[
 	AnimationController — animations procédurales côté client (aucun asset d'animation requis).
 
-	- Snake_Idle : chaque serpent (nids + vivariums) respire, oscille en S et tourne doucement la tête ;
-	  les Cosmiques défilent en arc-en-ciel (Color3.fromHSV).
+	- Snake_Idle : chaque serpent (nids + vivariums) respire (squash & stretch), oscille, sort la langue
+	  par à-coups et TOURNE LA TÊTE vers le joueur proche (curiosité) ; les Cosmiques défilent en arc-en-ciel.
+	- Snake_Spawn : apparition « pop » (échelle 0 → 1 avec rebond) quand un serpent surgit dans un nid.
 	- Player_HeavyCarry : pour TOUS les joueurs dont le personnage a l'attribut CarryWeight
 	  (posé par le serveur) → bras tendus vers l'avant, buste penché en arrière, dandinement
 	  d'autant plus fort que le serpent est lourd.
@@ -16,7 +17,16 @@ local Workspace = game:GetService("Workspace")
 
 local AnimationController = {}
 
-type SnakeAnim = { Base: CFrame, Phase: number, Rainbow: { BasePart } }
+type SnakeAnim = {
+	Base: CFrame,
+	Phase: number,
+	Rainbow: { BasePart },
+	Tongues: { BasePart },
+	Scale: number,
+	BornAt: number,
+	Yaw: number,
+	Squash: number,
+}
 
 local snakes: { [Model]: SnakeAnim } = setmetatable({}, { __mode = "k" }) :: any
 local floaters: { [BasePart]: { Base: CFrame, Phase: number } } = setmetatable({}, { __mode = "k" }) :: any
@@ -40,7 +50,24 @@ local function registerSnake(m: Instance)
 				end
 			end
 		end
-		snakes[m] = { Base = m:GetPivot(), Phase = math.random() * 6.28, Rainbow = rainbow }
+		local tongues = {}
+		for _, d in m:GetDescendants() do
+			if d:IsA("BasePart") and (string.find(d.Name, "^c_E62846") or d.Name == "Tongue") then
+				table.insert(tongues, d)
+			end
+		end
+		local scale = m:GetScale()
+		local wild = m:IsDescendantOf(Workspace:FindFirstChild("WildSnakes") or Workspace)
+		snakes[m] = {
+			Base = m:GetPivot(),
+			Phase = math.random() * 6.28,
+			Rainbow = rainbow,
+			Tongues = tongues,
+			Scale = scale,
+			BornAt = if wild then os.clock() else 0,
+			Yaw = 0,
+			Squash = 1,
+		}
 	end)
 end
 
@@ -124,8 +151,11 @@ function AnimationController.start()
 	end)
 
 	local frame = 0
-	RunService.RenderStepped:Connect(function()
+	RunService.RenderStepped:Connect(function(dt: number)
 		frame += 1
+		local me = Players.LocalPlayer.Character
+		local mr = me and me:FindFirstChild("HumanoidRootPart")
+		local myRoot: BasePart? = if mr and mr:IsA("BasePart") then mr else nil
 		local now = os.clock()
 		local cam = Workspace.CurrentCamera
 		local camPos = if cam then cam.CFrame.Position else Vector3.zero
@@ -145,10 +175,37 @@ function AnimationController.start()
 				continue
 			end
 			local t = now + a.Phase
+			-- Apparition « pop » avec rebond (0,45 s)
+			local age = now - a.BornAt
+			local pop = 1
+			if a.BornAt > 0 and age < 0.45 then
+				local k = age / 0.45
+				pop = math.max(0.05, 1 + 2.2 * (k - 1) ^ 3 + 1.2 * (k - 1) ^ 2)
+			end
+			-- Respiration : léger squash & stretch
+			local breathe = 1 + math.sin(t * 2.1) * 0.035
+			local target = a.Scale * pop * breathe
+			if dist < 70 and math.abs(target - m:GetScale()) > 0.002 then
+				m:ScaleTo(target)
+			end
+			-- Curiosité : la tête suit le joueur proche (±70°), sinon balancement
+			local yawTarget = math.sin(t * 1.3) * math.rad(9)
+			if myRoot then
+				local rel = a.Base:PointToObjectSpace(myRoot.Position)
+				local flatDist = Vector3.new(rel.X, 0, rel.Z).Magnitude
+				if flatDist < 26 and flatDist > 0.5 then
+					yawTarget = math.clamp(math.atan2(-rel.X, -rel.Z), math.rad(-70), math.rad(70))
+				end
+			end
+			a.Yaw += (yawTarget - a.Yaw) * math.min(1, dt * 4)
 			local bob = math.sin(t * 2.1) * 0.12
-			local sway = math.sin(t * 1.3) * math.rad(9)
 			local tilt = math.sin(t * 2.6) * math.rad(3)
-			m:PivotTo(a.Base * CFrame.new(0, bob, 0) * CFrame.Angles(tilt, sway, 0))
+			m:PivotTo(a.Base * CFrame.new(0, bob, 0) * CFrame.Angles(tilt, a.Yaw, 0))
+			-- Langue : sort par petits coups toutes les ~2 s
+			local flick = (t % 2.2) < 0.35 and math.floor(t * 12) % 2 == 0
+			for _, tg in a.Tongues do
+				tg.LocalTransparencyModifier = if flick then 0 else 1
+			end
 			for _, p in a.Rainbow do
 				p.Color = Color3.fromHSV((hue + p.Position.Y * 0.03) % 1, 0.85, 1)
 			end

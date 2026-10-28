@@ -350,6 +350,44 @@ function AmbienceController.start(environment: any)
 		end
 		wasCarrying = state ~= nil
 	end)
+	-- Morsure du gardien : secousse de caméra + flash rouge (le joueur est repoussé, pas tué)
+	local flashGui = Instance.new("ScreenGui")
+	flashGui.Name = "SAS_BiteFlash"
+	flashGui.IgnoreGuiInset = true
+	flashGui.ResetOnSpawn = false
+	flashGui.DisplayOrder = 50
+	flashGui.Parent = player:WaitForChild("PlayerGui")
+	local flash = Instance.new("Frame")
+	flash.Size = UDim2.fromScale(1, 1)
+	flash.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+	flash.BackgroundTransparency = 1
+	flash.BorderSizePixel = 0
+	flash.Parent = flashGui
+	Network.event("VFX").OnClientEvent:Connect(function(kind)
+		if kind ~= "Bite" then
+			return
+		end
+		flash.BackgroundTransparency = 0.45
+		TweenService:Create(flash, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			task.spawn(function()
+				local t0 = os.clock()
+				while os.clock() - t0 < 0.45 do
+					local k = 1 - (os.clock() - t0) / 0.45
+					hum.CameraOffset = Vector3.new(math.random() - 0.5, math.random() - 0.5, 0) * 1.6 * k
+					RunService.RenderStepped:Wait()
+				end
+				hum.CameraOffset = Vector3.zero
+			end)
+		end
+		local pos = hrpPos()
+		if pos then
+			burstAt(pos, Color3.fromRGB(255, 80, 80), false)
+		end
+	end)
+
 	Network.event("Alert").OnClientEvent:Connect(function(msg)
 		local pos = hrpPos()
 		if typeof(msg) == "string" and pos and msg:find("sécurisé") then

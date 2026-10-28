@@ -33,9 +33,9 @@ local rng = Random.new(1337) -- décor identique à chaque démarrage
 -- Géométrie globale
 local GROUND_Y = 1 -- dessus du sol (terrain)
 local ROAD_HALF = 20 -- demi-largeur de la route centrale (et de la sortie de l'arène)
-local HUB_Z_MAX = 290 -- mur du fond de l'arène (derrière les bases)
-local HUB_Z_MIN = -40 -- mur avant de l'arène (sortie vers la route)
-local HUB_HALF_X = 330
+local HUB_Z_MAX = 160 -- mur du fond de l'arène (derrière les bases)
+local HUB_Z_MIN = -15 -- mur avant de l'arène (sortie vers la route)
+local HUB_HALF_X = 280
 local LAST_BIOME = BiomesConfig[#BiomesConfig]
 local WORLD_Z_MIN = LAST_BIOME.Center.Z - LAST_BIOME.Size.Z / 2 - 30
 local CANYON_HALF_X = BiomesConfig[1].Size.X / 2 -- bord des zones
@@ -297,10 +297,10 @@ end
 
 local PLOT_W, PLOT_D = 64, 58
 
-local PLOT_ROW_Z = 220 -- les 8 bases sont alignées au fond de l'arène, entrée face à la place
+local PLOT_ROW_Z = 120 -- les 8 bases sont alignées au fond de l'arène, entrée face à la place
 
 local function plotCFrame(index: number): (CFrame, number)
-	local x = -252 + (index - 1) * 72
+	local x = -238 + (index - 1) * 68
 	local origin = Vector3.new(x, GROUND_Y, PLOT_ROW_Z)
 	-- l'avant de la base regarde la place centrale (−Z)
 	local cf = CFrame.lookAt(origin, origin + Vector3.new(0, 0, -1))
@@ -667,7 +667,7 @@ local function buildHub(map: Folder, safe: Folder)
 	surfaceText(safeSign, Enum.NormalId.Top, "🛡️ ZONE SÉCURISÉE 🛡️", Color3.fromRGB(255, 255, 255))
 
 	-- Place centrale : statue dorée sur piédestal + titre
-	local plazaZ = 90
+	local plazaZ = 32
 	terrain:FillCylinder(CFrame.new(0, 0.5, plazaZ), 2, 34, Enum.Material.Cobblestone)
 	local pedestal = deco({
 		Name = "StatuePedestal",
@@ -690,7 +690,7 @@ local function buildHub(map: Folder, safe: Folder)
 	end
 	light(pedestal, Color3.fromRGB(255, 215, 130), 34, 1.5)
 	-- Fontaines-serpents de part et d'autre de la place
-	for _, fx in { -70, 70 } do
+	for _, fx in { -60, 60 } do
 		local f = placeTemplate("SnakeFountain", hub, Vector3.new(fx, GROUND_Y, plazaZ), 1.4, math.rad(if fx < 0 then 90 else -90), true)
 		if f then
 			local _, fs = f:GetBoundingBox()
@@ -752,7 +752,7 @@ local function buildHub(map: Folder, safe: Folder)
 	surfaceText(archTop, Enum.NormalId.Back, "🐍 LES 15 ZONES ➜", Color3.fromRGB(255, 240, 120))
 
 	-- Palmiers et arbres le long des murs latéraux
-	for k = 0, 9 do
+	for k = 0, 3 do
 		for _, x in { -HUB_HALF_X + 18, HUB_HALF_X - 18 } do
 			placeTemplate(if k % 2 == 0 then "PalmTree" else "JungleTree", hub, Vector3.new(x, GROUND_Y, HUB_Z_MIN + 20 + k * 22), rng:NextNumber(0.7, 0.95), rng:NextNumber(0, 6.28))
 		end

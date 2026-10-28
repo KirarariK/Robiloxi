@@ -19,4 +19,18 @@ AnimationController.start()
 GuardianRenderer.start()
 task.spawn(AmbienceController.start, EnvironmentController)
 
+-- Pas de bouton « Réinitialiser » : on ne meurt plus dans Steal A Snake (le gardien repousse)
+task.spawn(function()
+	local StarterGui = game:GetService("StarterGui")
+	for _ = 1, 20 do
+		local ok = pcall(function()
+			StarterGui:SetCore("ResetButtonCallback", false)
+		end)
+		if ok then
+			break
+		end
+		task.wait(0.5)
+	end
+end)
+
 print("[StealASnake] client ready")
