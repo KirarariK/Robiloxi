@@ -37,6 +37,9 @@ type Visual = {
 	HeadPrimary: BasePart,
 	Jaw: BasePart?,
 	JawBase: CFrame?,
+	JawParts: { BasePart }?,
+	JawBases: { CFrame }?,
+	JawHinge: CFrame?,
 	Segments: { BasePart },
 	Trail: { Vector3 },
 	HeadPos: Vector3,
@@ -304,6 +307,17 @@ local FX: { [string]: { Texture: string, Color: Color3, Color2: Color3?, Rate: n
 	Feathers = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 220, 80), Color2 = Color3.fromRGB(230, 60, 60), Rate = 4, Speed = 2, Size = 0.8, Life = 1.8 },
 	Radioactive = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(190, 255, 40), Rate = 8, Speed = 3, Size = 0.9, Life = 1.2, Light = true },
 	Wings = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 230, 140), Color2 = Color3.fromRGB(255, 255, 255), Rate = 6, Speed = 1.5, Size = 0.9, Life = 2, Light = true },
+	Nature = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(120, 230, 80), Color2 = Color3.fromRGB(255, 160, 210), Rate = 4, Speed = 1.5, Size = 0.8, Life = 2.2 },
+	Sand = { Texture = "rbxasset://textures/particles/smoke_main.dds", Color = Color3.fromRGB(235, 200, 130), Rate = 4, Speed = 1, Size = 2.2, Life = 1.4 },
+	Venom = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(160, 255, 60), Color2 = Color3.fromRGB(150, 60, 200), Rate = 6, Speed = 2, Size = 0.8, Life = 1.4, Light = true },
+	Tiger = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 170, 50), Color2 = Color3.fromRGB(120, 230, 90), Rate = 3, Speed = 2, Size = 0.7, Life = 1.6 },
+	Stone = { Texture = "rbxasset://textures/particles/smoke_main.dds", Color = Color3.fromRGB(170, 150, 130), Rate = 3, Speed = 1, Size = 2, Life = 1.3 },
+	Runes = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(120, 230, 255), Color2 = Color3.fromRGB(190, 120, 255), Rate = 6, Speed = 1.5, Size = 0.9, Life = 2.2, Light = true },
+	Chaos = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 60, 90), Color2 = Color3.fromRGB(150, 40, 220), Rate = 8, Speed = 2.5, Size = 0.9, Life = 1.6, Light = true },
+	Shadow = { Texture = "rbxasset://textures/particles/smoke_main.dds", Color = Color3.fromRGB(110, 50, 170), Color2 = Color3.fromRGB(20, 10, 40), Rate = 6, Speed = 1.2, Size = 2.4, Life = 2, Light = true },
+	Iron = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 200, 80), Color2 = Color3.fromRGB(255, 110, 30), Rate = 6, Speed = 4, Size = 0.5, Life = 0.8, Light = true },
+	Storm = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(150, 230, 255), Color2 = Color3.fromRGB(255, 255, 160), Rate = 9, Speed = 4, Size = 0.7, Life = 0.9, Light = true },
+	Ultimate = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 70, 200), Color2 = Color3.fromRGB(110, 220, 255), Rate = 10, Speed = 2.5, Size = 1.1, Life = 2.2, Light = true },
 	Rainbow = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(170, 110, 255), Color2 = Color3.fromRGB(120, 255, 255), Rate = 8, Speed = 2, Size = 1, Life = 2.2, Light = true },
 }
 
@@ -324,7 +338,7 @@ local function addFx(part: BasePart, f: string, s: number, rateMult: number)
 	e.Lifetime = NumberRange.new(fx.Life * 0.6, fx.Life)
 	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, fx.Size * s), NumberSequenceKeypoint.new(1, 0) })
 	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
-	e.Acceleration = if f == "Fire" or f == "Ghost" or f == "Spores" then Vector3.new(0, 3, 0) else Vector3.new(0, -1, 0)
+	e.Acceleration = if f == "Fire" or f == "Ghost" or f == "Spores" or f == "Shadow" or f == "Ultimate" or f == "Runes" then Vector3.new(0, 3, 0) else Vector3.new(0, -1, 0)
 	e.Parent = a
 	if f == "Fire" then
 		local fire = Instance.new("Fire")
@@ -431,6 +445,8 @@ local function build(model: Model)
 	local head: Model
 	local primary: BasePart
 	local jaw: BasePart? = nil
+	local jawParts: { BasePart } = {}
+	local hingePart: BasePart? = nil
 	local tpl, ownHead = headTemplate(order)
 	if tpl then
 		head = tpl:Clone()
@@ -441,15 +457,19 @@ local function build(model: Model)
 				d.CanCollide = false
 				d.CanQuery = false
 				d.CanTouch = false
-				if string.find(string.lower(d.Name), "jaw") then
+				if d.Name == "JawHinge" then
+					hingePart = d
+					d.Transparency = 1
+				elseif string.find(string.lower(d.Name), "jaw") then
 					jaw = d
+					table.insert(jawParts, d)
 				end
 			end
 		end
 		primary = head.PrimaryPart or head:FindFirstChildWhichIsA("BasePart", true) :: BasePart
 		if not ownHead or not head.PrimaryPart then
 			for _, d in head:GetDescendants() do
-				if d:IsA("BasePart") and d ~= jaw then
+				if d:IsA("BasePart") and not table.find(jawParts, d) and d ~= hingePart then
 					primary = d
 					break
 				end
@@ -494,6 +514,17 @@ local function build(model: Model)
 	head.Parent = folder
 	-- jaw relatif au crâne (pour l'ouvrir autour de la charnière)
 	local jawBase: CFrame? = if jaw then primary.CFrame:ToObjectSpace(jaw.CFrame) else nil
+	-- mâchoire multi-pièces (têtes Blender) : toutes les pièces « jaw » tournent autour de JawHinge
+	local jawBases: { CFrame }? = nil
+	local jawHinge: CFrame? = nil
+	if hingePart and #jawParts > 0 then
+		jawHinge = primary.CFrame:ToObjectSpace(CFrame.new(hingePart.Position) * primary.CFrame.Rotation)
+		local bases = {}
+		for _, jp in jawParts do
+			table.insert(bases, jawHinge:Inverse() * primary.CFrame:ToObjectSpace(jp.CFrame))
+		end
+		jawBases = bases
+	end
 
 	-- Corps : kit voxel Blender si présent, sinon anneaux en Parts
 	local kitTpl = kitTemplate(order)
@@ -563,6 +594,9 @@ local function build(model: Model)
 		HeadPrimary = primary,
 		Jaw = jaw,
 		JawBase = jawBase,
+		JawParts = if jawBases then jawParts else nil,
+		JawBases = jawBases,
+		JawHinge = jawHinge,
 		Segments = segments,
 		Trail = trail,
 		HeadPos = start,
@@ -676,7 +710,14 @@ local function step(v: Visual, dt: number, now: number)
 	local sway = math.sin(v.Phase * 1.2) * 0.12
 	local headCf = CFrame.lookAt(headPos, headPos + v.HeadLook) * CFrame.Angles(0, sway, 0)
 	v.Head:PivotTo(headCf)
-	if v.Jaw and v.JawBase then
+	if v.JawParts and v.JawBases and v.JawHinge then
+		local hcf = v.HeadPrimary.CFrame * v.JawHinge * CFrame.Angles(math.rad(-30 * jawOpen), 0, 0)
+		local cfs = table.create(#v.JawParts)
+		for i, b in v.JawBases do
+			cfs[i] = hcf * b
+		end
+		Workspace:BulkMoveTo(v.JawParts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+	elseif v.Jaw and v.JawBase then
 		-- charnière à l'arrière de la mâchoire
 		local hinge = CFrame.new(0, 0, (v.Jaw.Size.Z * 0.45))
 		v.Jaw.CFrame = v.HeadPrimary.CFrame * v.JawBase * hinge * CFrame.Angles(math.rad(-38 * jawOpen), 0, 0) * hinge:Inverse()

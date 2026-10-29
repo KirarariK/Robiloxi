@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 
 local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
 local RebirthsConfig = require(game.ReplicatedStorage.StealASnake.Config.RebirthsConfig)
+local SnakesConfig = require(game.ReplicatedStorage.StealASnake.Config.SnakesConfig)
 
 export type VivariumSnake = {
 	SpeciesId: string,
@@ -153,6 +154,17 @@ local function load(player: Player)
 		d.Codes = if typeof(data.Codes) == "table" then data.Codes else {}
 		d.Index = if typeof(data.Index) == "table" then data.Index else {}
 	end
+	-- anciennes espèces → espèces de l'encyclopédie (même zone, même rareté)
+	for _, s in d.Vivariums do
+		if s and s.SpeciesId then
+			s.SpeciesId = SnakesConfig.migrate(s.SpeciesId)
+		end
+	end
+	local migrated = {}
+	for id, v in d.Index do
+		migrated[SnakesConfig.migrate(id)] = v
+	end
+	d.Index = migrated
 	-- index rétroactif : tout serpent déjà en vivarium compte comme découvert
 	for _, s in d.Vivariums do
 		if s and s.SpeciesId then

@@ -17,6 +17,14 @@ local Workspace = game:GetService("Workspace")
 
 local AnimationController = {}
 
+-- Pièce animable d'un serpent Blender (Head / Tail / WingL / WingR / Prop) : pivot = repère « Hinge »
+type Piece = {
+	Name: string,
+	Hinge: CFrame, -- repos, relatif au pivot du modèle
+	Parts: { BasePart },
+	Rel: { CFrame }, -- repos de chaque part, relatif au pivot du modèle
+}
+
 type SnakeAnim = {
 	Base: CFrame,
 	Phase: number,
@@ -24,6 +32,10 @@ type SnakeAnim = {
 	Tongues: { BasePart },
 	BornAt: number,
 	Yaw: number,
+	HeadYaw: number,
+	Pieces: { [string]: Piece }?,
+	Static: { BasePart },
+	StaticRel: { CFrame },
 }
 
 local snakes: { [Model]: SnakeAnim } = setmetatable({}, { __mode = "k" }) :: any
@@ -55,13 +67,56 @@ local function registerSnake(m: Instance)
 			end
 		end
 		local wild = m:IsDescendantOf(Workspace:FindFirstChild("WildSnakes") or Workspace)
+		local base = m:GetPivot()
+		-- serpents Blender : pièces animées séparément
+		local pieces: { [string]: Piece }? = nil
+		local static: { BasePart } = {}
+		local staticRel: { CFrame } = {}
+		local hasPieces = m:FindFirstChild("Head") ~= nil and m:FindFirstChild("Head"):IsA("Model")
+		if hasPieces then
+			local ps: { [string]: Piece } = {}
+			for _, child in m:GetChildren() do
+				if child:IsA("Model") then
+					local hinge = child:FindFirstChild("Hinge")
+					local animated = hinge and hinge:IsA("BasePart") and child.Name ~= "Body"
+					local piece: Piece? = if animated then {
+						Name = child.Name,
+						Hinge = base:ToObjectSpace((hinge :: BasePart).CFrame),
+						Parts = {},
+						Rel = {},
+					} else nil
+					for _, d in child:GetDescendants() do
+						if d:IsA("BasePart") then
+							if piece then
+								table.insert(piece.Parts, d)
+								table.insert(piece.Rel, base:ToObjectSpace(d.CFrame))
+							else
+								table.insert(static, d)
+								table.insert(staticRel, base:ToObjectSpace(d.CFrame))
+							end
+						end
+					end
+					if piece then
+						ps[piece.Name] = piece
+					end
+				elseif child:IsA("BasePart") then
+					table.insert(static, child)
+					table.insert(staticRel, base:ToObjectSpace(child.CFrame))
+				end
+			end
+			pieces = ps
+		end
 		snakes[m] = {
-			Base = m:GetPivot(),
+			Base = base,
 			Phase = math.random() * 6.28,
 			Rainbow = rainbow,
 			Tongues = tongues,
 			BornAt = if wild then os.clock() else 0,
 			Yaw = 0,
+			HeadYaw = 0,
+			Pieces = pieces,
+			Static = static,
+			StaticRel = staticRel,
 		}
 	end)
 end
@@ -187,10 +242,60 @@ function AnimationController.start()
 					yawTarget = math.clamp(math.atan2(-rel.X, -rel.Z), math.rad(-70), math.rad(70))
 				end
 			end
-			a.Yaw += (yawTarget - a.Yaw) * math.min(1, dt * 4)
 			local bob = math.sin(t * 2.1) * 0.12 + rise
 			local tilt = math.sin(t * 2.6) * math.rad(3)
-			m:PivotTo(a.Base * CFrame.new(0, bob, 0) * CFrame.Angles(tilt, a.Yaw, 0))
+			local pieces = a.Pieces
+			if pieces then
+				-- corps : respiration + léger balancement ; la TÊTE suit le joueur (pas tout le corps)
+				a.Yaw += (yawTarget * 0.25 - a.Yaw) * math.min(1, dt * 3)
+				a.HeadYaw += (yawTarget * 0.8 - a.HeadYaw) * math.min(1, dt * 5)
+				local root = a.Base * CFrame.new(0, bob, 0) * CFrame.Angles(tilt * 0.5, a.Yaw, 0)
+				local parts: { BasePart } = {}
+				local cfs: { CFrame } = {}
+				for k, p in a.Static do
+					table.insert(parts, p)
+					table.insert(cfs, root * a.StaticRel[k])
+				end
+				local headCF: CFrame? = nil
+				for name, pc in pieces do
+					if name == "Prop" then
+						continue
+					end
+					local anim: CFrame
+					if name == "Head" then
+						anim = CFrame.Angles(math.sin(t * 1.7) * math.rad(6), a.HeadYaw, math.sin(t * 1.3) * math.rad(5))
+					elseif name == "Tail" then
+						anim = CFrame.Angles(0, math.sin(t * 3.2) * math.rad(20), math.sin(t * 2.1) * math.rad(6))
+					elseif name == "WingR" then
+						anim = CFrame.Angles(0, 0, math.rad(10) + math.sin(t * 4.2) * math.rad(26))
+					elseif name == "WingL" then
+						anim = CFrame.Angles(0, 0, -math.rad(10) - math.sin(t * 4.2) * math.rad(26))
+					else
+						anim = CFrame.Angles(0, math.sin(t * 1.5) * math.rad(8), 0)
+					end
+					local pieceCF = root * pc.Hinge * anim * pc.Hinge:Inverse()
+					if name == "Head" then
+						headCF = pieceCF
+					end
+					for k, p in pc.Parts do
+						table.insert(parts, p)
+						table.insert(cfs, pieceCF * pc.Rel[k])
+					end
+				end
+				local prop = pieces.Prop
+				if prop then
+					local carrier = headCF or root
+					local pieceCF = carrier * prop.Hinge * CFrame.Angles(0, t * 14, 0) * prop.Hinge:Inverse()
+					for k, p in prop.Parts do
+						table.insert(parts, p)
+						table.insert(cfs, pieceCF * prop.Rel[k])
+					end
+				end
+				Workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+			else
+				a.Yaw += (yawTarget - a.Yaw) * math.min(1, dt * 4)
+				m:PivotTo(a.Base * CFrame.new(0, bob, 0) * CFrame.Angles(tilt, a.Yaw, 0))
+			end
 			-- Langue : sort par petits coups toutes les ~2 s
 			local flick = (t % 2.2) < 0.35 and math.floor(t * 12) % 2 == 0
 			for _, tg in a.Tongues do
