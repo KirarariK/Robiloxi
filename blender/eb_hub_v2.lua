@@ -67,6 +67,11 @@ local function P(parent: Instance, name: string, size: Vector3, cf: CFrame, colo
 	p.CFrame = cf
 	p.Color = color
 	p.Material = mat
+	-- l'or en Metal vire au vert sous l'éclairage : plastique lisse réfléchissant à la place
+	if color == C.Gold and mat == Enum.Material.Metal then
+		p.Material = Enum.Material.SmoothPlastic
+		p.Reflectance = 0.22
+	end
 	if o then
 		for k, v in o do
 			(p :: any)[k] = v
@@ -651,6 +656,26 @@ function B.ruins()
 	P(f, "Awning", Vector3.new(11, 0.4, 6.5), benchCf * CFrame.new(0, 9.1, 0.8) * CFrame.Angles(math.rad(-12), 0, 0), C.Banner, Enum.Material.Fabric)
 	local bench = P(f, "SaberBench", Vector3.new(5, 1, 3), benchCf * CFrame.new(0, 3.4, 0), C.Ether, Enum.Material.Neon, { Transparency = 0.85, CanCollide = false, CastShadow = false })
 	light(bench, C.Ether, 12, 1.2)
+	-- braseros d'éther en couronne sur la bordure de la place
+	for i = 0, 7 do
+		local a = (i + 0.5) / 8 * math.pi * 2
+		local pos = Vector3.new(math.cos(a) * (PLAZA_R - 3), 0, math.sin(a) * (PLAZA_R - 3))
+		local m = Instance.new("Model")
+		m.Name = "Brazier"
+		cyl(m, "Base", 3.2, 0.6, pos + Vector3.new(0, 0.3, 0), C.MarbleDark, Enum.Material.Limestone)
+		cyl(m, "Stem", 1.1, 3.2, pos + Vector3.new(0, 2.2, 0), C.Gold, Enum.Material.Metal)
+		cyl(m, "Bowl", 3.4, 0.9, pos + Vector3.new(0, 4.1, 0), C.Gold, Enum.Material.Metal)
+		cyl(m, "BowlRim", 3.8, 0.25, pos + Vector3.new(0, 4.6, 0), C.GoldDark, Enum.Material.Metal)
+		local flame = cyl(m, "Ether", 2.6, 0.3, pos + Vector3.new(0, 4.75, 0), C.Ether, Enum.Material.Neon, { CanCollide = false })
+		local fire = Instance.new("Fire")
+		fire.Color = C.Ether
+		fire.SecondaryColor = C.EtherDeep
+		fire.Size = 4
+		fire.Heat = 7
+		fire.Parent = flame
+		light(flame, C.Ether, 16, 1.4)
+		m.Parent = f
+	end
 	-- vases, petits cristaux et touffes de pierre dispersés
 	for i = 1, 10 do
 		local a = rng:NextNumber(0, math.pi * 2)
