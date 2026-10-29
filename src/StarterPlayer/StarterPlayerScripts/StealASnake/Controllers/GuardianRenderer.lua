@@ -373,10 +373,11 @@ local function buildKitBody(v: any, kit: Model, folder: Folder, s: number, f: st
 				local side = (c:GetAttribute("Side") :: number?) or 1
 				local ringIdx = if kind == "Hood" then 1 elseif kind == "Wing" then 3 else 4
 				local r = rings[ringIdx]
-				local base = if kind == "Hood" then CFrame.new(side * 0.9 * r.Scale, 0.3 * r.Scale, -0.6 * r.Scale)
-					elseif kind == "Wing" then CFrame.new(side * 1.4 * r.Scale, 1.2 * r.Scale, 0)
+				-- capuchon déployé derrière la tête ; ailes et nageoires sur les flancs
+				local base = if kind == "Hood" then CFrame.new(side * 0.7 * r.Scale, 0.2 * r.Scale, 0.9 * r.Scale)
+					elseif kind == "Wing" then CFrame.new(side * 1.3 * r.Scale, 1.0 * r.Scale, 0)
 					else CFrame.new(side * 1.8 * r.Scale, -0.2 * r.Scale, 0)
-				local pc = clonePiece(c, if kind == "Wing" then r.Scale * 1.25 else r.Scale, folder, kind, ringIdx, base)
+				local pc = clonePiece(c, if kind == "Wing" then r.Scale * 1.05 else r.Scale, folder, kind, ringIdx, base)
 				pc.Side = side
 				table.insert(attach, pc)
 			end

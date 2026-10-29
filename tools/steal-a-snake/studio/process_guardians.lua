@@ -179,7 +179,11 @@ if kits then
 							end
 						end
 						info.Model:SetAttribute("Side", side)
-						pivot = Vector3.new(if side == 1 then gmn.X else gmx.X, c.Y, c.Z)
+						-- ailes / capuchon : on les accroche par le bas (sinon la moitié passe sous le sol)
+						local py = if string.find(gname, "^Wing") then gmn.Y + (gmx.Y - gmn.Y) * 0.12
+							elseif string.find(gname, "^Hood") then gmn.Y + (gmx.Y - gmn.Y) * 0.3
+							else c.Y
+						pivot = Vector3.new(if side == 1 then gmn.X else gmx.X, py, c.Z)
 					end
 					info.Model.WorldPivot = CFrame.new(pivot)
 				end
