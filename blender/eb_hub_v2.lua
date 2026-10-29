@@ -155,10 +155,23 @@ function B.base()
 	end
 	t:FillBall(Vector3.new(0, -150, -8), 14, Enum.Material.Basalt)
 	-- rebord herbeux et extension nord (terrasse) + pentes est / ouest
-	t:FillCylinder(CFrame.new(0, -3.5, -10), 7, 112, Enum.Material.Rock)
-	t:FillCylinder(CFrame.new(0, -0.6, -10), 1.6, 116, Enum.Material.LeafyGrass)
-	t:FillBlock(CFrame.new(0, 2, -112), Vector3.new(96, 12, 60), Enum.Material.Rock)
-	t:FillBlock(CFrame.new(0, 8.6, -112), Vector3.new(98, 1.6, 62), Enum.Material.LeafyGrass)
+	-- couleurs chaudes façon roche sédimentaire, herbe tendre
+	t:SetMaterialColor(Enum.Material.Rock, Color3.fromRGB(132, 112, 92))
+	t:SetMaterialColor(Enum.Material.Slate, Color3.fromRGB(104, 92, 82))
+	t:SetMaterialColor(Enum.Material.LeafyGrass, Color3.fromRGB(110, 150, 72))
+	t:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(104, 146, 70))
+	t:SetMaterialColor(Enum.Material.Basalt, Color3.fromRGB(70, 64, 60))
+	-- galette rocheuse sous la dalle (sommet à y = -2), terrasse nord (sommet sous le plateau à 7,7)
+	t:FillCylinder(CFrame.new(0, -5.5, -10), 7, 116, Enum.Material.Rock)
+	t:FillBlock(CFrame.new(0, 1, -112), Vector3.new(96, 10, 60), Enum.Material.Rock)
+	-- herbe uniquement en couronne autour de la place (anneau de boules)
+	for i = 0, 47 do
+		local a = i / 48 * math.pi * 2
+		t:FillBall(Vector3.new(math.cos(a) * 64, -2.2, math.sin(a) * 64 - 4), 6, Enum.Material.LeafyGrass)
+	end
+	for x = -44, 44, 8 do
+		t:FillBall(Vector3.new(x, 5.4, -138), 5, Enum.Material.LeafyGrass)
+	end
 	-- rochers moussus autour
 	for i = 1, 26 do
 		local a = rng:NextNumber(0, math.pi * 2)
@@ -633,13 +646,14 @@ function B.sky()
 	local f = folder(root, "SkyIslands")
 	local t = Workspace.Terrain
 	local spots = {
-		{ Vector3.new(-120, 40, -60), 26 },
-		{ Vector3.new(110, 52, -90), 30 },
-		{ Vector3.new(-90, 64, 120), 22 },
-		{ Vector3.new(140, 30, 70), 18 },
-		{ Vector3.new(-160, 22, 40), 16 },
-		{ Vector3.new(30, 84, -190), 34 },
-		{ Vector3.new(-40, 46, 170), 14 },
+		{ Vector3.new(-150, 46, -70), 16 },
+		{ Vector3.new(150, 58, -110), 20 },
+		{ Vector3.new(-120, 72, 140), 14 },
+		{ Vector3.new(170, 36, 80), 12 },
+		{ Vector3.new(-190, 26, 40), 11 },
+		{ Vector3.new(40, 96, -230), 22 },
+		{ Vector3.new(-60, 52, 200), 10 },
+		{ Vector3.new(90, 70, 190), 13 },
 	}
 	for i, s in spots do
 		local c, r = s[1], s[2]
