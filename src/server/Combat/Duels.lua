@@ -142,7 +142,8 @@ function Duels.playIntro(matchId: string)
 	if not fa or not fb then
 		return
 	end
-	Broadcast.cinematic({ d.A, d.B }, "Intro", {
+	-- envoyé à tous : chacun voit l'animation, seuls les deux duellistes prennent la caméra
+	Broadcast.cinematic(Players:GetPlayers(), "Intro", {
 		MatchId = matchId,
 		A = fa.Model,
 		B = fb.Model,

@@ -132,6 +132,16 @@ local function equip(player: Player, kind: string, id: string, slot: number?): R
 			res = equipEmote(p, s, id)
 		end)
 	end
+	if res.Ok and (kind == "Form" or kind == "Weapon" or kind == "Color") then
+		-- la lame et la Voie en main changent tout de suite (hors duel)
+		local combat = script.Parent:FindFirstChild("CombatService")
+		if combat and combat:IsA("ModuleScript") then
+			local cs = require(combat) :: any
+			if type(cs.refreshLoadout) == "function" then
+				pcall(cs.refreshLoadout, player)
+			end
+		end
+	end
 	return res
 end
 

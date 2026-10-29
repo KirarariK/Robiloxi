@@ -91,6 +91,7 @@ function MenuController.open(id: string?, sub: string?)
 	local target = id or currentId or "Profile"
 	if not isOpen then
 		isOpen = true
+		game:GetService("Players").LocalPlayer:SetAttribute("EB_MenuOpen", true)
 		backdrop.Visible = true
 		window.Visible = true
 		backdrop.BackgroundTransparency = 1
@@ -107,6 +108,7 @@ function MenuController.close()
 		return
 	end
 	isOpen = false
+	game:GetService("Players").LocalPlayer:SetAttribute("EB_MenuOpen", false)
 	Kit.tween(backdrop, 0.2, { BackgroundTransparency = 1 })
 	Kit.tween(windowScale, 0.2, { Scale = Root.factor() * 0.94 })
 	task.delay(0.2, function()
