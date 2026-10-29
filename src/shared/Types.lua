@@ -116,6 +116,7 @@ export type Profile = {
 	BestStreak: number,
 	RankedPlayed: number,
 	Rerolls: number,
+	RerollPity: number, -- tirages consécutifs sans Voie Épique+ (le 50e est garanti Épique+)
 	Crystals: number, -- monnaie gagnée en duel, dépensée en relances
 	EquippedForm: FormId,
 	OwnedForms: { [FormId]: boolean },

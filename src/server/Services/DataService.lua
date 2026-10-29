@@ -102,6 +102,7 @@ local function defaultProfile(): Profile
 		BestStreak = 0,
 		RankedPlayed = 0,
 		Rerolls = 0,
+		RerollPity = 0,
 		Crystals = 300,
 		EquippedForm = FormData.Default,
 		OwnedForms = { [FormData.Default] = true },
