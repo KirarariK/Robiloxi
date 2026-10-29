@@ -25,14 +25,20 @@ local IS_STUDIO = RunService:IsStudio()
 local MAX_RECEIPTS = 100
 local root = ReplicatedStorage:WaitForChild("StealASnake")
 
-local lastCall: { [number]: number } = {}
-local function throttled(player: Player, gap: number): boolean
+-- limite de fréquence par joueur ET par action
+local lastCall: { [number]: { [string]: number } } = {}
+local function throttled(player: Player, action: string, gap: number): boolean
 	local now = os.clock()
-	local last = lastCall[player.UserId]
+	local mine = lastCall[player.UserId]
+	if not mine then
+		mine = {}
+		lastCall[player.UserId] = mine
+	end
+	local last = mine[action]
 	if last and now - last < gap then
 		return true
 	end
-	lastCall[player.UserId] = now
+	mine[action] = now
 	return false
 end
 
@@ -196,7 +202,7 @@ local function grantPass(player: Player, p: M.Pass)
 end
 
 local function onBuy(player: Player, key: any)
-	if typeof(key) ~= "string" or #key > 32 or throttled(player, 0.6) then
+	if typeof(key) ~= "string" or #key > 32 or throttled(player, "buy", 0.6) then
 		return
 	end
 	local pass = M.pass(key)
@@ -272,7 +278,7 @@ local function today(): number
 end
 
 local function onDaily(player: Player)
-	if throttled(player, 1) then
+	if throttled(player, "daily", 1) then
 		return
 	end
 	local d = DataManager.get(player)
@@ -293,7 +299,7 @@ local function onDaily(player: Player)
 end
 
 local function onGift(player: Player, index: any)
-	if typeof(index) ~= "number" or throttled(player, 0.5) then
+	if typeof(index) ~= "number" or throttled(player, "gift", 0.5) then
 		return
 	end
 	local g = M.Gifts[index]
@@ -310,7 +316,7 @@ local function onGift(player: Player, index: any)
 end
 
 local function onCode(player: Player, code: any): string
-	if typeof(code) ~= "string" or #code > 24 or throttled(player, 1.5) then
+	if typeof(code) ~= "string" or #code > 24 or throttled(player, "code", 1.5) then
 		return "Patiente un instant…"
 	end
 	local key = string.upper((string.gsub(code, "%s", "")))

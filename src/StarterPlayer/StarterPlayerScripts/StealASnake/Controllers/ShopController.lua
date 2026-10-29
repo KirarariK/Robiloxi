@@ -259,7 +259,7 @@ function ShopController.start()
 		corner(close, 16)
 		outline(close, 4)
 		grad(close, Color3.fromRGB(255, 110, 110), Color3.fromRGB(200, 30, 50))
-		local x = label(close, "✕", 32, { Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 31 })
+		local x = label(close, "X", 34, { Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 31 })
 		textOutline(x, 2.5)
 		juicy(close, closeModal)
 		local body = new("Frame", { Name = "Body", Position = UDim2.fromOffset(18, 88), Size = UDim2.new(1, -36, 1, -104), BackgroundTransparency = 1, ZIndex = 22, Parent = m })
@@ -335,7 +335,7 @@ function ShopController.start()
 	end
 
 	--[[ ── BOUTIQUE ── ]]
-	local shop, shopBody = modal("Shop", 900, 560, "🛒  BOUTIQUE", GOLD_A, GOLD_B)
+	local shop, shopBody = modal("Shop", 900, 450, "🛒  BOUTIQUE", GOLD_A, GOLD_B)
 	local tabsBar = new("Frame", { Size = UDim2.new(1, 0, 0, 46), BackgroundTransparency = 1, ZIndex = 22, Parent = shopBody })
 	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), Parent = tabsBar })
 	local pages = new("Frame", { Position = UDim2.fromOffset(0, 58), Size = UDim2.new(1, 0, 1, -58), BackgroundTransparency = 1, ZIndex = 22, Parent = shopBody })
@@ -355,7 +355,7 @@ function ShopController.start()
 			Parent = pages,
 		})
 		new("UIPadding", { PaddingTop = UDim.new(0, 18), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingBottom = UDim.new(0, 10), Parent = sf })
-		new("UIGridLayout", { CellSize = UDim2.fromOffset(194, 262), CellPadding = UDim2.fromOffset(16, 22), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = sf })
+		new("UIGridLayout", { CellSize = UDim2.fromOffset(194, 252), CellPadding = UDim2.fromOffset(16, 22), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = sf })
 		return sf
 	end
 
@@ -548,7 +548,7 @@ function ShopController.start()
 	end)
 
 	--[[ ── Rail gauche ── ]]
-	local rail = new("Frame", { Name = "Rail", AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 14, 0.42, 0), Size = UDim2.fromOffset(92, 470), BackgroundTransparency = 1, Parent = gui })
+	local rail = new("Frame", { Name = "Rail", AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 14, 0.38, 0), Size = UDim2.fromOffset(92, 470), BackgroundTransparency = 1, Parent = gui })
 	new("UIListLayout", { Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = rail })
 
 	local function railButton(order: number, icon: string, text: string, a: Color3, b: Color3, onClick: () -> ()): (TextButton, TextLabel, TextLabel)
