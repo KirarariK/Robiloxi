@@ -1,25 +1,30 @@
 --!strict
 --[[
-	UIController — interface complète de Steal A Snake (construite par code, aucune image requise).
+	UIController — HUD et fenêtres de jeu de Steal A Snake, sur le design system UIKit (« bonbon arcade »).
 
-	HUD          : cartes Cash / Speed / Rebirths (+ revenu $/s), popups « +$ », objectif guidé.
-	Portage      : panneau haut-centre (nom + mutation + rareté, barre de poids, pénalité de vitesse, bouton LÂCHER [G]).
-	Danger       : bannière « … TE POURSUIT ! » qui pulse + vignette rouge selon la proximité du gardien.
-	Notifications: toasts empilés en bas · titre de zone à l'entrée d'un biome.
-	Panneaux     : Tapis de course, Vivarium, Fusion, Rebirth (ouverts par le serveur via OpenUI).
+	HUD          : cartes Argent / Vitesse / Rebirths (badge + gros chiffre + détail), « +$ » volants.
+	Objectif     : bandeau haut-centre avec badge d'icône et pastilles de progression du tutoriel.
+	Portage      : carte de rareté (nom, poids, pénalité de vitesse) + gros bouton LÂCHER [G].
+	Danger       : ruban de poursuite rayé (nom du gardien + distance jusqu'au hub) + vignette rouge.
+	Zones        : carte « ZONE n/15 » qui glisse à l'entrée d'une zone (nom + gardien).
+	Notifications: toasts UIKit colorés par catégorie.
+	Stations     : Tapis, Vivarium, Fusion, Rebirth (fenêtre modale UIKit, ouverte par le serveur via OpenUI).
 ]]
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
-local FormatNumber = require(game.ReplicatedStorage.StealASnake.Modules.FormatNumber)
-local SnakesConfig = require(game.ReplicatedStorage.StealASnake.Config.SnakesConfig)
-local MutationsConfig = require(game.ReplicatedStorage.StealASnake.Config.MutationsConfig)
-local TreadmillsConfig = require(game.ReplicatedStorage.StealASnake.Config.TreadmillsConfig)
-local RebirthsConfig = require(game.ReplicatedStorage.StealASnake.Config.RebirthsConfig)
-local RarityConfig = require(game.ReplicatedStorage.StealASnake.Config.RarityConfig)
-local MonetizationConfig = require(game.ReplicatedStorage.StealASnake.Config.MonetizationConfig)
+local Network = require(ReplicatedStorage.StealASnake.Modules.Network)
+local FormatNumber = require(ReplicatedStorage.StealASnake.Modules.FormatNumber)
+local UIKit = require(ReplicatedStorage.StealASnake.Modules.UIKit)
+local SnakesConfig = require(ReplicatedStorage.StealASnake.Config.SnakesConfig)
+local MutationsConfig = require(ReplicatedStorage.StealASnake.Config.MutationsConfig)
+local TreadmillsConfig = require(ReplicatedStorage.StealASnake.Config.TreadmillsConfig)
+local RebirthsConfig = require(ReplicatedStorage.StealASnake.Config.RebirthsConfig)
+local RarityConfig = require(ReplicatedStorage.StealASnake.Config.RarityConfig)
+local BiomesConfig = require(ReplicatedStorage.StealASnake.Config.BiomesConfig)
+local MonetizationConfig = require(ReplicatedStorage.StealASnake.Config.MonetizationConfig)
 local EnvironmentController = require(script.Parent.EnvironmentController)
 
 local UIController = {}
@@ -27,130 +32,17 @@ local UIController = {}
 local player = Players.LocalPlayer
 local dataCache: any = nil
 
---[[ ───────────── Thème ───────────── ]]
-local FONT_TITLE = Font.new("rbxasset://fonts/families/FredokaOne.json")
-local FONT_BOLD = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
-local FONT_BODY = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
+local new, label, title, card, P, C = UIKit.new, UIKit.label, UIKit.title, UIKit.card, UIKit.P, UIKit.C
+local INK, WHITE = UIKit.INK, UIKit.WHITE
+local ZONE1_FRONT = BiomesConfig[1].Center.Z + BiomesConfig[1].Size.Z / 2
 
-local C = {
-	Panel = Color3.fromRGB(18, 22, 30),
-	Panel2 = Color3.fromRGB(28, 34, 46),
-	Text = Color3.fromRGB(245, 245, 250),
-	Muted = Color3.fromRGB(160, 170, 190),
-	Cash = Color3.fromRGB(90, 235, 120),
-	Speed = Color3.fromRGB(80, 180, 255),
-	Rebirth = Color3.fromRGB(190, 120, 255),
-	Danger = Color3.fromRGB(255, 70, 70),
-	Gold = Color3.fromRGB(255, 205, 70),
-}
-
---[[ ───────────── Helpers ───────────── ]]
-local function new(className: string, props: { [string]: any }): any
-	local inst = Instance.new(className)
-	for k, v in props do
-		if k ~= "Parent" then
-			(inst :: any)[k] = v
-		end
-	end
-	if props.Parent then
-		inst.Parent = props.Parent
-	end
-	return inst
-end
-
-local function corner(parent: Instance, r: number?)
-	return new("UICorner", { CornerRadius = UDim.new(0, r or 12), Parent = parent })
-end
-
-local function stroke(parent: Instance, color: Color3, thickness: number?, transparency: number?)
-	return new("UIStroke", {
-		Color = color,
-		Thickness = thickness or 2,
-		Transparency = transparency or 0,
-		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		Parent = parent,
-	})
-end
-
-local function textStroke(parent: Instance, thickness: number?)
-	return new("UIStroke", { Color = Color3.fromRGB(10, 10, 18), Thickness = thickness or 2, Parent = parent })
-end
-
-local function gradient(parent: Instance, a: Color3, b: Color3, rotation: number?)
-	return new("UIGradient", { Color = ColorSequence.new(a, b), Rotation = rotation or 90, Parent = parent })
-end
-
-local function label(props: { [string]: any }): TextLabel
-	local defaults = {
-		BackgroundTransparency = 1,
-		TextColor3 = C.Text,
-		FontFace = FONT_BOLD,
-		TextScaled = false,
-		TextSize = 18,
-	}
-	for k, v in props do
-		defaults[k] = v
-	end
-	return new("TextLabel", defaults)
-end
-
-local function button(props: { [string]: any }, color: Color3): TextButton
-	local b = new("TextButton", {
-		AutoButtonColor = false,
-		BackgroundColor3 = color,
-		TextColor3 = Color3.new(1, 1, 1),
-		FontFace = FONT_TITLE,
-		TextSize = 22,
-	})
-	for k, v in props do
-		(b :: any)[k] = v
-	end
-	corner(b, 12)
-	gradient(b, Color3.new(1, 1, 1), Color3.fromRGB(190, 190, 190), 90)
-	stroke(b, color:Lerp(Color3.new(0, 0, 0), 0.45), 3)
-	local scale = new("UIScale", { Parent = b })
-	b.MouseEnter:Connect(function()
-		TweenService:Create(scale, TweenInfo.new(0.12), { Scale = 1.06 }):Play()
-	end)
-	b.MouseLeave:Connect(function()
-		TweenService:Create(scale, TweenInfo.new(0.12), { Scale = 1 }):Play()
-	end)
-	b.MouseButton1Down:Connect(function()
-		TweenService:Create(scale, TweenInfo.new(0.06), { Scale = 0.94 }):Play()
-	end)
-	b.MouseButton1Up:Connect(function()
-		TweenService:Create(scale, TweenInfo.new(0.1), { Scale = 1.06 }):Play()
-	end)
-	return b
-end
-
-local function panel(props: { [string]: any }, accent: Color3?): Frame
-	local f = new("Frame", { BackgroundColor3 = C.Panel, BackgroundTransparency = 0.08 })
-	for k, v in props do
-		(f :: any)[k] = v
-	end
-	corner(f, 16)
-	gradient(f, Color3.fromRGB(255, 255, 255), Color3.fromRGB(175, 180, 195), 90)
-	stroke(f, accent or Color3.fromRGB(70, 80, 100), 2, 0.1)
-	return f
-end
-
-local function bar(parent: Instance, pos: UDim2, size: UDim2, color: Color3): (Frame, Frame)
-	local back = new("Frame", { Position = pos, Size = size, BackgroundColor3 = Color3.fromRGB(10, 12, 18), BackgroundTransparency = 0.2, Parent = parent })
-	corner(back, 8)
-	local fill = new("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = color, Parent = back })
-	corner(fill, 8)
-	gradient(fill, Color3.new(1, 1, 1), Color3.fromRGB(170, 170, 170), 90)
-	return back, fill
-end
-
-local function snakeTitle(speciesId: string, mutation: string?): (string, Color3, string)
+local function snakeTitle(speciesId: string, mutation: string?): (string, Color3, string, any)
 	local def = SnakesConfig.get(speciesId)
 	local name = if def then def.DisplayName else speciesId
 	local mut = MutationsConfig.Defs[mutation or "Normal"] or MutationsConfig.Defs.Normal
 	local rarity = if def then def.Rarity else "Common"
-	local title = if mut.Id ~= "Normal" then string.format("✨ [%s] %s", string.upper(mut.DisplayName), name) else name
-	return title, RarityConfig.color(rarity), RarityConfig.name(rarity)
+	local t = if mut.Id ~= "Normal" then string.format("✨ %s %s", mut.DisplayName, name) else name
+	return t, RarityConfig.color(rarity), RarityConfig.name(rarity), mut
 end
 
 local function incomePerSec(d: any): number
@@ -166,165 +58,134 @@ local function incomePerSec(d: any): number
 	return total
 end
 
---[[ ───────────── Construction ───────────── ]]
 function UIController.start()
-	local gui = new("ScreenGui", {
-		Name = "MainHUD",
-		ResetOnSpawn = false,
-		IgnoreGuiInset = true,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		Parent = player:WaitForChild("PlayerGui"),
-	})
+	local gui = UIKit.screen("MainHUD", 5)
 
-	-- Vignette de danger (sous tout le reste)
+	--[[ ───────────── Vignette de danger (sous tout le reste) ───────────── ]]
 	local vignette = new("Frame", { Name = "DangerVignette", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(200, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 0, Parent = gui })
 	new("UIGradient", {
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.22, 1),
-			NumberSequenceKeypoint.new(0.78, 1),
-			NumberSequenceKeypoint.new(1, 0),
-		}),
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.22, 1), NumberSequenceKeypoint.new(0.78, 1), NumberSequenceKeypoint.new(1, 0) }),
 		Parent = vignette,
 	})
 	local vignette2 = vignette:Clone()
-	vignette2.Name = "DangerVignetteV"
 	;(vignette2:FindFirstChildOfClass("UIGradient") :: UIGradient).Rotation = 90
 	vignette2.Parent = gui
 
-	-- Compteurs façon Steal An Egg : gros chiffres contourés en bas à gauche (Vitesse au-dessus de l'Argent)
-	local stats = new("Frame", { Name = "Stats", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 16, 1, -14), Size = UDim2.fromOffset(380, 210), BackgroundTransparency = 1, Parent = gui })
-	new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Parent = stats })
+	--[[ ───────────── Cartes de stats (bas-gauche) ───────────── ]]
+	local stats = new("Frame", { Name = "Stats", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14, 1, -14), Size = UDim2.fromOffset(360, 240), BackgroundTransparency = 1, Parent = gui })
+	new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Parent = stats })
 
-	local function statCard(order: number, icon: string, title: string, color: Color3): (TextLabel, TextLabel, UIScale)
-		local big = order <= 2
-		local h = if big then 66 else 40
-		local row = new("Frame", { Name = title, LayoutOrder = -order, Size = UDim2.new(1, 0, 0, h), BackgroundTransparency = 1, Parent = stats })
+	local function statCard(order: number, icon: string, pair: { Color3 }, valueColor: Color3, w: number, h: number): (TextLabel, TextLabel, UIScale)
+		local row = card(stats, { UIKit.darker(pair[2], 0.5), UIKit.darker(pair[2], 0.28) }, { LayoutOrder = order, Size = UDim2.fromOffset(w, h), BackgroundTransparency = 0.05 }, 99, 3.5)
 		local sc = new("UIScale", { Parent = row })
-		local ic = label({ Size = UDim2.fromOffset(h, h), Text = icon, TextSize = if big then 42 else 26, Parent = row })
-		textStroke(ic, 2)
-		local value = label({ Position = UDim2.fromOffset(h + 6, if big then -4 else 0), Size = UDim2.new(1, -h - 6, 0, if big then 50 else 30), Text = "0", FontFace = FONT_TITLE, TextSize = if big then 50 else 28, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Parent = row })
-		textStroke(value, if big then 4 else 3)
-		new("UIGradient", { Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(200, 200, 200)), Rotation = 90, Parent = value })
-		local sub = label({ Position = UDim2.fromOffset(h + 8, if big then 44 else 26), Size = UDim2.new(1, -h - 8, 0, 18), Text = "", TextColor3 = Color3.fromRGB(255, 255, 255), TextSize = if big then 15 else 12, FontFace = FONT_BOLD, TextXAlignment = Enum.TextXAlignment.Left, Parent = row })
-		textStroke(sub, 2)
-		local _ = title
+		local b = UIKit.badge(row, icon, pair, h + 8)
+		b.AnchorPoint = Vector2.new(0, 0.5)
+		b.Position = UDim2.new(0, -6, 0.5, 0)
+		local big = math.floor(h * 0.56)
+		local value = title(row, "0", big, { Position = UDim2.fromOffset(h + 10, 2), Size = UDim2.new(1, -h - 22, 0, big + 4), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = WHITE, TextScaled = true })
+		new("UITextSizeConstraint", { MaxTextSize = big, Parent = value })
+		UIKit.grad(value, WHITE, valueColor)
+		local sub = title(row, "", math.floor(h * 0.2), { Position = UDim2.new(0, h + 12, 1, -math.floor(h * 0.2) - 10), Size = UDim2.new(1, -h - 24, 0, math.floor(h * 0.2) + 4), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UIKit.lighter(valueColor, 0.55), TextScaled = true })
+		new("UITextSizeConstraint", { MaxTextSize = math.floor(h * 0.2), Parent = sub })
 		return value, sub, sc
 	end
 
-	local cashValue, cashSub, cashScale = statCard(1, "💵", "Argent", C.Cash)
-	local speedValue, speedSub, speedScale = statCard(2, "⚡", "Vitesse", C.Speed)
-	local rebirthValue, rebirthSub, rebirthScale = statCard(3, "👑", "Rebirths", C.Rebirth)
+	local rebirthValue, rebirthSub, rebirthScale = statCard(1, "👑", P.Rebirth, C.Rebirth, 250, 52)
+	local speedValue, speedSub, speedScale = statCard(2, "⚡", P.Speed, C.Speed, 300, 64)
+	local cashValue, cashSub, cashScale = statCard(3, "💵", P.Cash, C.Cash, 350, 78)
 
 	local function pop(sc: UIScale)
-		sc.Scale = 1.12
-		TweenService:Create(sc, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		UIKit.pop(sc, 0.12)
 	end
 
-
-	-- Objectif guidé (bas-gauche)
-	-- Objectif (haut-centre) : la consigne du moment, bien visible
-	local objective = panel({ Name = "Objective", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 10), Size = UDim2.fromOffset(520, 52) }, C.Gold)
-	objective.Parent = gui
-	local objText = label({ Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -28, 1, 0), Text = "", TextSize = 18, FontFace = FONT_BOLD, TextWrapped = true, Parent = objective })
-	textStroke(objText, 1.5)
-
-	-- Panneau de portage (haut-centre)
-	local carry = panel({ Name = "CarryGauge", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, -140), Size = UDim2.fromOffset(470, 118), Visible = false }, C.Danger)
-	carry.Parent = gui
-	local carryTitle = label({ Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -150, 0, 28), Text = "", FontFace = FONT_TITLE, TextSize = 24, TextXAlignment = Enum.TextXAlignment.Left, Parent = carry })
-	textStroke(carryTitle, 2)
-	local carryRarity = label({ Position = UDim2.fromOffset(16, 34), Size = UDim2.new(1, -150, 0, 16), Text = "", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Parent = carry })
-	label({ Position = UDim2.fromOffset(16, 56), Size = UDim2.fromOffset(110, 16), Text = "⚖️ POIDS", TextColor3 = C.Muted, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Parent = carry })
-	local _, weightFill = bar(carry, UDim2.fromOffset(16, 72), UDim2.fromOffset(170, 12), C.Gold)
-	local weightText = label({ Position = UDim2.fromOffset(16, 88), Size = UDim2.fromOffset(170, 18), Text = "", TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, Parent = carry })
-	label({ Position = UDim2.fromOffset(200, 56), Size = UDim2.fromOffset(120, 16), Text = "🏃 VITESSE", TextColor3 = C.Muted, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Parent = carry })
-	local _, speedFill = bar(carry, UDim2.fromOffset(200, 72), UDim2.fromOffset(120, 12), C.Speed)
-	local penaltyText = label({ Position = UDim2.fromOffset(200, 88), Size = UDim2.fromOffset(120, 18), Text = "", TextColor3 = C.Danger, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, Parent = carry })
-	local dropBtn = button({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(118, 86), Text = "LÂCHER\n[G]", TextSize = 22 }, C.Danger)
-	dropBtn.Parent = carry
-	dropBtn.MouseButton1Click:Connect(function()
-		Network.event("RequestDrop"):FireServer()
-	end)
-
-	-- Bannière de poursuite
-	local chase = panel({ Name = "ChaseBanner", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 210), Size = UDim2.fromOffset(640, 54), Visible = false, BackgroundColor3 = Color3.fromRGB(140, 15, 20) }, Color3.fromRGB(255, 200, 80))
-	chase.Parent = gui
-	local chaseText = label({ Size = UDim2.fromScale(1, 1), Text = "", FontFace = FONT_TITLE, TextSize = 24, TextColor3 = Color3.fromRGB(255, 235, 140), Parent = chase })
-	textStroke(chaseText, 2)
-	local chaseScale = new("UIScale", { Parent = chase })
-
-	-- Titre de zone (centre)
-	local zoneTitle = label({ Name = "ZoneTitle", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.28), Size = UDim2.fromOffset(700, 70), Text = "", FontFace = FONT_TITLE, TextSize = 54, TextTransparency = 1, Parent = gui })
-	local zoneStroke = textStroke(zoneTitle, 4)
-	zoneStroke.Transparency = 1
-
-	-- Toasts (bas-centre)
-	local toasts = new("Frame", { Name = "Toasts", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -110), Size = UDim2.fromOffset(460, 200), BackgroundTransparency = 1, Parent = gui })
-	new("UIListLayout", { Padding = UDim.new(0, 6), VerticalAlignment = Enum.VerticalAlignment.Bottom, HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = toasts })
-	local toastN = 0
-	local function toast(msg: string, color: Color3?)
-		toastN += 1
-		local accent = color or C.Gold
-		local t = panel({ LayoutOrder = toastN, Size = UDim2.fromOffset(440, 42), BackgroundTransparency = 0.05 }, accent)
-		t.Parent = toasts
-		local sc = new("UIScale", { Scale = 0.6, Parent = t })
-		local tl = label({ Size = UDim2.fromScale(1, 1), Text = msg, TextSize = 18, TextColor3 = accent:Lerp(Color3.new(1, 1, 1), 0.5), Parent = t })
-		textStroke(tl, 1.5)
-		TweenService:Create(sc, TweenInfo.new(0.25, Enum.EasingStyle.Back), { Scale = 1 }):Play()
-		local list = toasts:GetChildren()
-		local frames = {}
-		for _, c in list do
-			if c:IsA("Frame") then
-				table.insert(frames, c)
-			end
-		end
-		if #frames > 4 then
-			table.sort(frames, function(a, b)
-				return a.LayoutOrder < b.LayoutOrder
-			end)
-			frames[1]:Destroy()
-		end
-		task.delay(2.8, function()
-			if t.Parent then
-				TweenService:Create(sc, TweenInfo.new(0.25), { Scale = 0 }):Play()
-				task.wait(0.27)
-				t:Destroy()
-			end
-		end)
-	end
-
-	-- Popup « +$ » qui monte près de la carte argent
 	local function floatText(text: string, color: Color3)
-		local l = label({ Position = UDim2.new(0, 300, 1, -110), Size = UDim2.fromOffset(220, 34), Text = text, FontFace = FONT_TITLE, TextSize = 30, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Parent = gui })
-		textStroke(l, 2)
-		TweenService:Create(l, TweenInfo.new(1.1, Enum.EasingStyle.Quad), { Position = l.Position - UDim2.fromOffset(0, 60), TextTransparency = 1 }):Play()
-		task.delay(1.15, function()
+		local l = title(gui, text, 34, { Position = UDim2.new(0, 330, 1, -96), Size = UDim2.fromOffset(260, 40), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = color })
+		local sc = new("UIScale", { Scale = 0.5, Parent = l })
+		TweenService:Create(sc, TweenInfo.new(0.25, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+		TweenService:Create(l, TweenInfo.new(1.2, Enum.EasingStyle.Quad), { Position = l.Position - UDim2.fromOffset(0, 70), TextTransparency = 1 }):Play()
+		TweenService:Create(l:FindFirstChildOfClass("UIStroke") :: UIStroke, TweenInfo.new(1.2), { Transparency = 1 }):Play()
+		task.delay(1.25, function()
 			l:Destroy()
 		end)
 	end
 
-	--[[ ───────────── Panneau modal ───────────── ]]
-	local overlay = new("TextButton", { Name = "ModalOverlay", Text = "", AutoButtonColor = false, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 20, Parent = gui })
-	local modal = panel({ Name = "Modal", Active = true, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(470, 380), ZIndex = 21 })
-	modal.Parent = overlay
-	local modalScale = new("UIScale", { Parent = modal })
-	local header = new("Frame", { Size = UDim2.new(1, 0, 0, 64), BackgroundColor3 = C.Gold, ZIndex = 22, Parent = modal })
-	corner(header, 16)
-	local headerGrad = gradient(header, Color3.new(1, 1, 1), Color3.fromRGB(160, 160, 160), 90)
-	local _ = headerGrad
-	local headerFix = new("Frame", { Position = UDim2.new(0, 0, 1, -16), Size = UDim2.new(1, 0, 0, 16), BackgroundColor3 = C.Gold, BorderSizePixel = 0, ZIndex = 22, Parent = header })
-	local modalIcon = label({ Position = UDim2.fromOffset(14, 0), Size = UDim2.fromOffset(50, 64), Text = "", TextSize = 34, ZIndex = 23, Parent = header })
-	local modalTitle = label({ Position = UDim2.fromOffset(66, 0), Size = UDim2.new(1, -130, 1, 0), Text = "", FontFace = FONT_TITLE, TextSize = 28, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 23, Parent = header })
-	textStroke(modalTitle, 2.5)
-	local closeBtn = button({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(42, 42), Text = "✕", TextSize = 22, ZIndex = 24 }, Color3.fromRGB(220, 60, 60))
-	closeBtn.Parent = header
-	local body = new("Frame", { Position = UDim2.fromOffset(20, 78), Size = UDim2.new(1, -40, 1, -160), BackgroundTransparency = 1, ZIndex = 22, Parent = modal })
-	local actionA = button({ AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 20, 1, -18), Size = UDim2.new(0.5, -28, 0, 58), Text = "OK", ZIndex = 23 }, C.Cash)
-	actionA.Parent = modal
-	local actionB = button({ AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -20, 1, -18), Size = UDim2.new(0.5, -28, 0, 58), Text = "Fermer", ZIndex = 23 }, Color3.fromRGB(90, 95, 115))
-	actionB.Parent = modal
+	--[[ ───────────── Objectif (haut-centre) ───────────── ]]
+	local objective = card(gui, P.Slate, { Name = "Objective", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 12), Size = UDim2.fromOffset(560, 58) }, 99, 3.5)
+	;(objective:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = INK
+	local objBadge = UIKit.badge(objective, "🎯", P.Gold, 58)
+	objBadge.AnchorPoint = Vector2.new(0, 0.5)
+	objBadge.Position = UDim2.new(0, -8, 0.5, 0)
+	local objIcon = objBadge:FindFirstChildOfClass("TextLabel") :: TextLabel
+	local objText = title(objective, "", 18, { Position = UDim2.fromOffset(58, 0), Size = UDim2.new(1, -72, 1, 0), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center, TextScaled = true })
+	new("UITextSizeConstraint", { MaxTextSize = 18, Parent = objText })
+	local stepChip, stepText = UIKit.chip(objective, "ÉTAPE 1/4", P.Gold, UDim2.fromOffset(110, 26), 14)
+	stepChip.AnchorPoint = Vector2.new(0.5, 0.5)
+	stepChip.Position = UDim2.new(0.5, 0, 1, 2)
+	local pips = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -16, 1, 2), Size = UDim2.fromOffset(90, 16), BackgroundTransparency = 1, Parent = objective })
+	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Parent = pips })
+	local pipFrames: { Frame } = {}
+	for i = 1, 4 do
+		local pf = card(pips, P.Grey, { LayoutOrder = i, Size = UDim2.fromOffset(16, 16) }, 8, 2.5)
+		pipFrames[i] = pf
+	end
 
+	--[[ ───────────── Carte de portage ───────────── ]]
+	local carry = card(gui, P.Night, { Name = "CarryGauge", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, -160), Size = UDim2.fromOffset(500, 132), Visible = false }, 20, 4)
+	local carryHead = card(carry, P.Gold, { Size = UDim2.new(1, 0, 0, 46) }, 20, 0)
+	carryHead:FindFirstChildOfClass("UIStroke"):Destroy()
+	local carryHeadFill = new("Frame", { Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = carryHead })
+	local carryHeadFillGrad = UIKit.grad(carryHeadFill, P.Gold[2], P.Gold[2])
+	local carryTitle = title(carryHead, "", 24, { Position = UDim2.fromOffset(16, 0), Size = UDim2.new(1, -150, 1, 0), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center, TextScaled = true })
+	new("UITextSizeConstraint", { MaxTextSize = 24, Parent = carryTitle })
+	local rarityChip, rarityText = UIKit.chip(carryHead, "Commun", P.Grey, UDim2.fromOffset(120, 28), 15)
+	rarityChip.AnchorPoint = Vector2.new(1, 0.5)
+	rarityChip.Position = UDim2.new(1, -140, 0.5, 0)
+	title(carry, "⚖️ POIDS", 14, { Position = UDim2.fromOffset(16, 54), Size = UDim2.fromOffset(160, 18), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.Muted })
+	local _, setWeight = UIKit.bar(carry, UDim2.fromOffset(16, 74), UDim2.fromOffset(160, 24), P.Gold)
+	title(carry, "🏃 VITESSE", 14, { Position = UDim2.fromOffset(190, 54), Size = UDim2.fromOffset(150, 18), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.Muted })
+	local _, setPenalty = UIKit.bar(carry, UDim2.fromOffset(190, 74), UDim2.fromOffset(150, 24), P.Speed)
+	local carryHint = title(carry, "Ramène-le sur la zone verte de ta base !", 13, { Position = UDim2.fromOffset(16, 104), Size = UDim2.fromOffset(330, 18), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.Muted })
+	local dropBtn = UIKit.candyButton(carry, "LÂCHER", P.Danger, UDim2.fromOffset(128, 70), function()
+		Network.event("RequestDrop"):FireServer()
+	end, 22)
+	dropBtn.AnchorPoint = Vector2.new(1, 1)
+	dropBtn.Position = UDim2.new(1, -14, 1, -12)
+	local key = card(dropBtn, { WHITE, Color3.fromRGB(200, 200, 215) }, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -4, 0, 2), Size = UDim2.fromOffset(28, 28), ZIndex = 5 }, 8, 2.5)
+	label(key, "G", 18, { Size = UDim2.fromScale(1, 1), TextColor3 = INK, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 6 })
+
+	--[[ ───────────── Ruban de poursuite ───────────── ]]
+	local chase = card(gui, P.Danger, { Name = "ChaseBanner", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 230), Size = UDim2.fromOffset(620, 70), Visible = false, ClipsDescendants = true }, 18, 4)
+	;(chase:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = Color3.fromRGB(255, 220, 90)
+	local stripes = new("Frame", { Name = "Stripes", BackgroundTransparency = 1, Size = UDim2.new(1, 120, 1, 0), Parent = chase })
+	for i = 0, 22 do
+		new("Frame", { BackgroundColor3 = INK, BackgroundTransparency = 0.82, BorderSizePixel = 0, Rotation = 35, Size = UDim2.fromOffset(18, 150), Position = UDim2.fromOffset(i * 34 - 40, -40), Parent = stripes })
+	end
+	local skull = UIKit.badge(chase, "💀", { Color3.fromRGB(60, 50, 70), INK }, 54)
+	skull.AnchorPoint = Vector2.new(0, 0.5)
+	skull.Position = UDim2.new(0, 10, 0.5, 0)
+	skull.ZIndex = 3
+	local chaseText = title(chase, "", 24, { Position = UDim2.fromOffset(74, 4), Size = UDim2.new(1, -90, 0, 32), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromRGB(255, 240, 150), TextScaled = true, ZIndex = 3 })
+	new("UITextSizeConstraint", { MaxTextSize = 24, Parent = chaseText })
+	local chaseSub = title(chase, "🏡 Cours vers le hub !", 16, { Position = UDim2.fromOffset(74, 38), Size = UDim2.new(1, -90, 0, 22), TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 })
+	local chaseScale = new("UIScale", { Parent = chase })
+
+	--[[ ───────────── Carte de zone ───────────── ]]
+	local zoneCard = card(gui, P.Gold, { Name = "ZoneCard", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, -0.2), Size = UDim2.fromOffset(520, 120), Visible = false }, 22, 5)
+	local zoneGrad = zoneCard:FindFirstChildOfClass("UIGradient") :: UIGradient
+	local zoneNum, zoneNumText = UIKit.chip(zoneCard, "ZONE 1/15", { WHITE, Color3.fromRGB(215, 215, 230) }, UDim2.fromOffset(150, 32), 18)
+	zoneNum.AnchorPoint = Vector2.new(0.5, 0.5)
+	zoneNum.Position = UDim2.new(0.5, 0, 0, 0)
+	zoneNumText.TextColor3 = INK
+	;(zoneNumText:FindFirstChildOfClass("UIStroke") :: UIStroke).Enabled = false
+	local zoneName = title(zoneCard, "", 44, { Position = UDim2.fromOffset(0, 22), Size = UDim2.new(1, 0, 0, 50), TextScaled = true })
+	new("UITextSizeConstraint", { MaxTextSize = 44, Parent = zoneName })
+	new("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), Parent = zoneName })
+	local zoneSub = title(zoneCard, "", 18, { Position = UDim2.fromOffset(0, 76), Size = UDim2.new(1, 0, 0, 24), TextColor3 = Color3.fromRGB(255, 240, 200) })
+	local zoneToken = 0
+
+	--[[ ───────────── Fenêtre des stations ───────────── ]]
+	local station = UIKit.modal("Station", 580, 500, "🏃", "Tapis de course", P.Speed)
+	local body = station.Body
 	local modalCtx: any = nil
 
 	local function clearBody()
@@ -333,97 +194,121 @@ function UIController.start()
 		end
 	end
 
-	local function line(y: number, left: string, right: string, color: Color3?)
-		label({ Position = UDim2.fromOffset(0, y), Size = UDim2.new(0.55, 0, 0, 26), Text = left, TextColor3 = C.Muted, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 23, Parent = body })
-		local r = label({ Position = UDim2.new(0.45, 0, 0, y), Size = UDim2.new(0.55, 0, 0, 26), Text = right, TextColor3 = color or C.Text, FontFace = FONT_TITLE, TextSize = 20, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 23, Parent = body })
-		textStroke(r, 1.5)
+	-- tuile de stat : icône + libellé + valeur
+	local function tile(pos: UDim2, size: UDim2, icon: string, caption: string, value: string, pair: { Color3 }, parent: Instance?)
+		local t = card(parent or body, { UIKit.darker(pair[2], 0.55), UIKit.darker(pair[2], 0.32) }, { Position = pos, Size = size, ZIndex = 23 }, 16, 3)
+		;(t:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = pair[1]
+		label(t, icon, 26, { FontFace = UIKit.FONT_BOLD, Position = UDim2.fromOffset(8, 0), Size = UDim2.new(0, 34, 1, 0), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 24 })
+		title(t, caption, 13, { Position = UDim2.fromOffset(46, 6), Size = UDim2.new(1, -52, 0, 16), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.Muted, ZIndex = 24 })
+		local v = title(t, value, 22, { Position = UDim2.fromOffset(46, 22), Size = UDim2.new(1, -52, 1, -26), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UIKit.lighter(pair[1], 0.3), TextScaled = true, ZIndex = 24 })
+		new("UITextSizeConstraint", { MaxTextSize = 22, Parent = v })
+		return t
 	end
 
-	local function note(y: number, text: string, color: Color3?)
-		label({ Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 44), Text = text, TextColor3 = color or C.Muted, TextSize = 15, FontFace = FONT_BODY, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 23, Parent = body })
+	local function note(pos: UDim2, size: UDim2, text: string, color: Color3?)
+		label(body, text, 15, { FontFace = UIKit.FONT_BOLD, Position = pos, Size = size, TextColor3 = color or C.Muted, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 23 })
 	end
 
-	local function progress(y: number, ratio: number, color: Color3, text: string)
-		local back, fill = bar(body, UDim2.fromOffset(0, y), UDim2.new(1, 0, 0, 22), color)
+	local function progress(y: number, ratio: number, pair: { Color3 }, text: string)
+		local back, set = UIKit.bar(body, UDim2.fromOffset(0, y), UDim2.new(1, 0, 0, 30), pair)
 		back.ZIndex = 23
-		fill.ZIndex = 24
-		fill.Size = UDim2.fromScale(math.clamp(ratio, 0, 1), 1)
-		local t = label({ Size = UDim2.fromScale(1, 1), Text = text, TextSize = 14, ZIndex = 25, Parent = back })
-		textStroke(t, 1.5)
-	end
-
-	local function themeModal(color: Color3, icon: string, title: string)
-		header.BackgroundColor3 = color
-		headerFix.BackgroundColor3 = color
-		;(modal:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = color
-		modalIcon.Text = icon
-		modalTitle.Text = title
-	end
-
-	local function closeModal()
-		if not overlay.Visible then
-			return
+		for _, d in back:GetDescendants() do
+			if d:IsA("GuiObject") then
+				d.ZIndex = 24
+			end
 		end
-		TweenService:Create(modalScale, TweenInfo.new(0.15), { Scale = 0.8 }):Play()
-		TweenService:Create(overlay, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
-		task.delay(0.15, function()
-			overlay.Visible = false
-		end)
-		modalCtx = nil
+		set(ratio, text)
 	end
 
-	local function openModal(kind: string, payload: any)
+	local function actions(aText: string?, aPair: { Color3 }, aEnabled: boolean, bText: string)
+		local a: TextButton? = nil
+		if aText then
+			a = UIKit.candyButton(body, aText, if aEnabled then aPair else P.Grey, UDim2.new(0.5, -8, 0, 62), function()
+				if aEnabled then
+					UIController._action()
+				end
+			end, 24)
+			;(a :: TextButton).AnchorPoint = Vector2.new(0, 1)
+			;(a :: TextButton).Position = UDim2.new(0, 0, 1, 0)
+		end
+		local b = UIKit.candyButton(body, bText, P.Grey, if aText then UDim2.new(0.5, -8, 0, 62) else UDim2.new(1, 0, 0, 62), UIKit.closeModal, 22)
+		b.AnchorPoint = Vector2.new(1, 1)
+		b.Position = UDim2.new(1, 0, 1, 0)
+		for _, btn in { a, b } do
+			if btn then
+				btn.ZIndex = 24
+				for _, d in btn:GetDescendants() do
+					if d:IsA("GuiObject") then
+						d.ZIndex = 25
+					end
+				end
+			end
+		end
+	end
+
+	local function openStation(kind: string, payload: any)
 		modalCtx = { Kind = kind, Payload = payload }
 		clearBody()
-		actionA.Visible = true
-		actionB.Visible = true
-		actionB.Text = "Fermer"
 		local d = dataCache or {}
 		if kind == "Treadmill" then
 			local lvl = d.TreadmillLevel or 1
 			local cfg = TreadmillsConfig[lvl]
 			local nextCfg = TreadmillsConfig[lvl + 1]
-			themeModal(C.Speed, "🏃", "Tapis de course")
-			line(0, "Niveau actuel", string.format("Niv. %d · %s", lvl, cfg and cfg.DisplayName or "?"), C.Speed)
-			line(32, "Gain de vitesse", string.format("+%.2f /s", cfg and cfg.SpeedPerSec or 0), C.Cash)
+			station.SetTheme(P.Speed, "🏃", "Tapis de course")
+			-- échelle des niveaux
+			local ladder = new("Frame", { Size = UDim2.new(1, 0, 0, 64), BackgroundTransparency = 1, ZIndex = 23, Parent = body })
+			new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), Parent = ladder })
+			for i = 1, #TreadmillsConfig do
+				local done = i <= lvl
+				local f = card(ladder, if i == lvl then P.Gold elseif done then P.Speed else P.Grey, { LayoutOrder = i, Size = UDim2.fromOffset(if i == lvl then 60 else 48, if i == lvl then 60 else 48), ZIndex = 23 }, 99, 3.5)
+				title(f, tostring(i), if i == lvl then 26 else 20, { Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 24 })
+			end
+			tile(UDim2.fromOffset(0, 80), UDim2.new(0.5, -6, 0, 66), "⚡", "GAIN ACTUEL", string.format("+%.2f /s", cfg and cfg.SpeedPerSec or 0), P.Speed)
 			if nextCfg then
-				line(72, "Niveau suivant", string.format("Niv. %d · %s", nextCfg.Level, nextCfg.DisplayName), C.Gold)
-				line(104, "Nouveau gain", string.format("+%.2f /s", nextCfg.SpeedPerSec), C.Cash)
-				progress(146, (d.Cash or 0) / nextCfg.Cost, C.Cash, string.format("$%s / $%s", FormatNumber.short(d.Cash or 0), FormatNumber.short(nextCfg.Cost)))
-				note(178, "Monte sur ton tapis pour gagner de la Vitesse en continu. Plus de vitesse = plus de poids portable !")
-				actionA.Text = "Acheter $" .. FormatNumber.short(nextCfg.Cost)
-				actionA.BackgroundColor3 = if (d.Cash or 0) >= nextCfg.Cost then C.Cash else Color3.fromRGB(90, 95, 115)
+				tile(UDim2.new(0.5, 6, 0, 80), UDim2.new(0.5, -6, 0, 66), "⏫", "NIVEAU " .. nextCfg.Level, string.format("+%.2f /s", nextCfg.SpeedPerSec), P.Cash)
+				progress(162, (d.Cash or 0) / nextCfg.Cost, P.Cash, string.format("$%s / $%s", FormatNumber.short(d.Cash or 0), FormatNumber.short(nextCfg.Cost)))
+				note(UDim2.fromOffset(0, 204), UDim2.new(1, 0, 0, 60), "Monte sur ton tapis pour gagner de la Vitesse en continu. Plus de vitesse = serpents plus lourds portables et fuite plus facile !")
+				actions("ACHETER $" .. FormatNumber.short(nextCfg.Cost), P.Cash, (d.Cash or 0) >= nextCfg.Cost, "FERMER")
 			else
-				note(80, "🏆 Niveau maximum atteint !", C.Gold)
-				actionA.Visible = false
+				tile(UDim2.new(0.5, 6, 0, 80), UDim2.new(0.5, -6, 0, 66), "🏆", "STATUT", "Niveau max !", P.Gold)
+				actions(nil, P.Grey, false, "FERMER")
 			end
 		elseif kind == "Vivarium" then
 			local snake = payload and payload.Snake
 			if snake then
-				local title, rcol, rname = snakeTitle(snake.SpeciesId, snake.Mutation)
-				themeModal(rcol, "🦎", title)
-				line(0, "Rareté", rname, rcol)
-				line(32, "Mutation", (MutationsConfig.Defs[snake.Mutation] or MutationsConfig.Defs.Normal).DisplayName, (MutationsConfig.Defs[snake.Mutation] or MutationsConfig.Defs.Normal).Color)
-				line(64, "Poids", string.format("%.1f kg", snake.Weight), C.Gold)
-				line(96, "Revenu", "$" .. FormatNumber.short(snake.Income) .. " /s", C.Cash)
-				line(128, "Valeur de vente", "$" .. FormatNumber.short(math.floor(snake.Income * 25)), C.Gold)
-				note(168, "Vendre libère le vivarium. Pour fusionner, réunis 3 serpents identiques (même espèce + mutation) puis va à la Machine de Fusion.")
-				actionA.Text = "Vendre"
-				actionA.BackgroundColor3 = C.Gold
+				local t, rcol, rname, mut = snakeTitle(snake.SpeciesId, snake.Mutation)
+				local rp = UIKit.pairOf(rcol)
+				station.SetTheme(rp, "🐍", t)
+				local hero = card(body, rp, { Size = UDim2.fromOffset(140, 140), ZIndex = 23 }, 99, 4)
+				label(hero, "🐍", 76, { FontFace = UIKit.FONT_BOLD, Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 24 })
+				UIKit.shine(hero, 3, 99)
+				local rc = UIKit.chip(body, rname, rp, UDim2.fromOffset(150, 30), 16)
+				rc.Position = UDim2.fromOffset(160, 6)
+				rc.ZIndex = 23
+				local mc = UIKit.chip(body, "Mutation : " .. mut.DisplayName, UIKit.pairOf(mut.Color), UDim2.fromOffset(220, 30), 15)
+				mc.Position = UDim2.fromOffset(160, 44)
+				mc.ZIndex = 23
+				tile(UDim2.fromOffset(160, 84), UDim2.new(1, -160, 0, 56), "💰", "REVENU", "$" .. FormatNumber.short(snake.Income) .. " /s", P.Cash)
+				tile(UDim2.fromOffset(0, 154), UDim2.new(0.5, -6, 0, 62), "⚖️", "POIDS", string.format("%.1f kg", snake.Weight), P.Gold)
+				tile(UDim2.new(0.5, 6, 0, 154), UDim2.new(0.5, -6, 0, 62), "🏷️", "VENTE", "$" .. FormatNumber.short(math.floor(snake.Income * 25)), P.Pink)
+				note(UDim2.fromOffset(0, 228), UDim2.new(1, 0, 0, 60), "Vendre libère le vivarium. Pour fusionner, réunis 3 serpents identiques (même espèce + mutation) à la Machine de Fusion.")
+				actions("VENDRE", P.Gold, true, "FERMER")
 			else
-				themeModal(Color3.fromRGB(120, 130, 150), "🪟", "Vivarium " .. tostring(payload and payload.Slot or ""))
-				note(10, "Ce vivarium est vide.\n\nVole un serpent dans un nid et ramène-le sur la zone verte « DÉPOSE ICI » de ta base.", C.Text)
-				actionA.Visible = false
+				station.SetTheme(P.Grey, "🪟", "Vivarium " .. tostring(payload and payload.Slot or ""))
+				local hero = card(body, P.Slate, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(150, 150), ZIndex = 23 }, 99, 4)
+				label(hero, "🥚", 76, { FontFace = UIKit.FONT_BOLD, Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 24 })
+				title(body, "Ce vivarium est vide", 24, { Position = UDim2.fromOffset(0, 162), Size = UDim2.new(1, 0, 0, 30), ZIndex = 23 })
+				label(body, "Vole un serpent dans un nid et ramène-le sur la zone verte « DÉPOSE ICI » de ta base.", 16, { FontFace = UIKit.FONT_BOLD, Position = UDim2.fromOffset(20, 198), Size = UDim2.new(1, -40, 0, 50), TextColor3 = C.Muted, ZIndex = 23 })
+				actions(nil, P.Grey, false, "FERMER")
 			end
 		elseif kind == "Fusion" then
-			themeModal(Color3.fromRGB(170, 90, 255), "🧪", "Machine de Fusion")
-			-- Regroupe les vivariums par espèce + mutation ; un groupe de 3+ est fusionnable.
+			station.SetTheme(P.Rebirth, "🧪", "Machine de Fusion")
 			local groups: { [string]: { SpeciesId: string, Mutation: string, Slots: { string } } } = {}
 			for slotName, s in d.Vivariums or {} do
-				local key = s.SpeciesId .. "|" .. s.Mutation
-				local g = groups[key] or { SpeciesId = s.SpeciesId, Mutation = s.Mutation, Slots = {} }
+				local k = s.SpeciesId .. "|" .. s.Mutation
+				local g = groups[k] or { SpeciesId = s.SpeciesId, Mutation = s.Mutation, Slots = {} }
 				table.insert(g.Slots, slotName)
-				groups[key] = g
+				groups[k] = g
 			end
 			local list = {}
 			for _, g in groups do
@@ -441,58 +326,77 @@ function UIController.start()
 			local selected = math.clamp(payload and payload.Selected or 1, 1, math.max(#list, 1))
 			local chosen = list[selected]
 			local canFuse = chosen ~= nil and #chosen.Slots >= 3
+			-- 3 emplacements + flèche + résultat
+			local row = new("Frame", { Size = UDim2.new(1, 0, 0, 86), BackgroundTransparency = 1, ZIndex = 23, Parent = body })
+			new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), Parent = row })
+			for i = 1, 3 do
+				local filled = chosen ~= nil and i <= #chosen.Slots
+				local col = if chosen and filled then RarityConfig.color((SnakesConfig.get(chosen.SpeciesId) or { Rarity = "Common" }).Rarity) else Color3.fromRGB(90, 90, 110)
+				local f = card(row, if filled then UIKit.pairOf(col) else P.Grey, { LayoutOrder = i, Size = UDim2.fromOffset(74, 74), ZIndex = 23 }, 99, 3.5)
+				label(f, if filled then "🐍" else "?", 38, { FontFace = UIKit.FONT_BOLD, Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, TextColor3 = WHITE, ZIndex = 24 })
+			end
+			title(row, "➜", 40, { LayoutOrder = 4, Size = UDim2.fromOffset(44, 74), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 23 })
+			local nextMut = if chosen then MutationsConfig.Defs[MutationsConfig.FusionNext[chosen.Mutation] or "Cosmic"] else MutationsConfig.Defs.Normal
+			local res = card(row, if canFuse then UIKit.pairOf(nextMut.Color) else P.Grey, { LayoutOrder = 5, Size = UDim2.fromOffset(86, 86), ZIndex = 23 }, 99, 4)
+			label(res, if canFuse then "✨" else "🔒", 42, { FontFace = UIKit.FONT_BOLD, Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 24 })
+			if canFuse then
+				UIKit.shine(res, 2, 99)
+			end
+			-- liste des groupes
+			local scroll = new("ScrollingFrame", { Position = UDim2.fromOffset(0, 96), Size = UDim2.new(1, 0, 0, 170), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 6, ScrollBarImageColor3 = C.Rebirth, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 23, Parent = body })
+			new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+			new("UIPadding", { PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 4), PaddingLeft = UDim.new(0, 4), Parent = scroll })
 			if #list == 0 then
-				note(10, "Tes vivariums sont vides.\n\nVole 3 serpents identiques (même espèce + même mutation) pour les fusionner en une mutation supérieure.", C.Text)
+				label(scroll, "Tes vivariums sont vides. Vole 3 serpents identiques (même espèce + même mutation) pour les fusionner en une mutation supérieure.", 15, { FontFace = UIKit.FONT_BOLD, Size = UDim2.new(1, 0, 0, 80), TextColor3 = C.Muted, ZIndex = 24 })
 			end
-			for i = 1, math.min(#list, 5) do
-				local g = list[i]
-				local title, col = snakeTitle(g.SpeciesId, g.Mutation)
+			for i, g in list do
+				local t, col = snakeTitle(g.SpeciesId, g.Mutation)
 				local ok = #g.Slots >= 3
-				local rowBtn = button({
-					Position = UDim2.fromOffset(0, (i - 1) * 46),
-					Size = UDim2.new(1, 0, 0, 40),
-					Text = string.format("%s%s  ×%d/3", if i == selected then "▶ " else "", title, math.min(#g.Slots, 3)),
-					TextSize = 17,
-					TextColor3 = if ok then col else C.Muted,
-					ZIndex = 23,
-				}, if i == selected then Color3.fromRGB(70, 50, 110) else Color3.fromRGB(40, 42, 56))
-				rowBtn.Parent = body
-				rowBtn.MouseButton1Click:Connect(function()
-					openModal("Fusion", { Selected = i })
-				end)
-			end
-			if chosen then
-				local nextMut = MutationsConfig.Defs[MutationsConfig.FusionNext[chosen.Mutation] or "Cosmic"]
-				if canFuse then
-					note(math.min(#list, 5) * 46 + 4, "✅ Résultat : " .. (SnakesConfig.get(chosen.SpeciesId) or { DisplayName = chosen.SpeciesId }).DisplayName .. " " .. nextMut.DisplayName .. " (revenu ×" .. nextMut.Multiplier .. ", poids +10 %)", nextMut.Color)
-				else
-					note(math.min(#list, 5) * 46 + 4, "Il en manque " .. (3 - #chosen.Slots) .. " identique(s) pour fusionner ce serpent.")
+				local sel = i == selected
+				local rb = UIKit.candyButton(scroll, string.format("%s   ×%d/3", t, math.min(#g.Slots, 3)), if sel then P.Rebirth elseif ok then UIKit.pairOf(col) else P.Slate, UDim2.new(1, 0, 0, 42), function()
+					openStation("Fusion", { Selected = i })
+				end, 17)
+				rb.LayoutOrder = i
+				rb.ZIndex = 24
+				for _, dd in rb:GetDescendants() do
+					if dd:IsA("GuiObject") then
+						dd.ZIndex = 25
+					end
 				end
 			end
+			if chosen then
+				note(UDim2.fromOffset(0, 272), UDim2.new(1, 0, 0, 40), if canFuse then "✅ Résultat : " .. (SnakesConfig.get(chosen.SpeciesId) or { DisplayName = chosen.SpeciesId }).DisplayName .. " " .. nextMut.DisplayName .. " · revenu ×" .. nextMut.Multiplier .. ", poids +10 %" else "Il en manque " .. (3 - #chosen.Slots) .. " identique(s) pour fusionner ce serpent.", if canFuse then UIKit.lighter(nextMut.Color, 0.3) else nil)
+			end
 			modalCtx.FusionSlots = if canFuse and chosen then { chosen.Slots[1], chosen.Slots[2], chosen.Slots[3] } else nil
-			actionA.Text = "Fusionner"
-			actionA.BackgroundColor3 = if canFuse then Color3.fromRGB(170, 90, 255) else Color3.fromRGB(90, 95, 115)
+			actions("FUSIONNER", P.Rebirth, canFuse, "FERMER")
 		elseif kind == "Rebirth" then
 			local cost = payload and payload.Cost or RebirthsConfig.costFor(d.Rebirths or 0)
 			local reb = (payload and payload.Rebirths) or d.Rebirths or 0
-			themeModal(C.Rebirth, "👑", "Autel de Rebirth")
-			line(0, "Rebirths", tostring(reb) .. " → " .. tostring(reb + 1), C.Rebirth)
-			line(32, "Bonus revenu", string.format("+%d%% → +%d%%", math.floor(reb * RebirthsConfig.IncomeMultPerRebirth * 100 + 0.5), math.floor((reb + 1) * RebirthsConfig.IncomeMultPerRebirth * 100 + 0.5)), C.Cash)
-			line(64, "Bonus vitesse", string.format("+%d", (reb + 1) * RebirthsConfig.SpeedBonusPerRebirth), C.Speed)
-			progress(104, (d.Cash or 0) / cost, C.Rebirth, string.format("$%s / $%s", FormatNumber.short(d.Cash or 0), FormatNumber.short(cost)))
-			note(136, string.format("⚠️ Remet à zéro : argent, vivariums et tapis. Tu gardes %d%% de ta vitesse.", math.floor(RebirthsConfig.KeepSpeedPercent * 100 + 0.5)), Color3.fromRGB(255, 190, 120))
-			actionA.Text = "Renaître"
-			actionA.BackgroundColor3 = if (d.Cash or 0) >= cost then C.Rebirth else Color3.fromRGB(90, 95, 115)
-			actionB.Text = "Annuler"
+			station.SetTheme(P.Rebirth, "👑", "Autel de Rebirth")
+			local function column(x: UDim, header: string, pair: { Color3 }, rebV: number)
+				local colF = card(body, { UIKit.darker(pair[2], 0.5), UIKit.darker(pair[2], 0.3) }, { Position = UDim2.new(x, UDim.new(0, 0)), Size = UDim2.new(0.5, -26, 0, 150), ZIndex = 23 }, 18, 3)
+				;(colF:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = pair[1]
+				local hc = UIKit.chip(colF, header, pair, UDim2.fromOffset(110, 28), 15)
+				hc.AnchorPoint = Vector2.new(0.5, 0.5)
+				hc.Position = UDim2.new(0.5, 0, 0, 0)
+				hc.ZIndex = 24
+				title(colF, "👑 " .. rebV, 34, { Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 40), ZIndex = 24 })
+				title(colF, string.format("💰 +%d%% revenu", math.floor(rebV * RebirthsConfig.IncomeMultPerRebirth * 100 + 0.5)), 17, { Position = UDim2.fromOffset(0, 70), Size = UDim2.new(1, 0, 0, 24), TextColor3 = UIKit.lighter(C.Cash, 0.3), ZIndex = 24 })
+				title(colF, string.format("⚡ +%d vitesse", rebV * RebirthsConfig.SpeedBonusPerRebirth), 17, { Position = UDim2.fromOffset(0, 100), Size = UDim2.new(1, 0, 0, 24), TextColor3 = UIKit.lighter(C.Speed, 0.3), ZIndex = 24 })
+			end
+			column(UDim.new(0, 0), "AVANT", P.Grey, reb)
+			column(UDim.new(0.5, 26), "APRÈS", P.Rebirth, reb + 1)
+			title(body, "➜", 40, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 50), Size = UDim2.fromOffset(44, 44), ZIndex = 24 })
+			progress(166, (d.Cash or 0) / cost, P.Rebirth, string.format("$%s / $%s", FormatNumber.short(d.Cash or 0), FormatNumber.short(cost)))
+			note(UDim2.fromOffset(0, 206), UDim2.new(1, 0, 0, 60), string.format("⚠️ Remet à zéro : argent, vivariums et tapis. Tu gardes %d%% de ta vitesse.", math.floor(RebirthsConfig.KeepSpeedPercent * 100 + 0.5)), Color3.fromRGB(255, 200, 130))
+			actions("RENAÎTRE", P.Rebirth, (d.Cash or 0) >= cost, "ANNULER")
 		end
-		overlay.Visible = true
-		overlay.BackgroundTransparency = 1
-		modalScale.Scale = 0.75
-		TweenService:Create(overlay, TweenInfo.new(0.2), { BackgroundTransparency = 0.45 }):Play()
-		TweenService:Create(modalScale, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+		if not UIKit.isOpen(station.Frame) then
+			UIKit.showModal(station.Frame)
+		end
 	end
 
-	actionA.MouseButton1Click:Connect(function()
+	UIController._action = function()
 		if not modalCtx then
 			return
 		end
@@ -513,15 +417,27 @@ function UIController.start()
 		elseif kind == "Rebirth" then
 			Network.event("RequestRebirth"):FireServer()
 		end
-		closeModal()
-	end)
-	actionB.MouseButton1Click:Connect(closeModal)
-	closeBtn.MouseButton1Click:Connect(closeModal)
-	overlay.MouseButton1Click:Connect(closeModal)
+		UIKit.closeModal()
+	end
 
 	--[[ ───────────── État ───────────── ]]
 	local carrying = false
 	local chasing = false
+
+	local function setObjective(icon: string, text: string, step: number?)
+		objIcon.Text = icon
+		objText.Text = text
+		stepChip.Visible = step ~= nil
+		pips.Visible = step ~= nil
+		if step then
+			stepText.Text = "ÉTAPE " .. step .. "/4"
+			for i, pf in pipFrames do
+				local g = pf:FindFirstChildOfClass("UIGradient") :: UIGradient
+				local p = if i < step then P.Cash elseif i == step then P.Gold else P.Grey
+				g.Color = ColorSequence.new(p[1], p[2])
+			end
+		end
+	end
 
 	local function refreshObjective()
 		local d = dataCache or {}
@@ -533,26 +449,28 @@ function UIController.start()
 		end
 		local step = player:GetAttribute("TutorialStep") or 5
 		if step < 5 and not chasing then
-			objText.Text = ({
-				"🎯  Étape 1/4 · Suis le rayon jusqu'au nid de la Jungle et vole un serpent (maintiens E)",
-				"🏠  Étape 2/4 · Ramène-le sur la zone verte « DÉPOSE ICI » de ta base",
-				"💰  Étape 3/4 · Ton serpent rapporte de l'argent : marche sur le bouton vert pour récolter",
-				"🏃  Étape 4/4 · Monte sur ton tapis de course pour gagner de la Vitesse",
-			})[step] or ""
-			objective.Size = UDim2.fromOffset(600, 60)
+			local texts = {
+				{ "🎯", "Suis le rayon jusqu'au nid de la Jungle et vole un serpent (maintiens E)" },
+				{ "🏠", "Ramène-le sur la zone verte « DÉPOSE ICI » de ta base" },
+				{ "💰", "Ton serpent rapporte de l'argent : marche sur le bouton vert pour récolter" },
+				{ "🏃", "Monte sur ton tapis de course pour gagner de la Vitesse" },
+			}
+			local t = texts[step]
+			if t then
+				setObjective(t[1], t[2], step)
+			end
 			return
 		end
-		objective.Size = UDim2.fromOffset(520, 52)
 		if carrying then
-			objText.Text = "🏠  Ramène le serpent sur la zone verte de ta base !"
+			setObjective("🏠", "Ramène le serpent sur la zone verte de ta base !")
 		elseif chasing then
-			objText.Text = "🏃  Fuis vers la route (zone sûre) !"
+			setObjective("🏃", "Fuis jusqu'au hub : c'est la seule zone sûre !")
 		elseif (d.PendingCash or 0) > 0 then
-			objText.Text = "💰  Récolte $" .. FormatNumber.short(d.PendingCash) .. " sur le bouton vert de ta base"
+			setObjective("💰", "Récolte $" .. FormatNumber.short(d.PendingCash) .. " sur le bouton vert de ta base")
 		elseif count == 0 then
-			objText.Text = "🎯  Va au nid de la Jungle et vole un serpent (maintiens E)"
+			setObjective("🎯", "Va au nid de la Jungle et vole un serpent (maintiens E)")
 		else
-			objText.Text = "⚡  Entraîne-toi sur ton tapis pour porter des serpents plus lourds"
+			setObjective("⚡", "Entraîne-toi sur ton tapis pour aller plus loin et porter plus lourd")
 		end
 	end
 
@@ -563,11 +481,10 @@ function UIController.start()
 		dataCache = data
 		local cash = data.Cash or 0
 		cashValue.Text = "$" .. FormatNumber.short(cash)
-		local ips = incomePerSec(data)
-		cashSub.Text = string.format("+$%s /s · en attente $%s", FormatNumber.short(ips), FormatNumber.short(data.PendingCash or 0))
+		cashSub.Text = string.format("+$%s /s  ·  en attente $%s", FormatNumber.short(incomePerSec(data)), FormatNumber.short(data.PendingCash or 0))
 		speedValue.Text = FormatNumber.short(data.Speed or 0)
 		local lvl = data.TreadmillLevel or 1
-		speedSub.Text = string.format("Tapis niv. %d · +%.2f/s", lvl, (TreadmillsConfig[lvl] or TreadmillsConfig[1]).SpeedPerSec)
+		speedSub.Text = string.format("Tapis niv. %d  ·  +%.2f/s", lvl, (TreadmillsConfig[lvl] or TreadmillsConfig[1]).SpeedPerSec)
 		rebirthValue.Text = tostring(data.Rebirths or 0)
 		rebirthSub.Text = string.format("Prochain : $%s", FormatNumber.short(RebirthsConfig.costFor(data.Rebirths or 0)))
 		if lastCash and cash > lastCash then
@@ -582,14 +499,14 @@ function UIController.start()
 		end
 		lastCash, lastSpeed, lastReb = cash, data.Speed or 0, data.Rebirths or 0
 		refreshObjective()
-		if modalCtx and (modalCtx.Kind == "Treadmill" or modalCtx.Kind == "Rebirth") then
-			openModal(modalCtx.Kind, modalCtx.Payload)
+		if modalCtx and UIKit.isOpen(station.Frame) and (modalCtx.Kind == "Treadmill" or modalCtx.Kind == "Rebirth") then
+			openStation(modalCtx.Kind, modalCtx.Payload)
 		end
 	end
 
 	player:GetAttributeChangedSignal("TutorialStep"):Connect(function()
 		refreshObjective()
-		pop(cashScale)
+		UIKit.pop(objective, 0.1)
 	end)
 
 	Network.event("DataUpdate").OnClientEvent:Connect(function(data)
@@ -601,7 +518,7 @@ function UIController.start()
 	Network.event("CarryState").OnClientEvent:Connect(function(state)
 		if not state then
 			carrying = false
-			TweenService:Create(carry, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(0.5, 0, 0, -140) }):Play()
+			TweenService:Create(carry, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(0.5, 0, 0, -160) }):Play()
 			task.delay(0.26, function()
 				if not carrying then
 					carry.Visible = false
@@ -611,54 +528,64 @@ function UIController.start()
 			return
 		end
 		carrying = true
-		local title, rcol, rname = snakeTitle(state.SpeciesId, state.Mutation)
-		carryTitle.Text = title
-		carryTitle.TextColor3 = rcol
-		carryRarity.Text = rname
-		carryRarity.TextColor3 = rcol
-		;(carry:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = rcol
+		local t, rcol, rname = snakeTitle(state.SpeciesId, state.Mutation)
+		local rp = UIKit.pairOf(rcol)
+		carryTitle.Text = "🐍 " .. t
+		rarityText.Text = rname
+		;(rarityChip:FindFirstChildOfClass("UIGradient") :: UIGradient).Color = ColorSequence.new(rp[1], rp[2])
+		;(carryHead:FindFirstChildOfClass("UIGradient") :: UIGradient).Color = ColorSequence.new(rp[1], rp[2])
+		carryHeadFillGrad.Color = ColorSequence.new(rp[2], rp[2])
+		;(carry:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = INK
 		local w = state.Weight or 0
-		weightText.Text = string.format("%.1f kg", w)
-		weightFill.Size = UDim2.fromScale(math.clamp(w / 150, 0.03, 1), 1)
-		weightFill.BackgroundColor3 = if w > 80 then C.Danger elseif w > 35 then C.Gold else C.Cash
+		setWeight(w / 150, string.format("%.1f kg", w))
 		local pen = state.Penalty or 0
-		penaltyText.Text = string.format("-%d%%", pen)
-		speedFill.Size = UDim2.fromScale(math.clamp(1 - pen / 100, 0.03, 1), 1)
+		setPenalty(1 - pen / 100, string.format("-%d%%", pen))
+		carryHint.Text = if pen > 40 then "Lourd ! Les gardiens vont te rattraper, entraîne-toi." else "Ramène-le sur la zone verte de ta base !"
 		carry.Visible = true
-		TweenService:Create(carry, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 76) }):Play()
+		TweenService:Create(carry, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 86) }):Play()
 		refreshObjective()
 	end)
 
 	Network.event("Alert").OnClientEvent:Connect(function(msg)
 		local text = tostring(msg)
-		if string.find(string.upper(text), "POURSUIT") then
+		local upper = string.upper(text)
+		if string.find(upper, "POURSUIT") then
 			chasing = true
-			chaseText.Text = text
+			local name = string.match(text, "⚠️%s*(.-)%s+TE POURSUIT") or "Le gardien"
+			chaseText.Text = string.upper(name) .. " TE POURSUIT !"
 			chase.Visible = true
 			refreshObjective()
 			return
 		end
-		local color = C.Gold
-		local upper = string.upper(text)
-		if string.find(upper, "SÉCURISÉ") or string.find(upper, "FUSION →") or string.find(upper, "REBIRTH +") or string.find(upper, "✅") or string.find(upper, "🔓") or string.find(upper, "🎉") then
-			color = C.Cash
-		elseif string.find(upper, "GARDIEN") or string.find(upper, "ANTI") or string.find(upper, "PAS ASSEZ") or string.find(upper, "PLEINS") or string.find(upper, "🔒") then
-			color = C.Danger
+		local pair, icon = P.Gold, "🔔"
+		if string.find(upper, "SÉCURISÉ") or string.find(upper, "FUSION →") or string.find(upper, "REBIRTH +") or string.find(upper, "✅") or string.find(upper, "🔓") or string.find(upper, "🎉") or string.find(upper, "VENDU") or string.find(upper, "AMÉLIORÉ") then
+			pair, icon = P.Cash, "✅"
+		elseif string.find(upper, "GARDIEN") or string.find(upper, "ANTI") or string.find(upper, "PAS ASSEZ") or string.find(upper, "PLEINS") or string.find(upper, "🔒") or string.find(upper, "💥") then
+			pair, icon = P.Danger, "⚠️"
+		elseif string.find(upper, "📖") then
+			pair, icon = P.Teal, "📖"
+		elseif string.find(upper, "✨") then
+			pair, icon = P.Pink, "✨"
+		elseif string.find(upper, "🎁") or string.find(upper, "📅") or string.find(upper, "💰") then
+			pair, icon = P.Gold, "🎁"
 		end
-		toast(text, color)
+		UIKit.toast(text, pair, icon)
 	end)
 
 	Network.event("OpenUI").OnClientEvent:Connect(function(kind, payload)
-		if kind == "Shop" or kind == "Daily" then
-			return -- gérés par ShopController
+		if kind == "Shop" or kind == "Daily" or kind == "Index" then
+			return -- gérés par ShopController / MenuController
 		end
-		openModal(tostring(kind), payload)
+		openStation(tostring(kind), payload)
 	end)
 
 	local aggroIntensity = 0
 	Network.event("GuardianAggro").OnClientEvent:Connect(function(active: boolean, intensity: number?)
 		if active then
 			aggroIntensity = intensity or 0.3
+			if not chasing then
+				chaseText.Text = "UN GARDIEN TE POURSUIT !"
+			end
 			chasing = true
 			chase.Visible = true
 		else
@@ -676,25 +603,39 @@ function UIController.start()
 	end)
 
 	EnvironmentController.ZoneChanged:Connect(function(order: number, name: string)
-		zoneTitle.Text = if order == 0 then "🏡 " .. name else "🐍 " .. name
-		zoneTitle.TextColor3 = if order == 0 then C.Cash else C.Gold
-		zoneTitle.TextTransparency = 1
-		zoneStroke.Transparency = 1
-		TweenService:Create(zoneTitle, TweenInfo.new(0.4), { TextTransparency = 0 }):Play()
-		TweenService:Create(zoneStroke, TweenInfo.new(0.4), { Transparency = 0 }):Play()
-		task.delay(2.2, function()
-			TweenService:Create(zoneTitle, TweenInfo.new(0.6), { TextTransparency = 1 }):Play()
-			TweenService:Create(zoneStroke, TweenInfo.new(0.6), { Transparency = 1 }):Play()
+		zoneToken += 1
+		local my = zoneToken
+		local cfg = BiomesConfig[order]
+		local pair = if order == 0 then P.Cash else UIKit.pairOf(if cfg and cfg.Guardian then cfg.Guardian.Body else C.Gold)
+		zoneGrad.Color = ColorSequence.new(pair[1], pair[2])
+		zoneNumText.Text = if order == 0 then "ZONE SÛRE" else string.format("ZONE %d/%d", order, #BiomesConfig)
+		zoneName.Text = if order == 0 then "🏡 " .. name else "🐍 " .. name
+		zoneSub.Text = if order == 0 then "Les gardiens ne peuvent pas t'atteindre ici" elseif cfg then "⚠️ Gardien : " .. cfg.GuardianName else ""
+		zoneCard.Visible = true
+		zoneCard.Position = UDim2.fromScale(0.5, -0.2)
+		TweenService:Create(zoneCard, TweenInfo.new(0.45, Enum.EasingStyle.Back), { Position = UDim2.fromScale(0.5, 0.24) }):Play()
+		task.delay(2.6, function()
+			if zoneToken == my then
+				TweenService:Create(zoneCard, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.fromScale(0.5, -0.2) }):Play()
+			end
 		end)
 	end)
 
-	-- Pulsations (bannière + vignette)
+	-- Pulsations (ruban + vignette + rayures) et distance jusqu'au hub
 	RunService.RenderStepped:Connect(function()
 		local now = os.clock()
 		if chase.Visible then
-			chaseScale.Scale = 1 + math.sin(now * 8) * 0.03
+			chaseScale.Scale = 1 + math.sin(now * 8) * 0.025
+			stripes.Position = UDim2.fromOffset(-((now * 60) % 34), 0)
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp and hrp:IsA("BasePart") then
+				local dist = math.max(0, ZONE1_FRONT - hrp.Position.Z)
+				chaseSub.Text = string.format("🏡 Hub à %d studs : cours !", math.floor(dist))
+			end
 		end
-		local target = if chasing then 1 - math.clamp(aggroIntensity, 0, 1) * 0.4 - (math.sin(now * (6 + aggroIntensity * 8)) + 1) * 0.04 else 1
+		local vignetteOn = player:GetAttribute("Set_Vignette") ~= false
+		local target = if chasing and vignetteOn then 1 - math.clamp(aggroIntensity, 0, 1) * 0.4 - (math.sin(now * (6 + aggroIntensity * 8)) + 1) * 0.04 else 1
 		vignette.BackgroundTransparency += (target - vignette.BackgroundTransparency) * 0.2
 		vignette2.BackgroundTransparency = vignette.BackgroundTransparency
 	end)
@@ -709,5 +650,7 @@ function UIController.start()
 	end)
 	refreshObjective()
 end
+
+UIController._action = function() end
 
 return UIController

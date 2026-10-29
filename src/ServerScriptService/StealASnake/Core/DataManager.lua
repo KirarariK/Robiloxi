@@ -31,6 +31,7 @@ export type PlayerData = {
 	StarterOfferEnds: number, -- fin de l'offre limitée (unix), 0 = pas encore fixée
 	Receipts: { string }, -- PurchaseIds déjà accordés (idempotence ProcessReceipt)
 	Codes: { [string]: boolean },
+	Index: { [string]: boolean }, -- espèces déjà possédées (livre de collection)
 	-- non sauvegardés (recalculés à chaque session)
 	Passes: { [string]: boolean },
 	Premium: boolean,
@@ -78,6 +79,7 @@ local function defaultData(): PlayerData
 		StarterOfferEnds = 0,
 		Receipts = {},
 		Codes = {},
+		Index = {},
 		Passes = {},
 		Premium = false,
 		GiftsClaimed = {},
@@ -149,6 +151,13 @@ local function load(player: Player)
 		d.StarterOfferEnds = tonumber(data.StarterOfferEnds) or 0
 		d.Receipts = if typeof(data.Receipts) == "table" then data.Receipts else {}
 		d.Codes = if typeof(data.Codes) == "table" then data.Codes else {}
+		d.Index = if typeof(data.Index) == "table" then data.Index else {}
+	end
+	-- index rétroactif : tout serpent déjà en vivarium compte comme découvert
+	for _, s in d.Vivariums do
+		if s and s.SpeciesId then
+			d.Index[s.SpeciesId] = true
+		end
 	end
 	d.Premium = player.MembershipType == Enum.MembershipType.Premium
 	cache[player.UserId] = d
@@ -176,6 +185,7 @@ local function save(player: Player): boolean
 		StarterOfferEnds = d.StarterOfferEnds,
 		Receipts = d.Receipts,
 		Codes = d.Codes,
+		Index = d.Index,
 	}
 	local ds = getStore()
 	local saved = not ds -- sans DataStore (Studio non publié) : rien à écrire

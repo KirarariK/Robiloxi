@@ -19,6 +19,15 @@ function SoundController.start()
 	local folder = Instance.new("Folder")
 	folder.Name = "SAS_Sounds"
 	folder.Parent = SoundService
+	-- groupe de volume réglable depuis le menu Réglages
+	local group = SoundService:FindFirstChild("SAS_SFX") :: SoundGroup?
+	if not group then
+		local g = Instance.new("SoundGroup")
+		g.Name = "SAS_SFX"
+		g.Volume = 1
+		g.Parent = SoundService
+		group = g
+	end
 
 	local chase = Instance.new("Sound")
 	chase.Name = "ChasePulse"
@@ -26,6 +35,7 @@ function SoundController.start()
 	chase.Volume = 0
 	chase.PlaybackSpeed = 1
 	chase.SoundId = "rbxasset://sounds/impact_water.mp3"
+	chase.SoundGroup = group
 	chase.Parent = folder
 	pcall(function()
 		chase:Play()
@@ -41,6 +51,7 @@ function SoundController.start()
 		local s = Instance.new("Sound")
 		s.SoundId = id
 		s.Volume = vol or 0.4
+		s.SoundGroup = group
 		s.Parent = folder
 		local ok = pcall(function()
 			s:Play()

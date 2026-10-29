@@ -227,6 +227,10 @@ function PlotManager.depositSnake(player: Player, speciesId: string, mutation: s
 		DataManager.rebirthMult(player)
 	)
 	local d = DataManager.get(player)
+	if not d.Index[speciesId] then
+		d.Index[speciesId] = true
+		Network.event("Alert"):FireClient(player, "📖 Nouvelle espèce dans ton Index : " .. def.DisplayName .. " !")
+	end
 	d.Vivariums[slot] = {
 		SpeciesId = speciesId,
 		Mutation = mutation,

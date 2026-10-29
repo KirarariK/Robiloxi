@@ -22,6 +22,7 @@ local Workspace = game:GetService("Workspace")
 local Network = require(ReplicatedStorage.StealASnake.Modules.Network)
 local FormatNumber = require(ReplicatedStorage.StealASnake.Modules.FormatNumber)
 local M = require(ReplicatedStorage.StealASnake.Config.MonetizationConfig)
+local UIKit = require(ReplicatedStorage.StealASnake.Modules.UIKit)
 
 local ShopController = {}
 
@@ -187,83 +188,19 @@ end
 
 --[[ ───────────── Construction ───────────── ]]
 function ShopController.start()
-	local gui = new("ScreenGui", { Name = "SAS_Shop", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 10, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = player:WaitForChild("PlayerGui") })
+	local gui = UIKit.screen("SAS_Shop", 10)
 
-	-- échelle responsive (mobile → écran large)
-	local uiScale = new("UIScale", { Parent = gui })
-	local function rescale()
-		local cam = Workspace.CurrentCamera
-		if not cam then
-			return
-		end
-		local v = cam.ViewportSize
-		uiScale.Scale = math.clamp(math.min(v.X / 1280, v.Y / 760), 0.55, 1.15)
-	end
-	rescale()
-	if Workspace.CurrentCamera then
-		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale)
-	end
-
-	--[[ ── Modales ── ]]
-	local backdrop = new("TextButton", { Name = "Backdrop", Text = "", AutoButtonColor = false, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 20, Parent = gui })
-	local openModal: Frame? = nil
-
+	--[[ ── Modales : système commun UIKit (une seule ouverte à la fois, partagé avec le HUD / l'index) ── ]]
 	local function closeModal()
-		local m = openModal
-		if not m then
-			return
-		end
-		openModal = nil
-		local sc = m:FindFirstChildOfClass("UIScale") :: UIScale
-		TweenService:Create(sc, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.85 }):Play()
-		TweenService:Create(backdrop, TweenInfo.new(0.16), { BackgroundTransparency = 1 }):Play()
-		task.delay(0.16, function()
-			if openModal ~= m then
-				m.Visible = false
-			end
-			if not openModal then
-				backdrop.Visible = false
-			end
-		end)
+		UIKit.closeModal()
 	end
-	backdrop.Activated:Connect(closeModal)
-
 	local function showModal(m: Frame)
-		if openModal and openModal ~= m then
-			openModal.Visible = false
-		end
-		openModal = m
-		backdrop.Visible = true
-		m.Visible = true
-		local sc = m:FindFirstChildOfClass("UIScale") :: UIScale
-		sc.Scale = 0.75
-		TweenService:Create(sc, TweenInfo.new(0.32, Enum.EasingStyle.Back), { Scale = 1 }):Play()
-		TweenService:Create(backdrop, TweenInfo.new(0.2), { BackgroundTransparency = 0.45 }):Play()
+		UIKit.showModal(m)
 	end
-
 	local function modal(name: string, w: number, h: number, title: string, accentA: Color3, accentB: Color3): (Frame, Frame)
-		local m = new("Frame", { Name = name, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52), Size = UDim2.fromOffset(w, h), BackgroundColor3 = WHITE, Visible = false, ZIndex = 21, Parent = gui })
-		new("UIScale", { Parent = m })
-		corner(m, 24)
-		outline(m, 5)
-		grad(m, Color3.fromRGB(52, 34, 92), Color3.fromRGB(20, 16, 40))
-		-- en-tête dégradé (coins arrondis en haut seulement : un bandeau carré masque l'arrondi du bas)
-		local head = new("Frame", { Name = "Header", Size = UDim2.new(1, 0, 0, 74), BackgroundColor3 = WHITE, ZIndex = 22, Parent = m })
-		corner(head, 24)
-		grad(head, accentA, accentB)
-		new("Frame", { Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 1, -24), BackgroundColor3 = accentB, BorderSizePixel = 0, ZIndex = 22, Parent = head })
-		new("Frame", { Size = UDim2.new(1, 0, 0, 4), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = INK, BorderSizePixel = 0, ZIndex = 22, Parent = head })
-		local t = label(head, title, 42, { Size = UDim2.new(1, -120, 1, 0), Position = UDim2.fromOffset(24, 0), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 23 })
-		textOutline(t, 3.5)
-		local close = new("TextButton", { Name = "Close", AutoButtonColor = false, Text = "", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 14, 0, -14), Size = UDim2.fromOffset(58, 58), BackgroundColor3 = WHITE, ZIndex = 30, Parent = m })
-		corner(close, 16)
-		outline(close, 4)
-		grad(close, Color3.fromRGB(255, 110, 110), Color3.fromRGB(200, 30, 50))
-		local x = label(close, "X", 34, { Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 31 })
-		textOutline(x, 2.5)
-		juicy(close, closeModal)
-		local body = new("Frame", { Name = "Body", Position = UDim2.fromOffset(18, 88), Size = UDim2.new(1, -36, 1, -104), BackgroundTransparency = 1, ZIndex = 22, Parent = m })
-		return m, body
+		local icon, rest = string.match(title, "^(%S+)%s+(.+)$")
+		local api = UIKit.modal(name, w, h, icon or "", rest or title, { accentA, accentB })
+		return api.Frame, api.Body
 	end
 
 	--[[ ── Carte d'offre ── ]]
@@ -547,24 +484,9 @@ function ShopController.start()
 		box.Text = ""
 	end)
 
-	--[[ ── Rail gauche ── ]]
-	local rail = new("Frame", { Name = "Rail", AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 14, 0.42, 0), Size = UDim2.fromOffset(92, 440), BackgroundTransparency = 1, Parent = gui })
-	new("UIListLayout", { Padding = UDim.new(0, 4), HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = rail })
-
+	--[[ ── Rail gauche (commun UIKit) ── ]]
 	local function railButton(order: number, icon: string, text: string, a: Color3, b: Color3, onClick: () -> ()): (TextButton, TextLabel, TextLabel)
-		local holder = new("Frame", { LayoutOrder = order, Size = UDim2.fromOffset(86, 84), BackgroundTransparency = 1, Parent = rail })
-		local btn = new("TextButton", { AutoButtonColor = false, Text = "", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromOffset(64, 64), BackgroundColor3 = WHITE, Parent = holder })
-		corner(btn, 20)
-		outline(btn, 4)
-		grad(btn, a, b)
-		local ic = label(btn, icon, 34, { FontFace = FONT_BOLD, Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center })
-		local t = label(holder, text, 15, { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.fromScale(0.5, 1), Size = UDim2.new(1, 10, 0, 20) })
-		textOutline(t, 2.5)
-		local badge = label(btn, "!", 18, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -4, 0, 4), Size = UDim2.fromOffset(28, 28), BackgroundTransparency = 0, BackgroundColor3 = Color3.fromRGB(255, 50, 70), TextYAlignment = Enum.TextYAlignment.Center, Visible = false, ZIndex = 3 })
-		corner(badge, 14)
-		outline(badge, 2.5)
-		juicy(btn, onClick)
-		local _ = ic
+		local btn, t, badge = UIKit.railButton(order, icon, text, { a, b }, onClick)
 		return btn, t, badge
 	end
 
@@ -840,7 +762,7 @@ function ShopController.start()
 			end
 			task.wait(5)
 		end
-		if refreshStarter() and not openModal then
+		if refreshStarter() and not UIKit.isOpen() then
 			showModal(starter)
 		end
 	end)

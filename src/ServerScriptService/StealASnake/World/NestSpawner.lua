@@ -96,50 +96,75 @@ function NestSpawner.spawnAt(biomeCfg: any, spawnPart: BasePart)
 	local mutDef = MutationsConfig.Defs[mutation] or MutationsConfig.Defs.Normal
 	local incomePreview = SpeedCalculator.income(def.BaseIncome, def.RarityMult, weight, def.BaseWeight, mutDef.Multiplier, 1)
 
-	-- Étiquette 3 lignes : [MUTATION] Nom (couleur mutation) · Rareté (couleur rareté) · poids | revenu
+	-- Étiquette « bonbon » (style UIKit) : bandeau de rareté, nom contouré, pastilles poids / revenu
 	local _, bbSize = model:GetBoundingBox()
+	local rarityColor = RarityConfig.color(def.Rarity)
+	local INK = Color3.fromRGB(14, 10, 28)
+	local FREDOKA = Font.new("rbxasset://fonts/families/FredokaOne.json")
 	local bb = Instance.new("BillboardGui")
 	bb.Name = "SnakeBillboard"
-	bb.Size = UDim2.fromOffset(190, 66)
-	bb.StudsOffsetWorldSpace = Vector3.new(0, bbSize.Y / 2 + 1.6, 0)
+	bb.Size = UDim2.fromOffset(210, 92)
+	bb.StudsOffsetWorldSpace = Vector3.new(0, bbSize.Y / 2 + 2, 0)
 	bb.AlwaysOnTop = false
-	bb.MaxDistance = 28 -- lisible en s'approchant du nid, sans empiler toutes les étiquettes
+	bb.MaxDistance = 30 -- lisible en s'approchant du nid, sans empiler toutes les étiquettes
 	bb.LightInfluence = 0
 	bb.Parent = model.PrimaryPart
-	local card = Instance.new("Frame")
-	card.Size = UDim2.fromScale(1, 1)
-	card.BackgroundColor3 = Color3.fromRGB(15, 18, 26)
-	card.BackgroundTransparency = 0.25
-	card.Parent = bb
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = card
-	local rarityColor = RarityConfig.color(def.Rarity)
-	local st = Instance.new("UIStroke")
-	st.Color = rarityColor
-	st.Thickness = 2
-	st.Parent = card
-	local lines = {
-		{ if mutation == "Normal" then def.DisplayName else ("✨ [" .. string.upper(mutDef.DisplayName) .. "] " .. def.DisplayName), if mutation == "Normal" then Color3.new(1, 1, 1) else mutDef.Color, 0.36 },
-		{ RarityConfig.name(def.Rarity), rarityColor, 0.28 },
-		{ string.format("⚖️ %.1f kg  ·  💰 $%s/s", weight, FormatNumber.short(incomePreview)), Color3.fromRGB(200, 255, 200), 0.3 },
-	}
-	local y = 0.03
-	for _, l in lines do
+	local function stroke(inst: Instance, th: number, border: boolean)
+		local st = Instance.new("UIStroke")
+		st.Color = INK
+		st.Thickness = th
+		st.LineJoinMode = Enum.LineJoinMode.Round
+		if border then
+			st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		end
+		st.Parent = inst
+	end
+	local function rounded(inst: Instance, r: number)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, r)
+		c.Parent = inst
+	end
+	local function txt(parent: Instance, text: string, color: Color3, pos: UDim2, size: UDim2)
 		local tl = Instance.new("TextLabel")
 		tl.BackgroundTransparency = 1
-		tl.Position = UDim2.fromScale(0.04, y)
-		tl.Size = UDim2.fromScale(0.92, l[3])
-		tl.Text = l[1]
-		tl.TextColor3 = l[2]
+		tl.Position = pos
+		tl.Size = size
+		tl.Text = text
+		tl.TextColor3 = color
 		tl.TextScaled = true
-		tl.FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json")
-		tl.Parent = card
-		local ts = Instance.new("UIStroke")
-		ts.Thickness = 1.5
-		ts.Parent = tl
-		y += l[3] + 0.01
+		tl.FontFace = FREDOKA
+		tl.Parent = parent
+		stroke(tl, 2, false)
+		return tl
 	end
+	-- nom (mutation incluse)
+	local nameText = if mutation == "Normal" then def.DisplayName else ("✨ " .. mutDef.DisplayName .. " " .. def.DisplayName)
+	txt(bb, nameText, if mutation == "Normal" then Color3.new(1, 1, 1) else mutDef.Color:Lerp(Color3.new(1, 1, 1), 0.25), UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.34))
+	-- pastille de rareté
+	local pill = Instance.new("Frame")
+	pill.AnchorPoint = Vector2.new(0.5, 0)
+	pill.Position = UDim2.fromScale(0.5, 0.36)
+	pill.Size = UDim2.fromScale(0.6, 0.26)
+	pill.BackgroundColor3 = Color3.new(1, 1, 1)
+	pill.Parent = bb
+	rounded(pill, 99)
+	stroke(pill, 2.5, true)
+	local pg = Instance.new("UIGradient")
+	pg.Color = ColorSequence.new(rarityColor:Lerp(Color3.new(1, 1, 1), 0.3), Color3.new(rarityColor.R * 0.6, rarityColor.G * 0.6, rarityColor.B * 0.6))
+	pg.Rotation = 90
+	pg.Parent = pill
+	txt(pill, RarityConfig.name(def.Rarity), Color3.new(1, 1, 1), UDim2.fromScale(0.05, 0.08), UDim2.fromScale(0.9, 0.84))
+	-- poids · revenu
+	local stats = Instance.new("Frame")
+	stats.AnchorPoint = Vector2.new(0.5, 0)
+	stats.Position = UDim2.fromScale(0.5, 0.66)
+	stats.Size = UDim2.fromScale(0.96, 0.32)
+	stats.BackgroundColor3 = Color3.fromRGB(28, 22, 50)
+	stats.BackgroundTransparency = 0.15
+	stats.Parent = bb
+	rounded(stats, 99)
+	stroke(stats, 2, true)
+	txt(stats, string.format("⚖️ %.1f kg   💰 $%s/s", weight, FormatNumber.short(incomePreview)), Color3.fromRGB(190, 255, 190), UDim2.fromScale(0.04, 0.1), UDim2.fromScale(0.92, 0.8))
 
 	model.Parent = wildFolder()
 

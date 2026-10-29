@@ -371,7 +371,7 @@ function AmbienceController.start(environment: any)
 		TweenService:Create(flash, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 1 }):Play()
 		local char = player.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if hum then
+		if hum and player:GetAttribute("Set_Shake") ~= false then
 			task.spawn(function()
 				local t0 = os.clock()
 				while os.clock() - t0 < 0.45 do
