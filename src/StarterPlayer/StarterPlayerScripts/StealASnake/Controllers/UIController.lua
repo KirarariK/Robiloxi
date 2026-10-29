@@ -616,7 +616,7 @@ function UIController.start()
 		zoneSub.Text = if order == 0 then "Les gardiens ne peuvent pas t'atteindre ici" elseif cfg then "⚠️ Gardien : " .. cfg.GuardianName else ""
 		zoneCard.Visible = true
 		zoneCard.Position = UDim2.fromScale(0.5, -0.2)
-		TweenService:Create(zoneCard, TweenInfo.new(0.45, Enum.EasingStyle.Back), { Position = UDim2.fromScale(0.5, 0.24) }):Play()
+		TweenService:Create(zoneCard, TweenInfo.new(0.45, Enum.EasingStyle.Back), { Position = UDim2.fromScale(0.5, 0.43) }):Play()
 		task.delay(2.6, function()
 			if zoneToken == my then
 				TweenService:Create(zoneCard, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.fromScale(0.5, -0.2) }):Play()
