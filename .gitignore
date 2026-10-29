@@ -20,3 +20,6 @@ tools/
 
 # Graphify generated graph (rebuild with /graphify .)
 graphify-out/
+
+# Exports FBX (lourds, régénérables depuis blender/)
+exports/

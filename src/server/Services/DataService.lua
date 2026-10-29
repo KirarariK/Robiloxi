@@ -41,6 +41,7 @@ type Session = {
 }
 
 local DataService = {}
+DataService.Priority = 0 -- démarre avant tous les autres services
 
 local sessions: { [Player]: Session } = {}
 local loadedEvent = Instance.new("BindableEvent")
@@ -298,6 +299,14 @@ function DataService.isMemoryMode(): boolean
 end
 
 function DataService.init()
+	local Guard = require(script.Parent.Guard)
+	Guard.func("GetProfile", {}, 2, 6, function(player: Player)
+		local profile = DataService.get(player)
+		if not profile then
+			return { Ok = false, Err = "Chargement du profil…" }
+		end
+		return { Ok = true, Data = publicView(profile) }
+	end)
 	Players.PlayerAdded:Connect(function(p)
 		task.spawn(load, p)
 	end)

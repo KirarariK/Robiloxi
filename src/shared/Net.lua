@@ -7,21 +7,39 @@ local FOLDER_NAME = "Remotes"
 
 local Net = {}
 
--- Les listes grandissent avec les étapes : chaque remote déclarée ici a un handler serveur.
+-- Les remotes sont déclarées par domaine dans NetDefs/*.lua (un fichier par équipe : Core, Combat, Match,
+-- Progression, Security…). Chaque module renvoie { ClientEvents, ServerEvents, Functions }.
+-- Net fusionne tout et refuse les doublons : chaque remote déclarée doit avoir un handler serveur.
+local clientEvents: { string } = {}
+local serverEvents: { string } = {}
+local functions: { string } = {}
+do
+	local seen: { [string]: string } = {}
+	local defs = script.Parent:WaitForChild("NetDefs")
+	local mods = defs:GetChildren()
+	table.sort(mods, function(a, b)
+		return a.Name < b.Name
+	end)
+	for _, m in mods do
+		if m:IsA("ModuleScript") then
+			local d = require(m) :: any
+			for listName, target in { ClientEvents = clientEvents, ServerEvents = serverEvents, Functions = functions } do
+				for _, n in (d[listName] or {}) :: { string } do
+					assert(seen[n] == nil, string.format("Remote %s déclarée deux fois (%s et %s)", n, tostring(seen[n]), m.Name))
+					seen[n] = m.Name
+					table.insert(target, n)
+				end
+			end
+		end
+	end
+end
 
 -- Client → Serveur (RemoteEvent)
-Net.ClientEvents = table.freeze({} :: { string })
-
+Net.ClientEvents = table.freeze(clientEvents)
 -- Serveur → Client (RemoteEvent)
-Net.ServerEvents = table.freeze({
-	"ProfileUpdated", -- vue du profil (après chargement et à chaque changement)
-	"Notify", -- message toast { Text: string, Kind: string }
-})
-
--- Requêtes avec réponse (RemoteFunction, toujours validées côté serveur)
-Net.Functions = table.freeze({
-	"GetProfile",
-})
+Net.ServerEvents = table.freeze(serverEvents)
+-- Requêtes avec réponse (RemoteFunction)
+Net.Functions = table.freeze(functions)
 
 local function getRoot(): Instance
 	return script.Parent
