@@ -142,6 +142,23 @@ local function marker(parent: Instance, name: string, cf: CFrame, size: Vector3?
 	})
 end
 
+-- Centres des 3 arènes d'entraînement (pods de file)
+B.RingCenters = {
+	Vector3.new(-PLAZA_R - 14, 0, 6),
+	Vector3.new(PLAZA_R + 14, 0, 6),
+	Vector3.new(0, 0, PLAZA_R + 16),
+}
+
+-- Vrai si `p` (au sol) est à moins de `margin` studs du bord d'une arène.
+function B.nearRing(p: Vector3, margin: number): boolean
+	for _, c in B.RingCenters do
+		if (Vector3.new(p.X, 0, p.Z) - c).Magnitude < 20 + margin then
+			return true
+		end
+	end
+	return false
+end
+
 --------------------------------------------------------------------------------
 -- 1. Île porteuse (Terrain) + socle de la place
 
@@ -177,6 +194,9 @@ function B.base()
 		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(PLAZA_R + 12, 86)
 		local p = Vector3.new(math.cos(a) * r, rng:NextNumber(-3, 0), math.sin(a) * r)
+		if B.nearRing(p, 9) then
+			continue
+		end
 		t:FillBall(p, rng:NextNumber(3, 7), if rng:NextNumber() < 0.5 then Enum.Material.Rock else Enum.Material.Slate)
 		t:FillBall(p + Vector3.new(0, 2.5, 0), rng:NextNumber(2, 4), Enum.Material.Grass)
 	end
@@ -599,8 +619,8 @@ function B.ruins()
 		local a = (i + 0.25) / 12 * math.pi * 2
 		local r = PLAZA_R + 16 + rng:NextNumber(-2, 4)
 		local pos = Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
-		if math.abs(pos.X) > 50 and math.abs(pos.Z - 6) < 30 then
-			continue -- dégage les arènes latérales
+		if B.nearRing(pos, 6) then
+			continue -- dégage les arènes
 		end
 		if pos.Z < -PLAZA_R then
 			continue -- dégage l'escalier
