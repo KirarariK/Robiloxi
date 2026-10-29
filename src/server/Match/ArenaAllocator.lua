@@ -68,7 +68,7 @@ local function buildFallback(arenaId: string): Model
 	marker(m, "SpawnB", CFrame.lookAt(Vector3.new(0, 3, 16), Vector3.new(0, 3, -16)))
 	marker(m, "IntroCam", CFrame.lookAt(Vector3.new(26, 9, 0), Vector3.new(0, 3, 0)))
 	marker(m, "KillY", CFrame.new(0, -40, 0))
-	m.PrimaryPart = floor
+	m.PrimaryPart = m:FindFirstChild("Center") :: BasePart
 	return m
 end
 

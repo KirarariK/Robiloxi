@@ -20,19 +20,99 @@ local hud: DuelHud.DuelHud? = nil
 local pendingResult: { [string]: any }? = nil
 local savedLighting: { [string]: any }? = nil
 
-local LIGHT_PROPS = { "Ambient", "OutdoorAmbient", "ClockTime", "FogColor", "FogEnd" }
+local LIGHT_PROPS = {
+	"Ambient",
+	"OutdoorAmbient",
+	"ClockTime",
+	"FogColor",
+	"FogEnd",
+	"Brightness",
+	"ExposureCompensation",
+	"GeographicLatitude",
+}
+local EFFECT_CLASSES = { "Atmosphere", "Sky", "ColorCorrectionEffect", "BloomEffect", "SunRaysEffect" }
 
-local function applyArenaLighting(arenaId: string?)
-	local def = arenaId and ArenaData.get(arenaId)
-	if not def then
+-- effets du Hub retirés le temps du duel, et effets d'arène ajoutés (clones locaux, invisibles pour les autres)
+local parkedEffects: { Instance } = {}
+local arenaEffects: { Instance } = {}
+
+-- Arène du match en cours : clone dans Workspace.EB_Arenas nommé « <ArenaId>_<id> », la plus proche du joueur.
+local function findArena(arenaId: string): Model?
+	local folder = workspace:WaitForChild("EB_Arenas", 5)
+	if not folder then
+		return nil
+	end
+	local char = game:GetService("Players").LocalPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local best: Model? = nil
+	local bestDist = math.huge
+	for _ = 1, 20 do
+		for _, m in folder:GetChildren() do
+			if m:IsA("Model") and string.sub(m.Name, 1, #arenaId + 1) == arenaId .. "_" then
+				local d = if root and root:IsA("BasePart") then (m:GetPivot().Position - root.Position).Magnitude else 0
+				if d < bestDist then
+					best, bestDist = m, d
+				end
+			end
+		end
+		if best then
+			return best
+		end
+		task.wait(0.25)
+	end
+	return nil
+end
+
+local function saveLighting()
+	if savedLighting then
 		return
 	end
-	if not savedLighting then
-		local saved: { [string]: any } = {}
+	local saved: { [string]: any } = {}
+	for _, k in LIGHT_PROPS do
+		saved[k] = (Lighting :: any)[k]
+	end
+	savedLighting = saved
+end
+
+local function applyArenaLighting(arenaId: string?)
+	if not arenaId then
+		return
+	end
+	saveLighting()
+	local arena = findArena(arenaId)
+	local folder = arena and arena:FindFirstChild("Lighting")
+	if folder then
+		-- réglages fournis par l'arène elle-même (attributs + effets à cloner)
+		local goals: { [string]: any } = {}
 		for _, k in LIGHT_PROPS do
-			saved[k] = (Lighting :: any)[k]
+			local v = folder:GetAttribute(k)
+			if v ~= nil then
+				if k == "ClockTime" or k == "GeographicLatitude" then
+					(Lighting :: any)[k] = v
+				else
+					goals[k] = v
+				end
+			end
 		end
-		savedLighting = saved
+		Kit.tween(Lighting, 1.2, goals, Enum.EasingStyle.Sine)
+		for _, child in folder:GetChildren() do
+			if table.find(EFFECT_CLASSES, child.ClassName) then
+				for _, existing in Lighting:GetChildren() do
+					if existing.ClassName == child.ClassName and not table.find(arenaEffects, existing) then
+						existing.Parent = nil
+						table.insert(parkedEffects, existing)
+					end
+				end
+				local c = child:Clone()
+				c.Parent = Lighting
+				table.insert(arenaEffects, c)
+			end
+		end
+		return
+	end
+	local def = ArenaData.get(arenaId)
+	if not def then
+		return
 	end
 	Lighting.ClockTime = def.ClockTime
 	Kit.tween(Lighting, 1.2, {
@@ -44,18 +124,28 @@ local function applyArenaLighting(arenaId: string?)
 end
 
 local function restoreLighting()
+	for _, e in arenaEffects do
+		e:Destroy()
+	end
+	table.clear(arenaEffects)
+	for _, e in parkedEffects do
+		e.Parent = Lighting
+	end
+	table.clear(parkedEffects)
 	local saved = savedLighting
 	if not saved then
 		return
 	end
 	savedLighting = nil
-	Lighting.ClockTime = saved.ClockTime
-	Kit.tween(Lighting, 1.2, {
-		Ambient = saved.Ambient,
-		OutdoorAmbient = saved.OutdoorAmbient,
-		FogColor = saved.FogColor,
-		FogEnd = saved.FogEnd,
-	}, Enum.EasingStyle.Sine)
+	local goals: { [string]: any } = {}
+	for _, k in LIGHT_PROPS do
+		if k == "ClockTime" or k == "GeographicLatitude" then
+			(Lighting :: any)[k] = saved[k]
+		else
+			goals[k] = saved[k]
+		end
+	end
+	Kit.tween(Lighting, 1.2, goals, Enum.EasingStyle.Sine)
 end
 
 local function flushResult()
@@ -75,7 +165,7 @@ local function onMatch(view: State.MatchView, prev: State.MatchView?)
 		local h = hud :: DuelHud.DuelHud
 		h.update(view, prev)
 		if not prev or not prev.Active or prev.ArenaId ~= view.ArenaId then
-			applyArenaLighting(view.ArenaId)
+			task.spawn(applyArenaLighting, view.ArenaId)
 		end
 		if view.Phase == "Victory" and pendingResult then
 			task.delay(1.2, flushResult)
