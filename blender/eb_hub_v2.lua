@@ -148,11 +148,12 @@ end
 function B.base()
 	local t = Workspace.Terrain
 	-- corps rocheux de l'île principale, effilé vers le bas
+	-- boules empilées sous la dalle : le sommet de chacune reste sous y = -4
 	for i = 0, 7 do
-		local r = 92 - i * 10
-		t:FillBall(Vector3.new(rng:NextNumber(-6, 6), -14 - i * 11, rng:NextNumber(-6, 6) - 10), r * 0.62, Enum.Material.Rock)
+		local rad = (92 - i * 10) * 0.62
+		t:FillBall(Vector3.new(rng:NextNumber(-6, 6), -4 - rad - i * 9, rng:NextNumber(-6, 6) - 10), rad, if i > 4 then Enum.Material.Slate else Enum.Material.Rock)
 	end
-	t:FillBall(Vector3.new(0, -96, -8), 16, Enum.Material.Basalt)
+	t:FillBall(Vector3.new(0, -150, -8), 14, Enum.Material.Basalt)
 	-- rebord herbeux et extension nord (terrasse) + pentes est / ouest
 	t:FillCylinder(CFrame.new(0, -3.5, -10), 7, 112, Enum.Material.Rock)
 	t:FillCylinder(CFrame.new(0, -0.6, -10), 1.6, 116, Enum.Material.LeafyGrass)
@@ -166,7 +167,6 @@ function B.base()
 		t:FillBall(p, rng:NextNumber(3, 7), if rng:NextNumber() < 0.5 then Enum.Material.Rock else Enum.Material.Slate)
 		t:FillBall(p + Vector3.new(0, 2.5, 0), rng:NextNumber(2, 4), Enum.Material.Grass)
 	end
-	t.Decoration = true
 end
 
 --------------------------------------------------------------------------------
@@ -555,7 +555,7 @@ function B.rings()
 	for _, c in { Vector3.new(-PLAZA_R - 14, 0, 6), Vector3.new(PLAZA_R + 14, 0, 6), Vector3.new(0, 0, PLAZA_R + 16) } do
 		t:FillCylinder(CFrame.new(c + Vector3.new(0, -3.2, 0)), 6, 50, Enum.Material.Rock)
 		t:FillCylinder(CFrame.new(c + Vector3.new(0, -0.4, 0)), 1.2, 52, Enum.Material.LeafyGrass)
-		t:FillBall(c + Vector3.new(0, -14, 0), 16, Enum.Material.Rock)
+		t:FillBall(c + Vector3.new(0, -24, 0), 18, Enum.Material.Rock)
 	end
 end
 
@@ -647,7 +647,8 @@ function B.sky()
 		t:FillCylinder(CFrame.new(c), 4, r * 2, Enum.Material.Rock)
 		t:FillCylinder(CFrame.new(c + Vector3.new(0, 2.2, 0)), 1.2, r * 2 - 2, Enum.Material.LeafyGrass)
 		for k = 1, 4 do
-			t:FillBall(c + Vector3.new(rng:NextNumber(-r * 0.3, r * 0.3), -r * 0.35 * k, rng:NextNumber(-r * 0.3, r * 0.3)), r * (0.8 - k * 0.16), if k > 2 then Enum.Material.Slate else Enum.Material.Rock)
+			local rad = r * (0.8 - k * 0.16)
+			t:FillBall(c + Vector3.new(rng:NextNumber(-r * 0.2, r * 0.2), -2 - rad - (k - 1) * r * 0.22, rng:NextNumber(-r * 0.2, r * 0.2)), rad, if k > 2 then Enum.Material.Slate else Enum.Material.Rock)
 		end
 		local top = c + Vector3.new(0, 2.8, 0)
 		tree(f, top + Vector3.new(rng:NextNumber(-r * 0.3, r * 0.3), 0, rng:NextNumber(-r * 0.3, r * 0.3)), r / 22)
@@ -656,7 +657,7 @@ function B.sky()
 		end
 		crystalCluster(f, top + Vector3.new(-r * 0.4, 0, r * 0.25), r / 18)
 		-- cristaux pendant sous l'île
-		local hang = P(f, "HangingCrystal", Vector3.new(2, r * 0.6, 2), CFrame.new(c + Vector3.new(0, -r * 1.2, 0)) * CFrame.Angles(0, math.rad(45), 0), C.Ether, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.1 })
+		local hang = P(f, "HangingCrystal", Vector3.new(2, r * 0.6, 2), CFrame.new(c + Vector3.new(0, -r * 1.55, 0)) * CFrame.Angles(0, math.rad(45), 0), C.Ether, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.1 })
 		light(hang, C.Ether, 24, 1.4)
 	end
 	-- arbres sur l'île principale (hors place)
