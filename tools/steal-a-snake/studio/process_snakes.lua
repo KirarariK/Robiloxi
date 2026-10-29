@@ -68,7 +68,12 @@ for _, src in workspace:GetChildren() do
 						g.Parent = out
 					end
 				end
-				out.PrimaryPart = biggest
+				-- l'import FBX couche le modèle (haut Blender → -Z) : on le redresse
+				for _, d in out:GetDescendants() do
+					if d:IsA("BasePart") then
+						d.CFrame = CFrame.Angles(math.rad(90), 0, 0) * d.CFrame
+					end
+				end
 				local mn, mx = bbox(out)
 				local size = mx - mn
 				local center = (mn + mx) / 2
@@ -78,6 +83,11 @@ for _, src in workspace:GetChildren() do
 					out:ScaleTo(out:GetScale() * (SNAKE_SIZE / maxd))
 				end
 				out:PivotTo(CFrame.new(0, 0, 0))
+				-- PrimaryPart après coup : sinon WorldPivot / PivotTo gardent l'orientation de la pièce
+				out.PrimaryPart = biggest
+				if biggest then
+					biggest.PivotOffset = biggest.CFrame:Inverse()
+				end
 				out:SetAttribute("Cartoon", true)
 				local old = Models:FindFirstChild(id)
 				if old then

@@ -89,7 +89,12 @@ if heads then
 					end
 				end
 			end
-			out.PrimaryPart = biggest
+			-- l'import FBX couche la tête (haut Blender → -Z) : on la redresse (les kits, eux, arrivent droits)
+			for _, d in out:GetChildren() do
+				if d:IsA("BasePart") then
+					d.CFrame = CFrame.Angles(math.rad(90), 0, 0) * d.CFrame
+				end
+			end
 			local mn, mx = bbox(all)
 			local size = mx - mn
 			out.WorldPivot = CFrame.new((mn + mx) / 2)
@@ -98,6 +103,11 @@ if heads then
 				out:ScaleTo(out:GetScale() * (HEAD_SIZE / maxd))
 			end
 			out:PivotTo(CFrame.new())
+			-- PrimaryPart après coup : sinon WorldPivot / PivotTo gardent l'orientation de la pièce
+			out.PrimaryPart = biggest
+			if biggest then
+				biggest.PivotOffset = biggest.CFrame:Inverse()
+			end
 			out:SetAttribute("Cartoon", true)
 			place(out, "GuardianHead_" .. n)
 		end
@@ -150,7 +160,7 @@ if kits then
 					local c = (gmn + gmx) / 2
 					local pivot
 					if gname == "Body" or gname == "BodyAlt" then
-						pivot = Vector3.new(c.X, gmn.Y + (gmx.Y - gmn.Y) / 2, c.Z)
+						pivot = Vector3.new(c.X, gmn.Y + RING_WIDTH * 0.45, c.Z) -- centre de l'anneau (hors crinière / pics)
 						info.Model:SetAttribute("BodyLen", gmx.Z - gmn.Z)
 					elseif gname == "Tail" then
 						pivot = Vector3.new(c.X, c.Y, gmn.Z)

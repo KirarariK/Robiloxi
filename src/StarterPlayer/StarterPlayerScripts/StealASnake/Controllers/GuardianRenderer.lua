@@ -518,10 +518,12 @@ local function build(model: Model)
 	local jawBases: { CFrame }? = nil
 	local jawHinge: CFrame? = nil
 	if hingePart and #jawParts > 0 then
-		jawHinge = primary.CFrame:ToObjectSpace(CFrame.new(hingePart.Position) * primary.CFrame.Rotation)
+		-- repère de la tête (pivot = museau vers -Z) : l'axe X local est la charnière
+		local pivot = head:GetPivot()
+		jawHinge = pivot:ToObjectSpace(CFrame.new(hingePart.Position) * pivot.Rotation)
 		local bases = {}
 		for _, jp in jawParts do
-			table.insert(bases, jawHinge:Inverse() * primary.CFrame:ToObjectSpace(jp.CFrame))
+			table.insert(bases, (jawHinge :: CFrame):Inverse() * pivot:ToObjectSpace(jp.CFrame))
 		end
 		jawBases = bases
 	end
@@ -711,7 +713,7 @@ local function step(v: Visual, dt: number, now: number)
 	local headCf = CFrame.lookAt(headPos, headPos + v.HeadLook) * CFrame.Angles(0, sway, 0)
 	v.Head:PivotTo(headCf)
 	if v.JawParts and v.JawBases and v.JawHinge then
-		local hcf = v.HeadPrimary.CFrame * v.JawHinge * CFrame.Angles(math.rad(-30 * jawOpen), 0, 0)
+		local hcf = headCf * v.JawHinge * CFrame.Angles(math.rad(-30 * jawOpen), 0, 0)
 		local cfs = table.create(#v.JawParts)
 		for i, b in v.JawBases do
 			cfs[i] = hcf * b
