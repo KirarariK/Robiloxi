@@ -70,8 +70,20 @@ end
 local keep, report = {}, {}
 local ok, err = pcall(function()
 	for _, r in ROOTS do keep[folderAt(r, true)] = true end
-	for _, f in FILES do
-		local src = H:GetAsync(BASE .. f[1], true)
+	-- téléchargements en parallèle (un appel séquentiel par fichier dépasserait le délai de l'outil)
+	local srcs, pending, failed = {}, #FILES, nil
+	for i, f in FILES do
+		task.spawn(function()
+			local okGet, body = pcall(H.GetAsync, H, BASE .. f[1], true)
+			if okGet then srcs[i] = body else failed = f[1] .. " : " .. tostring(body) end
+			pending -= 1
+		end)
+	end
+	local deadline = os.clock() + 45
+	while pending > 0 and os.clock() < deadline do task.wait(0.05) end
+	assert(pending == 0 and not failed, "téléchargement incomplet : " .. tostring(failed or (pending .. " restants")))
+	for i, f in FILES do
+		local src = srcs[i]
 		local parent = folderAt(f[2], true)
 		local inst = parent:FindFirstChild(f[3])
 		if inst and inst.ClassName ~= f[4] then inst:Destroy() inst = nil end
