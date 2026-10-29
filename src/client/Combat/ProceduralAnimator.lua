@@ -29,7 +29,7 @@ export type PlayOpts = {
 
 type Joint = {
 	Name: string,
-	Motor: Motor6D,
+	Motor: any, -- Motor6D, ou AnimationConstraint (nouvelles articulations d'avatar) : tous deux ont Transform
 	Rot: CFrame?, -- rotation de C0 (R6) : les poses sont converties dans le repère du moteur
 	InvRot: CFrame?,
 	Last: CFrame,
@@ -102,16 +102,29 @@ local globalScaleUntil = 0
 --------------------------------------------------------------------------------
 -- Rig
 
-local function findMotor(model: Model, partName: string, motorName: string): Motor6D?
+-- Articulation pilotable : Motor6D classique, ou AnimationConstraint (mise à niveau des articulations
+-- d'avatar de Roblox, qui remplace les Motor6D des personnages). Les deux exposent `Transform`.
+local function findMotor(model: Model, partName: string, motorName: string): Instance?
 	local part = model:FindFirstChild(partName)
 	if not part then
 		return nil
 	end
 	local m = part:FindFirstChild(motorName)
-	if m and m:IsA("Motor6D") then
+	if m and (m:IsA("Motor6D") or m:IsA("AnimationConstraint")) then
 		return m
 	end
 	return nil
+end
+
+-- Orientation du repère de l'articulation (C0 du Motor6D, ou Attachment0 de l'AnimationConstraint).
+local function jointFrameRotation(motor: Instance): CFrame
+	if motor:IsA("Motor6D") then
+		return motor.C0.Rotation
+	elseif motor:IsA("AnimationConstraint") then
+		local att = motor.Attachment0
+		return if att then att.CFrame.Rotation else CFrame.identity
+	end
+	return CFrame.identity
 end
 
 local function removeRig(model: Model)
@@ -139,7 +152,7 @@ local function buildJoints(model: Model): { Joint }
 	for name, spec in map do
 		local motor = findMotor(model, spec[1], spec[2])
 		if motor then
-			local rot = motor.C0.Rotation
+			local rot = jointFrameRotation(motor)
 			local trivial = rot:FuzzyEq(CFrame.identity, 1e-3)
 			table.insert(out, {
 				Name = name,
