@@ -6,7 +6,8 @@
 	  - son décor (Theme → MapBuilder), ses matériaux de terrain (Ground / Trail / Cliff + couleur du Ground) ;
 	  - son ambiance client (Mood → EnvironmentController, Particles → AmbienceController) ;
 	  - son gardien Alpha (nom, vitesse, rayons, apparence Guardian → GuardianRenderer) ;
-	  - sa porte : Vitesse (stat HUD) + argent requis (GateService).
+	  - plus de porte : les 15 zones sont contiguës ; GateSpeed ne sert plus qu'à calibrer la difficulté
+	    (vitesse du gardien, poids des serpents).
 
 	Courbes (documentées, ne pas casser sans raison) :
 	  GateSpeed(b)  = 25 × 1.75^(b-2)          (b ≥ 2)

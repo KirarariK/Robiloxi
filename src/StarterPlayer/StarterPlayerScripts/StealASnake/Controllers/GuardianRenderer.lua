@@ -45,6 +45,27 @@ type Visual = {
 	Phase: number,
 	LastBite: number,
 	Raise: number,
+	-- corps voxel Blender (GuardianKit_<n>)
+	Kit: boolean,
+	Feature: string,
+	Rings: { Piece },
+	Attach: { Piece },
+	Ground: number,
+	LastState: string,
+	FxAcc: number,
+	HeadLight: PointLight?,
+	Dust: ParticleEmitter?,
+}
+
+type Piece = {
+	Parts: { BasePart },
+	Offsets: { CFrame },
+	Scale: number,
+	Ring: number, -- anneau porteur (pièces attachées)
+	Kind: string, -- Ring | Tail | Wing | Hood | Fin
+	Side: number,
+	Base: CFrame, -- position relative à l'anneau porteur
+	Neon: { BasePart },
 }
 
 local visuals: { [Model]: Visual } = {}
@@ -227,6 +248,172 @@ local function segmentLook(pal: Palette, i: number, n: number): (Color3, Enum.Ma
 	return if accent then pal.Accent else pal.Body, if pal.Neon and accent then Enum.Material.Neon else Enum.Material.SmoothPlastic, 0
 end
 
+--[[ ───────────── Corps voxel (kit Blender) ───────────── ]]
+local KIT_RINGS = 16
+local KIT_SPACING = 2.3 -- × échelle : les anneaux (3,5 de long) se chevauchent
+
+local function kitTemplate(order: number): Model?
+	local root = ReplicatedStorage:FindFirstChild("StealASnake")
+	local assets = root and root:FindFirstChild("Assets")
+	local models = assets and assets:FindFirstChild("Models")
+	local kit = models and models:FindFirstChild("GuardianKit_" .. order)
+	return if kit and kit:IsA("Model") then kit else nil
+end
+
+local function clonePiece(tpl: Model, scale: number, folder: Instance, kind: string, ring: number, base: CFrame): Piece
+	local m = tpl:Clone()
+	m:ScaleTo(m:GetScale() * scale)
+	m:PivotTo(CFrame.new())
+	local parts, offsets, neon = {}, {}, {}
+	for _, d in m:GetChildren() do
+		if d:IsA("BasePart") then
+			table.insert(parts, d)
+			table.insert(offsets, d.CFrame)
+			if d.Material == Enum.Material.Neon then
+				table.insert(neon, d)
+			end
+			d.Parent = folder
+		end
+	end
+	m:Destroy()
+	return {
+		Parts = parts,
+		Offsets = offsets,
+		Scale = scale,
+		Ring = ring,
+		Kind = kind,
+		Side = (tpl:GetAttribute("Side") :: number?) or 1,
+		Base = base,
+		Neon = neon,
+	}
+end
+
+-- Effets de zone portés par le corps (particules douces, budget faible)
+local FX: { [string]: { Texture: string, Color: Color3, Color2: Color3?, Rate: number, Speed: number, Size: number, Life: number, Light: boolean? } } = {
+	Crest = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(140, 230, 90), Rate = 3, Speed = 2, Size = 0.6, Life = 1.6 },
+	Hood = { Texture = "rbxasset://textures/particles/smoke_main.dds", Color = Color3.fromRGB(230, 200, 140), Rate = 4, Speed = 1, Size = 2.4, Life = 1.4 },
+	Toxic = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(150, 70, 200), Color2 = Color3.fromRGB(150, 255, 60), Rate = 5, Speed = 3, Size = 0.8, Life = 1.2, Light = true },
+	Frost = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(220, 245, 255), Rate = 6, Speed = 2, Size = 0.7, Life = 2, Light = true },
+	Mane = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 120, 120), Color2 = Color3.fromRGB(255, 220, 80), Rate = 3, Speed = 2, Size = 0.7, Life = 1.6 },
+	Rattle = { Texture = "rbxasset://textures/particles/smoke_main.dds", Color = Color3.fromRGB(200, 140, 90), Rate = 4, Speed = 1, Size = 2.4, Life = 1.4 },
+	Spores = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 120, 200), Color2 = Color3.fromRGB(120, 255, 200), Rate = 7, Speed = 1.5, Size = 0.9, Life = 2.6, Light = true },
+	Fins = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(200, 240, 255), Rate = 5, Speed = 3, Size = 0.6, Life = 1.8 },
+	Fire = { Texture = "rbxasset://textures/particles/fire_main.dds", Color = Color3.fromRGB(255, 160, 40), Color2 = Color3.fromRGB(255, 60, 10), Rate = 10, Speed = 4, Size = 1.4, Life = 0.9, Light = true },
+	Crystal = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(230, 160, 255), Color2 = Color3.fromRGB(140, 230, 255), Rate = 6, Speed = 2, Size = 0.8, Life = 1.5, Light = true },
+	Ghost = { Texture = "rbxasset://textures/particles/smoke_main.dds", Color = Color3.fromRGB(140, 255, 200), Rate = 5, Speed = 1.5, Size = 2.2, Life = 2, Light = true },
+	Feathers = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 220, 80), Color2 = Color3.fromRGB(230, 60, 60), Rate = 4, Speed = 2, Size = 0.8, Life = 1.8 },
+	Radioactive = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(190, 255, 40), Rate = 8, Speed = 3, Size = 0.9, Life = 1.2, Light = true },
+	Wings = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(255, 230, 140), Color2 = Color3.fromRGB(255, 255, 255), Rate = 6, Speed = 1.5, Size = 0.9, Life = 2, Light = true },
+	Rainbow = { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = Color3.fromRGB(170, 110, 255), Color2 = Color3.fromRGB(120, 255, 255), Rate = 8, Speed = 2, Size = 1, Life = 2.2, Light = true },
+}
+
+local function addFx(part: BasePart, f: string, s: number, rateMult: number)
+	local fx = FX[f]
+	if not fx then
+		return
+	end
+	local a = Instance.new("Attachment")
+	a.Parent = part
+	local e = Instance.new("ParticleEmitter")
+	e.Texture = fx.Texture
+	e.Color = if fx.Color2 then ColorSequence.new(fx.Color, fx.Color2) else ColorSequence.new(fx.Color)
+	e.LightEmission = if fx.Light then 0.8 else 0.1
+	e.Rate = fx.Rate * rateMult
+	e.Speed = NumberRange.new(fx.Speed * 0.5, fx.Speed)
+	e.SpreadAngle = Vector2.new(180, 180)
+	e.Lifetime = NumberRange.new(fx.Life * 0.6, fx.Life)
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, fx.Size * s), NumberSequenceKeypoint.new(1, 0) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+	e.Acceleration = if f == "Fire" or f == "Ghost" or f == "Spores" then Vector3.new(0, 3, 0) else Vector3.new(0, -1, 0)
+	e.Parent = a
+	if f == "Fire" then
+		local fire = Instance.new("Fire")
+		fire.Size = 3 * s
+		fire.Heat = 6
+		fire.Color = fx.Color
+		fire.SecondaryColor = fx.Color2 or fx.Color
+		fire.Parent = part
+	end
+end
+
+local function buildKitBody(v: any, kit: Model, folder: Folder, s: number, f: string)
+	local rings: { Piece } = {}
+	local body = kit:FindFirstChild("Body") :: Model
+	local alt = (kit:FindFirstChild("BodyAlt") or body) :: Model
+	for i = 1, KIT_RINGS do
+		local t = (i - 1) / (KIT_RINGS - 1)
+		local rs = s * (1.05 - 0.55 * t ^ 1.25)
+		local tpl = if i % 3 == 0 then alt else body
+		table.insert(rings, clonePiece(tpl, rs, folder, "Ring", i, CFrame.new()))
+	end
+	local attach: { Piece } = {}
+	local tail = kit:FindFirstChild("Tail")
+	if tail and tail:IsA("Model") then
+		local last = rings[#rings]
+		table.insert(attach, clonePiece(tail, last.Scale, folder, "Tail", #rings, CFrame.new(0, 0, 1.2 * last.Scale)))
+	end
+	for _, c in kit:GetChildren() do
+		if c:IsA("Model") then
+			local kind = if string.find(c.Name, "^Wing") then "Wing" elseif string.find(c.Name, "^Hood") then "Hood" elseif string.find(c.Name, "^Fin") then "Fin" else nil
+			if kind then
+				local side = (c:GetAttribute("Side") :: number?) or 1
+				local ringIdx = if kind == "Hood" then 1 elseif kind == "Wing" then 3 else 4
+				local r = rings[ringIdx]
+				local base = if kind == "Hood" then CFrame.new(side * 0.9 * r.Scale, 0.3 * r.Scale, -0.6 * r.Scale)
+					elseif kind == "Wing" then CFrame.new(side * 1.4 * r.Scale, 1.2 * r.Scale, 0)
+					else CFrame.new(side * 1.8 * r.Scale, -0.2 * r.Scale, 0)
+				local pc = clonePiece(c, if kind == "Wing" then r.Scale * 1.25 else r.Scale, folder, kind, ringIdx, base)
+				pc.Side = side
+				table.insert(attach, pc)
+			end
+		end
+	end
+	-- effets portés : quelques anneaux + queue
+	for _, idx in { 2, 7, 12 } do
+		local r = rings[idx]
+		if r and r.Parts[1] then
+			addFx(r.Parts[1], f, s, if idx == 2 then 1 else 0.6)
+		end
+	end
+	-- poussière au sol pendant la poursuite
+	local dustA = Instance.new("Attachment")
+	dustA.Parent = rings[5].Parts[1]
+	local dust = Instance.new("ParticleEmitter")
+	dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	dust.Color = ColorSequence.new(Color3.fromRGB(190, 170, 140))
+	dust.Rate = 0
+	dust.Speed = NumberRange.new(2, 5)
+	dust.SpreadAngle = Vector2.new(70, 20)
+	dust.Lifetime = NumberRange.new(0.6, 1.1)
+	dust.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.5 * s), NumberSequenceKeypoint.new(1, 4 * s) })
+	dust.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 1) })
+	dust.Parent = dustA
+	v.Rings = rings
+	v.Attach = attach
+	v.Dust = dust
+end
+
+-- Onde de choc au début d'une poursuite (rugissement visuel)
+local function roarRing(pos: Vector3, color: Color3, s: number)
+	local ring = Instance.new("Part")
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = color
+	ring.Transparency = 0.3
+	ring.Size = Vector3.new(0.3, 4 * s, 4 * s)
+	ring.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Parent = getContainer()
+	local TweenService = game:GetService("TweenService")
+	TweenService:Create(ring, TweenInfo.new(0.7, Enum.EasingStyle.Quad), { Size = Vector3.new(0.3, 46 * s, 46 * s), Transparency = 1 }):Play()
+	task.delay(0.75, function()
+		ring:Destroy()
+	end)
+end
+
 local function build(model: Model)
 	local root = model:WaitForChild("Root", 5)
 	if not root or not root:IsA("BasePart") then
@@ -308,9 +495,14 @@ local function build(model: Model)
 	-- jaw relatif au crâne (pour l'ouvrir autour de la charnière)
 	local jawBase: CFrame? = if jaw then primary.CFrame:ToObjectSpace(jaw.CFrame) else nil
 
-	-- Anneaux du corps (de plus en plus fins vers la queue)
+	-- Corps : kit voxel Blender si présent, sinon anneaux en Parts
+	local kitTpl = kitTemplate(order)
+	local kitData: any = {}
+	if kitTpl then
+		buildKitBody(kitData, kitTpl, folder, s, pal.Feature)
+	end
 	local segments: { BasePart } = {}
-	for i = 1, SEGMENTS do
+	for i = 1, if kitTpl then 0 else SEGMENTS do
 		local t = i / SEGMENTS
 		local r = (3.6 - 2.6 * t ^ 1.3) * s
 		local color, material, transparency = segmentLook(pal, i, SEGMENTS)
@@ -353,6 +545,15 @@ local function build(model: Model)
 	for i = 0, SEGMENTS + 2 do
 		table.insert(trail, start + Vector3.new(0, 0, i * SPACING * s))
 	end
+	local headLight: PointLight? = primary:FindFirstChildOfClass("PointLight")
+	if not headLight then
+		local l = Instance.new("PointLight")
+		l.Color = pal.Eye
+		l.Range = 14 * s
+		l.Brightness = 1
+		l.Parent = primary
+		headLight = l
+	end
 
 	visuals[model] = {
 		Model = model,
@@ -370,6 +571,15 @@ local function build(model: Model)
 		Phase = math.random() * 10,
 		LastBite = (model:GetAttribute("BiteAt") :: number?) or 0,
 		Raise = 0,
+		Kit = kitTpl ~= nil,
+		Feature = pal.Feature,
+		Rings = kitData.Rings or {},
+		Attach = kitData.Attach or {},
+		Ground = root.Position.Y - 3,
+		LastState = "PATROL",
+		FxAcc = 0,
+		HeadLight = headLight,
+		Dust = kitData.Dust,
 	}
 end
 
@@ -459,6 +669,9 @@ local function step(v: Visual, dt: number, now: number)
 	end
 
 	local headPos = v.HeadPos + v.HeadLook * lunge * s + Vector3.new(0, v.Raise * s + 1.5 * s, 0)
+	if v.Kit then
+		headPos = Vector3.new(headPos.X, v.Ground + (2.6 + v.Raise) * s, headPos.Z)
+	end
 	local sway = math.sin(v.Phase * 1.2) * 0.12
 	local headCf = CFrame.lookAt(headPos, headPos + v.HeadLook) * CFrame.Angles(0, sway, 0)
 	v.Head:PivotTo(headCf)
@@ -466,6 +679,91 @@ local function step(v: Visual, dt: number, now: number)
 		-- charnière à l'arrière de la mâchoire
 		local hinge = CFrame.new(0, 0, (v.Jaw.Size.Z * 0.45))
 		v.Jaw.CFrame = v.HeadPrimary.CFrame * v.JawBase * hinge * CFrame.Angles(math.rad(-38 * jawOpen), 0, 0) * hinge:Inverse()
+	end
+
+	-- Corps voxel (kit Blender) : anneaux qui suivent la trace + pièces animées, déplacés en un seul BulkMoveTo
+	if v.Kit then
+		local chase = state == "CHASE" or state == "ATTACK"
+		if chase and v.LastState ~= "CHASE" and v.LastState ~= "ATTACK" then
+			roarRing(Vector3.new(headPos.X, v.Ground + 0.4, headPos.Z), if v.HeadLight then v.HeadLight.Color else Color3.new(1, 0.3, 0.3), s)
+		end
+		v.LastState = state :: string
+		local av = v :: any
+		av.HoodOpen = (av.HoodOpen or 0) + ((if chase then 1 else 0) - (av.HoodOpen or 0)) * (1 - math.exp(-6 * dt))
+		local kamp = math.clamp(speed / 20, 0.15, 1) * 1.3 * s
+		local parts: { BasePart } = {}
+		local cfs: { CFrame } = {}
+		local ringCf: { CFrame } = {}
+		local prevPos = headPos
+		for i, r in v.Rings do
+			local d = (i - 0.3) * KIT_SPACING * s
+			local p, back = sampleTrail(v.Trail, d)
+			local lateral = back:Cross(Vector3.yAxis)
+			local wave = math.sin(v.Phase * 2.2 - i * 0.7) * kamp * math.clamp(i / 3, 0.2, 1)
+			local neckLift = math.max(0, 1 - i / 4) * (v.Raise + 0.8) * s
+			local breathe = math.sin(now * 2 + i * 0.5) * 0.06 * r.Scale
+			local pos = Vector3.new(p.X, v.Ground + 1.76 * r.Scale + neckLift + breathe, p.Z) + lateral * wave
+			local dir = prevPos - pos
+			local cf = if dir.Magnitude > 1e-3 then CFrame.lookAt(pos, prevPos) else CFrame.new(pos)
+			ringCf[i] = cf
+			prevPos = pos
+			for k, part in r.Parts do
+				table.insert(parts, part)
+				table.insert(cfs, cf * r.Offsets[k])
+			end
+		end
+		for _, a in v.Attach do
+			local rc = ringCf[a.Ring]
+			if rc then
+				local anim = CFrame.identity
+				if a.Kind == "Tail" then
+					local shake = if v.Feature == "Rattle" then (if chase then 0.35 else 0.12) else 0.15
+					anim = CFrame.Angles(0, math.sin(now * (if chase and v.Feature == "Rattle" then 22 else 2.5)) * shake, 0)
+				elseif a.Kind == "Wing" then
+					local amp = if chase then 34 else 20
+					local freq = if chase then 9 else 2.6
+					anim = CFrame.Angles(0, 0, a.Side * math.rad(12 + math.sin(now * freq) * amp))
+				elseif a.Kind == "Hood" then
+					local k = av.HoodOpen
+					anim = CFrame.Angles(0, -a.Side * math.rad(80) * (1 - k), 0) * CFrame.Angles(0, 0, a.Side * math.rad(10 * k))
+				elseif a.Kind == "Fin" then
+					anim = CFrame.Angles(0, 0, a.Side * math.sin(now * 4 + a.Side) * 0.45)
+				end
+				local cf = rc * a.Base * anim
+				for k, part in a.Parts do
+					table.insert(parts, part)
+					table.insert(cfs, cf * a.Offsets[k])
+				end
+			end
+		end
+		Workspace:BulkMoveTo(parts, cfs, Enum.BulkMoveMode.FireCFrameChanged)
+		-- effets : lueur des yeux qui pulse en chasse, poussière au sol, néons arc-en-ciel
+		if v.HeadLight then
+			v.HeadLight.Brightness = if chase then 2.5 + math.sin(now * 10) else 0.8 + math.sin(now * 2) * 0.2
+		end
+		if v.Dust then
+			v.Dust.Rate = if chase and speed > 4 then 26 else 0
+		end
+		v.FxAcc += dt
+		if v.FxAcc > 0.08 then
+			v.FxAcc = 0
+			if v.Feature == "Rainbow" then
+				for i, r in v.Rings do
+					for _, n in r.Neon do
+						n.Color = Color3.fromHSV((now * 0.15 + i / #v.Rings) % 1, 0.7, 1)
+					end
+				end
+			elseif v.Feature == "Ghost" then
+				for i, r in v.Rings do
+					for _, part in r.Parts do
+						if part.Material == Enum.Material.Glass then
+							part.Transparency = 0.35 + math.sin(now * 3 + i * 0.6) * 0.2
+						end
+					end
+				end
+			end
+		end
+		return
 	end
 
 	-- Corps : suit la trace, ondule latéralement (plus fort quand il avance), le cou remonte vers la tête

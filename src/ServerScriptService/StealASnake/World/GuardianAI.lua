@@ -7,9 +7,12 @@
 	est rendu côté client par GuardianRenderer → réseau léger et animation fluide.
 
 	Règles :
-	  - aggro si un joueur entre dans le rayon (×1.35 s'il porte un serpent) et n'est pas en zone sûre ;
-	  - l'intérieur d'un biome n'est jamais sûr (l'allée est coupée à la frontière) ;
-	  - morsure = lâcher le serpent + projection + mort ; immunité de 4 s ensuite.
+	  - le gardien vit DANS son nid (il s'enroule autour) ;
+	  - aggro si un joueur entre dans le rayon du nid (×1.35 s'il porte un serpent) ;
+	  - une fois lancé, il poursuit le joueur À TRAVERS TOUTES LES ZONES jusqu'au début de la zone 1
+	    (seul le hub est sûr), même depuis la zone 15 ;
+	  - morsure = lâcher le serpent + projection vers le hub (pas de mort) ; immunité de 4 s ensuite ;
+	  - cible perdue → retour au nid (plus rapide que la patrouille).
 ]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -85,45 +88,16 @@ Players.PlayerRemoving:Connect(function(player)
 	immuneUntil[player.UserId] = nil
 end)
 
-local function insideBox(part: BasePart, pos: Vector3): boolean
-	local rel = part.CFrame:PointToObjectSpace(pos)
-	return math.abs(rel.X) <= part.Size.X * 0.5 and math.abs(rel.Z) <= part.Size.Z * 0.5
-end
-
--- Vrai si la position est à l'intérieur d'un biome (zone d'aggro) : jamais sûre, même sur l'allée.
-local function inAnyBiome(pos: Vector3): boolean
-	local biomes = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Biomes")
-	if not biomes then
-		return false
-	end
-	for _, b in biomes:GetChildren() do
-		local boundary = b:FindFirstChild("BiomeBoundary")
-		if boundary and boundary:IsA("BasePart") and insideBox(boundary, pos) then
-			return true
-		end
-	end
-	return false
-end
+-- Seul le hub est sûr : tout ce qui est au-delà du début de la zone 1 est terrain de chasse.
+local ZONE1_FRONT = BiomesConfig[1].Center.Z + BiomesConfig[1].Size.Z / 2
+local SAFE_MARGIN = 2
 
 local function inSafeZone(pos: Vector3): boolean
-	if inAnyBiome(pos) then
-		return false
-	end
-	local safe = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("SafeZone")
-	if not safe then
-		return false
-	end
-	for _, name in { "SafePath", "HubFloor" } do
-		local p = safe:FindFirstChild(name)
-		if p and p:IsA("BasePart") then
-			local rel = p.CFrame:PointToObjectSpace(pos)
-			if math.abs(rel.X) < p.Size.X * 0.55 and math.abs(rel.Z) < p.Size.Z * 0.55 and math.abs(rel.Y) < 40 then
-				return true
-			end
-		end
-	end
-	return false
+	return pos.Z > ZONE1_FRONT + SAFE_MARGIN
 end
+
+local IDLE_RADIUS = 13 -- s'enroule autour du nid (les serpents apparaissent au centre, r ≤ 7)
+local RETURN_SPEED_MULT = 1.5
 
 local function nearestThreat(cfg: any, home: Vector3): Player?
 	local best: Player? = nil
@@ -237,7 +211,21 @@ function GuardianAI.start()
 					setState(g, "RETURN")
 				end
 			else
-				local threat = nearestThreat(g.Cfg, g.Home)
+				-- poursuite tenace : on garde la cible tant qu'elle n'est pas rentrée au hub
+				local threat = g.Target
+				if threat then
+					local char = threat.Character
+					local hrp = char and char:FindFirstChild("HumanoidRootPart")
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					local imm = immuneUntil[threat.UserId]
+					if not threat.Parent or not hrp or not hrp:IsA("BasePart") or not hum or hum.Health <= 0
+						or inSafeZone(hrp.Position) or MonetizationService.hasShield(threat) or (imm and now < imm) then
+						threat = nil
+					end
+				end
+				if not threat then
+					threat = nearestThreat(g.Cfg, g.Home)
+				end
 				if threat then
 					local isNew = g.Target ~= threat
 					g.Target = threat
@@ -261,7 +249,7 @@ function GuardianAI.start()
 				local hrp = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
 				if hrp and hrp:IsA("BasePart") and not inSafeZone(hrp.Position) then
 					local flat = Vector3.new(hrp.Position.X - g.Pos.X, 0, hrp.Position.Z - g.Pos.Z)
-					sendAggro(target, true, 1 - math.clamp(flat.Magnitude / g.Cfg.AggroRadius, 0, 1))
+					sendAggro(target, true, math.max(0.35, 1 - math.clamp(flat.Magnitude / g.Cfg.AggroRadius, 0, 1)))
 					moveToward(g, hrp.Position, g.Cfg.GuardianSpeed, dt)
 					if flat.Magnitude <= g.Cfg.AttackRadius then
 						-- ATTACK : anticipation puis impact
@@ -285,12 +273,16 @@ function GuardianAI.start()
 					g.Target = nil
 					setState(g, "RETURN")
 				end
-			elseif g.State == "RETURN" or g.State == "PATROL" then
-				local orbit = g.Home + Vector3.new(math.sin(t * 0.35 + g.Cfg.Order) * 16, 0, math.cos(t * 0.35 + g.Cfg.Order) * 16)
-				moveToward(g, orbit, g.Cfg.GuardianSpeed * 0.4, dt)
-				if g.State == "RETURN" and (g.Pos - g.Home).Magnitude < 20 then
+			elseif g.State == "RETURN" then
+				moveToward(g, g.Home + Vector3.new(0, 0, IDLE_RADIUS), g.Cfg.GuardianSpeed * RETURN_SPEED_MULT, dt)
+				if (g.Pos - g.Home).Magnitude < IDLE_RADIUS + 4 then
 					setState(g, "PATROL")
 				end
+			elseif g.State == "PATROL" then
+				-- enroulé autour du nid : tour lent
+				local a = t * 0.3 + g.Cfg.Order
+				local orbit = g.Home + Vector3.new(math.sin(a) * IDLE_RADIUS, 0, math.cos(a) * IDLE_RADIUS)
+				moveToward(g, orbit, g.Cfg.GuardianSpeed * 0.3, dt)
 			else
 				g.Model:SetAttribute("Speed", 0)
 			end

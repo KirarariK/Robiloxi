@@ -12,7 +12,7 @@
 	  Map/SafeZone/SafePath (Part invisible : zone sûre) · Map/SafeZone/HubFloor
 	  Map/Plots/Plot_N/{PlotPad, OwnerSign(SurfaceGui.OwnerLabel), DropZone, CollectPad(CashBillboard.Amount),
 	                   TreadmillSpot, FusionMachine, RebirthShrine, Vivariums/Slot_1..20, PlotSpawn}
-	  Map/Biomes/<Id>/{Floor, BiomeBoundary, Nest/SpawnPoints/SP_n, GuardianSpawn, BiomeGate (Order > 1)}
+	  Map/Biomes/<Id>/{Floor, BiomeBoundary, Nest/SpawnPoints/SP_n, GuardianSpawn (au centre du nid)} — zones contiguës, sans portes
 
 	Les modèles 3D décoratifs sont pris dans ReplicatedStorage.StealASnake.Assets.Models
 	(JungleTree, PalmTree, Cactus, SwampTree, Mushrooms, LavaSpire, CosmicCrystal, SkullGate, Nest,
@@ -38,6 +38,8 @@ local HUB_Z_MIN = -15 -- mur avant de l'arène (sortie vers la route)
 local HUB_HALF_X = 280
 local LAST_BIOME = BiomesConfig[#BiomesConfig]
 local WORLD_Z_MIN = LAST_BIOME.Center.Z - LAST_BIOME.Size.Z / 2 - 30
+local ZONE1_FRONT = BiomesConfig[1].Center.Z + BiomesConfig[1].Size.Z / 2 -- début de la zone 1 = fin de la zone sûre
+local SPACING_GAP = if #BiomesConfig > 1 then (BiomesConfig[1].Center.Z - BiomesConfig[2].Center.Z) - BiomesConfig[1].Size.Z else 0 -- couloir entre deux zones (comblé)
 local CANYON_HALF_X = BiomesConfig[1].Size.X / 2 -- bord des zones
 local WALL_H = 60 -- murs visibles
 local BARRIER_H = 300 -- barrières invisibles (anti-sortie de map)
@@ -1272,14 +1274,22 @@ local function buildBiome(parent: Folder, cfg: any)
 	local center = Vector3.new(cfg.Center.X, GROUND_Y, cfg.Center.Z)
 	local half = cfg.Size.X / 2
 
+	-- Zones CONTIGUËS (plus de portes ni de murs entre elles) : chaque zone s'étend jusqu'à mi-chemin
+	-- de ses voisines ; seule l'entrée de la zone 1 (côté hub) et le fond de la zone 15 sont murés.
+	local gap = SPACING_GAP / 2
+	local extF = if cfg.Order > 1 then gap else 0
+	local extB = if cfg.Order < #BiomesConfig then gap else 0
+	local spanZ = cfg.Size.Z + extF + extB
+	local midZ = center.Z + (extF - extB) / 2
+
 	-- Sol du biome + sentier central
-	fill(CFrame.new(center.X, -1, center.Z), Vector3.new(cfg.Size.X, 4, cfg.Size.Z), style.Ground)
-	fill(CFrame.new(center.X, -0.6, center.Z), Vector3.new(ROAD_HALF * 2, 4, cfg.Size.Z), style.Trail)
+	fill(CFrame.new(center.X, -1, midZ), Vector3.new(cfg.Size.X, 4, spanZ), style.Ground)
+	fill(CFrame.new(center.X, -0.6, midZ), Vector3.new(ROAD_HALF * 2, 4, spanZ), style.Trail)
 
 	-- Falaises de chaque côté (décor) + murs d'enceinte avec ouvertures pour la route (anti-chute)
 	for _, sx in { -1, 1 } do
-		local z = center.Z - half
-		while z <= center.Z + half do
+		local z = center.Z - half - extB
+		while z <= center.Z + half + extF do
 			terrain:FillBall(Vector3.new(sx * (CANYON_HALF_X - 4 + rng:NextNumber(0, 6)), rng:NextNumber(2, 10), z), rng:NextNumber(10, 16), style.Cliff)
 			z += 10
 		end
@@ -1289,17 +1299,18 @@ local function buildBiome(parent: Folder, cfg: any)
 	walls.Name = "Walls"
 	walls.Parent = folder
 	local wallColor = cfg.GroundColor:Lerp(Color3.new(0, 0, 0), 0.25)
-	local zF, zB = center.Z + half, center.Z - half
+	local zF, zB = center.Z + half + extF, center.Z - half - extB
 	local xL, xR = center.X - half - 3, center.X + half + 3
+	-- murs latéraux seulement (anti-chute), continus d'une zone à l'autre
 	wall(walls, Vector3.new(xL, 0, zF), Vector3.new(xL, 0, zB), wallColor, Enum.Material.Rock)
 	wall(walls, Vector3.new(xR, 0, zF), Vector3.new(xR, 0, zB), wallColor, Enum.Material.Rock)
-	for _, zz in { zF, zB } do
-		if not (cfg.Order == #BiomesConfig and zz == zB) then
-			wall(walls, Vector3.new(xL, 0, zz), Vector3.new(-ROAD_HALF - 3, 0, zz), wallColor, Enum.Material.Rock)
-			wall(walls, Vector3.new(ROAD_HALF + 3, 0, zz), Vector3.new(xR, 0, zz), wallColor, Enum.Material.Rock)
-		else
-			wall(walls, Vector3.new(xL, 0, zz), Vector3.new(xR, 0, zz), wallColor, Enum.Material.Rock)
-		end
+	if cfg.Order == 1 then
+		-- entrée depuis le hub : ouverture sur la route
+		wall(walls, Vector3.new(xL, 0, zF), Vector3.new(-ROAD_HALF - 3, 0, zF), wallColor, Enum.Material.Rock)
+		wall(walls, Vector3.new(ROAD_HALF + 3, 0, zF), Vector3.new(xR, 0, zF), wallColor, Enum.Material.Rock)
+	end
+	if cfg.Order == #BiomesConfig then
+		wall(walls, Vector3.new(xL, 0, zB), Vector3.new(xR, 0, zB), wallColor, Enum.Material.Rock)
 	end
 
 	-- Marqueurs logiques
@@ -1369,7 +1380,7 @@ local function buildBiome(parent: Folder, cfg: any)
 	part({
 		Name = "GuardianSpawn",
 		Size = Vector3.new(2, 2, 2),
-		CFrame = CFrame.new(center + Vector3.new(0, 3, -32)),
+		CFrame = CFrame.new(center + Vector3.new(0, 3, 0)), -- le gardien vit DANS le nid
 		Transparency = 1,
 		CanCollide = false,
 		CanQuery = false,
@@ -1382,11 +1393,6 @@ local function buildBiome(parent: Folder, cfg: any)
 	local gateDeco = Instance.new("Folder")
 	gateDeco.Name = "Entrance"
 	gateDeco.Parent = folder
-	if not placeTemplate("SkullGate", gateDeco, Vector3.new(0, GROUND_Y, entranceZ + 2), 1.35, 0, false) then
-		for _, x in { -16, 16 } do
-			deco({ Name = "Fang", Size = Vector3.new(4, 20, 4), CFrame = CFrame.new(x, 10, entranceZ + 2) * CFrame.Angles(0, 0, math.rad(x > 0 and 8 or -8)), Color = Color3.fromRGB(235, 228, 210), Parent = gateDeco, CanCollide = true })
-		end
-	end
 	local banner = deco({
 		Name = "BiomeBanner",
 		Size = Vector3.new(30, 5, 0.5),
@@ -1415,7 +1421,7 @@ local function buildBiome(parent: Folder, cfg: any)
 	req.Size = UDim2.fromScale(1, 0.38)
 	req.Position = UDim2.fromScale(0, 0.62)
 	req.BackgroundTransparency = 1
-	req.Text = if cfg.Order > 1 then string.format("⚡ %d Vitesse  ·  💵 $%s", cfg.GateSpeed, tostring(cfg.GateCash)) else "⚠️ Gardien : " .. cfg.GuardianName
+	req.Text = "⚠️ Gardien : " .. cfg.GuardianName
 	req.TextScaled = true
 	req.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
 	req.TextColor3 = Color3.fromRGB(255, 220, 120)
@@ -1425,25 +1431,9 @@ local function buildBiome(parent: Folder, cfg: any)
 	rs.Color = Color3.fromRGB(20, 20, 30)
 	rs.Parent = req
 
-	if cfg.Order > 1 then
-		local gate = part({
-			Name = "BiomeGate",
-			Size = Vector3.new(ROAD_HALF * 2 + 4, 18, 2),
-			CFrame = CFrame.new(0, GROUND_Y + 9, entranceZ + 2),
-			Color = Color3.fromRGB(120, 200, 255),
-			Material = Enum.Material.ForceField,
-			Parent = folder,
-		})
-		gate:SetAttribute("RequiredSpeed", cfg.GateSpeed)
-		gate:SetAttribute("RequiredCash", cfg.GateCash)
-		gate:SetAttribute("Order", cfg.Order)
-		-- déblocage PAR JOUEUR : le serveur repousse les joueurs non qualifiés (GateService),
-		-- le client affiche la porte ouverte/fermée selon son propre MaxBiome (AmbienceController)
-		gate.CanCollide = false
-	end
 
 	-- Ligne de sécurité visible au sol (sortie du biome = zone sûre)
-	for _, z in { entranceZ + 8, center.Z - half - 8 } do
+	for _, z in (if cfg.Order == 1 then { entranceZ + 8 } else {}) :: { number } do
 		deco({
 			Name = "SafeLine",
 			Size = Vector3.new(ROAD_HALF * 2, 0.15, 1.2),
@@ -1468,11 +1458,8 @@ local function buildRoadLamps(safe: Folder)
 	-- tronçons de route hors zones
 	local segments: { { number } } = {}
 	local zTop = HUB_Z_MIN
-	for _, cfg in BiomesConfig do
-		local front = cfg.Center.Z + cfg.Size.Z / 2
-		table.insert(segments, { zTop, front })
-		zTop = cfg.Center.Z - cfg.Size.Z / 2
-	end
+	local first = BiomesConfig[1]
+	table.insert(segments, { zTop, first.Center.Z + first.Size.Z / 2 })
 	for _, seg in segments do
 		for _, x in { -(ROAD_HALF + 3), ROAD_HALF + 3 } do
 			local v = wall(safe, Vector3.new(x, 0, seg[1]), Vector3.new(x, 0, seg[2]), hedge, Enum.Material.Grass, 4)
@@ -1515,8 +1502,8 @@ function MapBuilder.build()
 	-- Zone sûre logique (route entière ; les biomes sont exclus par GuardianAI)
 	part({
 		Name = "SafePath",
-		Size = Vector3.new(ROAD_HALF * 2 + 8, 1, HUB_Z_MAX - WORLD_Z_MIN),
-		CFrame = CFrame.new(0, GROUND_Y - 0.5, (HUB_Z_MAX + WORLD_Z_MIN) / 2),
+		Size = Vector3.new(ROAD_HALF * 2 + 8, 1, HUB_Z_MAX - ZONE1_FRONT),
+		CFrame = CFrame.new(0, GROUND_Y - 0.5, (HUB_Z_MAX + ZONE1_FRONT) / 2),
 		Transparency = 1,
 		CanCollide = false,
 		CanQuery = false,
