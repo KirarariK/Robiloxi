@@ -824,7 +824,9 @@ function GuardianRenderer.start()
 		for model, v in visuals do
 			if not model.Parent or not v.Root.Parent then
 				destroy(model)
-			elseif (v.Root.Position - camPos).Magnitude < 420 then
+			elseif not (v :: any).Placed or (v.Root.Position - camPos).Magnitude < 420 then
+				-- 1re image toujours calculée : sinon les pièces d'un gardien lointain restent à l'origine (hub)
+				(v :: any).Placed = true
 				step(v, math.min(dt, 0.1), now)
 			end
 		end
