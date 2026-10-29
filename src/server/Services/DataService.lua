@@ -23,7 +23,7 @@ type Profile = Types.Profile
 local STORE_NAME = "EtherBlades_Profiles_v1"
 local SCHEMA_VERSION = 1
 local AUTOSAVE_PERIOD = 120
-local LOCK_TIMEOUT = 600 -- s : un verrou plus vieux est considéré comme abandonné (serveur planté)
+local LOCK_TIMEOUT = 360 -- s : un verrou plus vieux est considéré comme abandonné (l'autosave le rafraîchit toutes les 120 s)
 local MAX_ATTEMPTS = 5
 
 local SERVER_ID = if game.JobId ~= "" then game.JobId else ("studio-" .. HttpService:GenerateGUID(false))
@@ -38,6 +38,8 @@ type Session = {
 	Profile: Profile,
 	Dirty: boolean,
 	Released: boolean,
+	Saving: boolean, -- une écriture est en cours : les suivantes attendent leur tour
+	Releasing: boolean, -- sortie en cours (PlayerRemoving et BindToClose peuvent se croiser)
 }
 
 local DataService = {}
@@ -46,6 +48,10 @@ DataService.Priority = 0 -- démarre avant tous les autres services
 local sessions: { [Player]: Session } = {}
 local loadedEvent = Instance.new("BindableEvent")
 DataService.ProfileLoaded = loadedEvent.Event -- (player, profile)
+
+-- Fonctions appelées (dans l'ordre d'enregistrement) juste avant la sauvegarde finale d'un joueur qui part :
+-- c'est là que les autres services appliquent ce qui doit l'être (ex. défaite + pénalité d'abandon).
+local beforeRelease: { (Player, Profile) -> () } = {}
 
 -- Stockage : DataStore réel, ou mémoire en Studio sans accès API.
 local store: DataStore? = nil
@@ -186,6 +192,17 @@ local function update(userId: number, transform: (Record?) -> Record?): (boolean
 	return false, nil
 end
 
+local function deepCopy<T>(t: T): T
+	if type(t) ~= "table" then
+		return t
+	end
+	local out = {}
+	for k, v in t :: any do
+		out[k] = deepCopy(v)
+	end
+	return (out :: any) :: T
+end
+
 local function publicView(p: Profile): { [string]: any }
 	-- Copie superficielle : le client ne reçoit jamais la table serveur elle-même.
 	local view = table.clone(p :: any)
@@ -231,6 +248,15 @@ local function load(player: Player)
 		task.wait(6) -- l'autre serveur relâche généralement le verrou en quelques secondes
 	end
 	if not player.Parent then
+		-- parti pendant le chargement : libérer tout de suite le verrou posé par ce serveur
+		if profile then
+			update(userId, function(old: Record?): Record?
+				if old and old.LockServer == SERVER_ID then
+					return { Profile = old.Profile, LockServer = nil, LockTime = nil }
+				end
+				return nil
+			end)
+		end
 		return
 	end
 	if not profile then
@@ -241,22 +267,32 @@ local function load(player: Player)
 	end
 	local p = profile :: Profile
 	p.LastJoin = os.time()
-	sessions[player] = { Profile = p, Dirty = true, Released = false }
+	sessions[player] = { Profile = p, Dirty = true, Released = false, Saving = false, Releasing = false }
 	loadedEvent:Fire(player, p)
 	push(player)
 end
 
 local function save(player: Player, release: boolean): boolean
 	local s = sessions[player]
-	if not s or s.Released then
+	if not s then
+		return true
+	end
+	-- une seule écriture à la fois par session : une autosave lente ne peut pas écraser la sauvegarde finale
+	while s.Saving do
+		task.wait(0.1)
+	end
+	if s.Released then
 		return true
 	end
 	if not s.Dirty and not release then
 		return true
 	end
-	local snapshot = table.clone(s.Profile :: any)
+	s.Saving = true
+	local snapshot = deepCopy(s.Profile)
+	local stolen = false
 	local ok = update(player.UserId, function(old: Record?): Record?
 		if old and old.LockServer and old.LockServer ~= SERVER_ID then
+			stolen = true
 			return nil -- un autre serveur a pris la main : ne pas écraser ses données
 		end
 		return {
@@ -265,6 +301,12 @@ local function save(player: Player, release: boolean): boolean
 			LockTime = if release then nil else os.time(),
 		}
 	end)
+	s.Saving = false
+	if stolen then
+		warn(string.format("[EtherBlades] sauvegarde de %d abandonnée : session reprise par un autre serveur", player.UserId))
+		s.Released = true -- ce serveur ne doit plus jamais écrire ce profil
+		return false
+	end
 	if ok then
 		s.Dirty = false
 		if release then
@@ -272,6 +314,35 @@ local function save(player: Player, release: boolean): boolean
 		end
 	end
 	return ok
+end
+
+-- Sortie d'un joueur : laisse les autres handlers PlayerRemoving finir, applique les hooks, puis sauvegarde et libère.
+local function release(player: Player)
+	local current = sessions[player]
+	if current and current.Releasing then
+		-- une autre sortie est déjà en cours : attendre qu'elle se termine (BindToClose doit pouvoir patienter)
+		local deadline = os.clock() + 25
+		while sessions[player] == current and os.clock() < deadline do
+			task.wait(0.1)
+		end
+		return
+	end
+	if current then
+		current.Releasing = true
+	end
+	task.wait() -- une frame : les autres services traitent PlayerRemoving avant la copie finale
+	local s = sessions[player]
+	if s and not s.Released then
+		for _, hook in beforeRelease do
+			local ok, err = pcall(hook, player, s.Profile)
+			if not ok then
+				warn("[EtherBlades] hook avant sauvegarde : " .. tostring(err))
+			end
+			s.Dirty = true
+		end
+	end
+	save(player, true)
+	sessions[player] = nil
 end
 
 --------------------------------------------------------------------------------
@@ -285,13 +356,18 @@ end
 -- Modifie le profil via `fn` puis le pousse au client. Retourne false si le profil n'est pas chargé.
 function DataService.update(player: Player, fn: (Profile) -> ()): boolean
 	local s = sessions[player]
-	if not s then
+	if not s or s.Released then
 		return false
 	end
 	fn(s.Profile)
 	s.Dirty = true
 	push(player)
 	return true
+end
+
+-- Enregistre une fonction exécutée juste avant la sauvegarde finale d'un joueur qui quitte le serveur.
+function DataService.onBeforeRelease(fn: (Player, Profile) -> ())
+	table.insert(beforeRelease, fn)
 end
 
 function DataService.isMemoryMode(): boolean
@@ -314,14 +390,15 @@ function DataService.init()
 		task.spawn(load, p)
 	end
 	Players.PlayerRemoving:Connect(function(p)
-		save(p, true)
-		sessions[p] = nil
+		release(p)
 	end)
 	task.spawn(function()
 		while true do
 			task.wait(AUTOSAVE_PERIOD)
-			for p in sessions do
-				task.spawn(save, p, false)
+			for p, sess in sessions do
+				if not sess.Released then
+					task.spawn(save, p, false)
+				end
 			end
 		end
 	end)
@@ -330,7 +407,7 @@ function DataService.init()
 		for p in sessions do
 			pending += 1
 			task.spawn(function()
-				save(p, true)
+				release(p)
 				pending -= 1
 			end)
 		end

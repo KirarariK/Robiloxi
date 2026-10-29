@@ -86,6 +86,8 @@ function Net.init()
 	end
 	for _, n in Net.ServerEvents do
 		make("RemoteEvent", n)
+		-- récepteur vide : sans handler, Roblox mettrait en file les envois forgés par un client (mémoire)
+		(f:FindFirstChild(n) :: RemoteEvent).OnServerEvent:Connect(function() end)
 	end
 	for _, n in Net.Functions do
 		make("RemoteFunction", n)

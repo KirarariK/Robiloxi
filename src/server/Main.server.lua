@@ -51,4 +51,13 @@ for _, s in loaded do
 	end
 end
 
+-- Toute remote client → serveur déclarée doit avoir un handler (sinon les envois s'accumulent en file).
+task.delay(5, function()
+	local Guard = require(script.Parent.Services.Guard) :: any
+	local missing = Guard.missingHandlers()
+	if #missing > 0 then
+		warn("[EtherBlades] remotes sans handler : " .. table.concat(missing, ", "))
+	end
+end)
+
 print(string.format("[EtherBlades] serveur prêt (%d services)", #loaded))
