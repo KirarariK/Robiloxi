@@ -7,6 +7,7 @@ L.Kit = SS.EtherBladesAssets.Kit
 function L.hex(h: string): Color3
 	return Color3.fromRGB(tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16))
 end
+function L.col(c) if typeof(c) == "string" then return L.hex(c) end return c or Color3.new(1, 1, 1) end
 
 -- Part ancree generique. opts : Shape, Transparency, Reflectance, CanCollide, CastShadow, Name
 function L.part(parent, name, size, cf, color, mat, opts)
@@ -74,7 +75,7 @@ function L.marker(parent, name, cf, size)
 		{ Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
 end
 
--- clone d'un element du kit Blender. opts : scale, collide, color (recolore les pieces Accent), glow (couleur des neons)
+-- clone d'un element du kit Blender (collisions du kit conservees). opts : scale, collide=false, accent, tint, material, noshadow, name (recolore les pieces Accent), glow (couleur des neons)
 function L.kit(parent, kitName, cf, opts)
 	opts = opts or {}
 	local m = L.Kit:FindFirstChild(kitName)
@@ -87,9 +88,9 @@ function L.kit(parent, kitName, cf, opts)
 	for _, p in ipairs(c:GetDescendants()) do
 		if p:IsA("BasePart") then
 			p.Anchored = true
-			if opts.collide then
-				p.CanCollide = p.Material ~= Enum.Material.Neon
-				p.CanQuery = true
+			if opts.collide == false then
+				p.CanCollide = false
+				p.CanQuery = false
 			end
 			if opts.accent and p:GetAttribute("Accent") then
 				p.Color = typeof(opts.accent) == "string" and L.hex(opts.accent) or opts.accent
