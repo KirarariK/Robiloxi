@@ -257,10 +257,13 @@ function UIController.start()
 			station.SetTheme(P.Speed, "🏃", "Tapis de course")
 			-- échelle des niveaux
 			local ladder = new("Frame", { Size = UDim2.new(1, 0, 0, 64), BackgroundTransparency = 1, ZIndex = 23, Parent = body })
-			new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), Parent = ladder })
-			for i = 1, #TreadmillsConfig do
+			local n = #TreadmillsConfig
+			local small = math.min(48, math.floor((540 - 12 - (n - 1) * 6) / n))
+			new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6), Parent = ladder })
+			for i = 1, n do
 				local done = i <= lvl
-				local f = card(ladder, if i == lvl then P.Gold elseif done then P.Speed else P.Grey, { LayoutOrder = i, Size = UDim2.fromOffset(if i == lvl then 60 else 48, if i == lvl then 60 else 48), ZIndex = 23 }, 99, 3.5)
+				local px = if i == lvl then small + 12 else small
+				local f = card(ladder, if i == lvl then P.Gold elseif done then P.Speed else P.Grey, { LayoutOrder = i, Size = UDim2.fromOffset(px, px), ZIndex = 23 }, 99, 3.5)
 				title(f, tostring(i), if i == lvl then 26 else 20, { Size = UDim2.fromScale(1, 1), TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 24 })
 			end
 			tile(UDim2.fromOffset(0, 80), UDim2.new(0.5, -6, 0, 66), "⚡", "GAIN ACTUEL", string.format("+%.2f /s", cfg and cfg.SpeedPerSec or 0), P.Speed)

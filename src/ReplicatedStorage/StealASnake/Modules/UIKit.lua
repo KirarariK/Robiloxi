@@ -476,6 +476,9 @@ function UIKit.toast(msg: string, pair: { Color3 }?, icon: string?)
 	local f = toastFrame :: Frame
 	toastN += 1
 	local p = pair or UIKit.P.Gold
+	if icon and string.sub(msg, 1, #icon) == icon then
+		msg = string.gsub(string.sub(msg, #icon + 1), "^%s+", "")
+	end
 	local t = UIKit.card(f, { UIKit.darker(p[2], 0.55), UIKit.darker(p[2], 0.35) }, { LayoutOrder = toastN, Size = UDim2.fromOffset(520, 46) }, 99, 3.5)
 	;(t:FindFirstChildOfClass("UIStroke") :: UIStroke).Color = p[1]
 	local sc = new("UIScale", { Scale = 0.5, Parent = t })
