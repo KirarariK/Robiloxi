@@ -138,10 +138,23 @@ local function assetHilt(name: string): Hilt?
 	end
 	local grip = gripInst :: BasePart
 	model.PrimaryPart = grip
+	-- pièces déjà soudées dans l'asset (GetJoints ne marche pas hors Workspace)
+	local welded: { [BasePart]: boolean } = {}
+	for _, d in model:GetDescendants() do
+		if d:IsA("WeldConstraint") or d:IsA("Weld") or d:IsA("Motor6D") then
+			local j = d :: any
+			if j.Part0 then
+				welded[j.Part0] = true
+			end
+			if j.Part1 then
+				welded[j.Part1] = true
+			end
+		end
+	end
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
 			decorate(d)
-			if d ~= grip and #d:GetJoints() == 0 then
+			if d ~= grip and not welded[d] then
 				local wc = Instance.new("WeldConstraint")
 				wc.Part0 = grip
 				wc.Part1 = d
