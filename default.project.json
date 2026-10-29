@@ -1,0 +1,29 @@
+{
+  "name": "Ether Blades",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "EtherBlades": { "$path": "src/shared" }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "EtherBlades": { "$path": "src/server" }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "EtherBladesAssets": { "$className": "Folder" }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "EtherBlades": { "$path": "src/client" }
+      }
+    },
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": { "Technology": "Future" }
+    }
+  }
+}
