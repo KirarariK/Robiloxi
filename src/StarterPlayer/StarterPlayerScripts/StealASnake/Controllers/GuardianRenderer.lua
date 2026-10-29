@@ -328,8 +328,8 @@ local function addFx(part: BasePart, f: string, s: number, rateMult: number)
 	e.Parent = a
 	if f == "Fire" then
 		local fire = Instance.new("Fire")
-		fire.Size = 3 * s
-		fire.Heat = 6
+		fire.Size = 1.8 * s
+		fire.Heat = 4
 		fire.Color = fx.Color
 		fire.SecondaryColor = fx.Color2 or fx.Color
 		fire.Parent = part
@@ -670,6 +670,7 @@ local function step(v: Visual, dt: number, now: number)
 
 	local headPos = v.HeadPos + v.HeadLook * lunge * s + Vector3.new(0, v.Raise * s + 1.5 * s, 0)
 	if v.Kit then
+		v.Ground = v.HeadPos.Y - 3 -- la Root serveur suit le relief (rebord du nid / sol)
 		headPos = Vector3.new(headPos.X, v.Ground + (2.6 + v.Raise) * s, headPos.Z)
 	end
 	local sway = math.sin(v.Phase * 1.2) * 0.12
@@ -702,7 +703,7 @@ local function step(v: Visual, dt: number, now: number)
 			local wave = math.sin(v.Phase * 2.2 - i * 0.7) * kamp * math.clamp(i / 3, 0.2, 1)
 			local neckLift = math.max(0, 1 - i / 4) * (v.Raise + 0.8) * s
 			local breathe = math.sin(now * 2 + i * 0.5) * 0.06 * r.Scale
-			local pos = Vector3.new(p.X, v.Ground + 1.76 * r.Scale + neckLift + breathe, p.Z) + lateral * wave
+			local pos = Vector3.new(p.X, p.Y - 3 + 1.76 * r.Scale + neckLift + breathe, p.Z) + lateral * wave
 			local dir = prevPos - pos
 			local cf = if dir.Magnitude > 1e-3 then CFrame.lookAt(pos, prevPos) else CFrame.new(pos)
 			ringCf[i] = cf

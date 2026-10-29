@@ -34,6 +34,8 @@ type Guardian = {
 	Target: Player?,
 	Alerted: { [number]: boolean },
 	AttackUntil: number,
+	NestRadius: number,
+	RootGroundY: number, -- hauteur de la Root quand le gardien est au sol (hors du nid)
 }
 
 local GuardianAI = {}
@@ -96,7 +98,6 @@ local function inSafeZone(pos: Vector3): boolean
 	return pos.Z > ZONE1_FRONT + SAFE_MARGIN
 end
 
-local IDLE_RADIUS = 13 -- s'enroule autour du nid (les serpents apparaissent au centre, r ≤ 7)
 local RETURN_SPEED_MULT = 1.5
 
 local function nearestThreat(cfg: any, home: Vector3): Player?
@@ -146,6 +147,10 @@ local function moveToward(g: Guardian, target: Vector3, speed: number, dt: numbe
 	end
 	local stepLen = math.min(dist, speed * dt)
 	g.Pos += dir.Unit * stepLen
+	-- sur le rebord du nid → hauteur du nid ; ailleurs → au sol (transition douce)
+	local fromHome = Vector3.new(g.Pos.X - g.Home.X, 0, g.Pos.Z - g.Home.Z).Magnitude
+	local targetY = if fromHome < g.NestRadius + 2 then g.Home.Y else g.RootGroundY
+	g.Pos = Vector3.new(g.Pos.X, g.Pos.Y + (targetY - g.Pos.Y) * math.min(1, dt * 6), g.Pos.Z)
 	g.Facing = dir.Unit
 	g.Model:SetAttribute("Speed", stepLen / math.max(dt, 1e-3))
 end
@@ -197,6 +202,8 @@ function GuardianAI.start()
 			Target = nil,
 			Alerted = {},
 			AttackUntil = 0,
+			NestRadius = ((spawn:GetAttribute("NestRadius") :: number?) or 11) * 0.82,
+			RootGroundY = ((spawn:GetAttribute("GroundY") :: number?) or 1) + 3,
 		})
 	end
 
@@ -274,14 +281,14 @@ function GuardianAI.start()
 					setState(g, "RETURN")
 				end
 			elseif g.State == "RETURN" then
-				moveToward(g, g.Home + Vector3.new(0, 0, IDLE_RADIUS), g.Cfg.GuardianSpeed * RETURN_SPEED_MULT, dt)
-				if (g.Pos - g.Home).Magnitude < IDLE_RADIUS + 4 then
+				moveToward(g, g.Home + Vector3.new(0, 0, g.NestRadius), g.Cfg.GuardianSpeed * RETURN_SPEED_MULT, dt)
+				if Vector3.new(g.Pos.X - g.Home.X, 0, g.Pos.Z - g.Home.Z).Magnitude < g.NestRadius + 4 then
 					setState(g, "PATROL")
 				end
 			elseif g.State == "PATROL" then
 				-- enroulé autour du nid : tour lent
 				local a = t * 0.3 + g.Cfg.Order
-				local orbit = g.Home + Vector3.new(math.sin(a) * IDLE_RADIUS, 0, math.cos(a) * IDLE_RADIUS)
+				local orbit = g.Home + Vector3.new(math.sin(a) * g.NestRadius, 0, math.cos(a) * g.NestRadius)
 				moveToward(g, orbit, g.Cfg.GuardianSpeed * 0.3, dt)
 			else
 				g.Model:SetAttribute("Speed", 0)

@@ -1342,10 +1342,14 @@ local function buildBiome(parent: Folder, cfg: any)
 	nestFolder.Parent = folder
 	local nest = placeTemplate("Nest", nestFolder, center, 1, rng:NextNumber(0, 6.28))
 	local nestTop = GROUND_Y + 1.6
+	local nestRim = GROUND_Y + 3
+	local nestRadius = 11
 	if nest then
 		nest.Name = "NestMesh"
 		local cf, size = nest:GetBoundingBox()
 		nestTop = cf.Position.Y + size.Y * 0.5 - 1.4 -- au ras du rebord : serpents visibles de loin
+		nestRim = cf.Position.Y + size.Y * 0.5
+		nestRadius = math.max(size.X, size.Z) * 0.5
 	else
 		part({
 			Name = "NestMesh",
@@ -1377,16 +1381,19 @@ local function buildBiome(parent: Folder, cfg: any)
 		p:SetAttribute("SpawnIndex", i)
 	end
 
-	part({
+	-- Le gardien vit DANS le nid : enroulé sur le rebord (Root = sol du gardien + 3)
+	local gSpawn = part({
 		Name = "GuardianSpawn",
 		Size = Vector3.new(2, 2, 2),
-		CFrame = CFrame.new(center + Vector3.new(0, 3, 0)), -- le gardien vit DANS le nid
+		CFrame = CFrame.new(center.X, nestRim - 0.6 + 3, center.Z),
 		Transparency = 1,
 		CanCollide = false,
 		CanQuery = false,
 		CanTouch = false,
 		Parent = folder,
 	})
+	gSpawn:SetAttribute("NestRadius", nestRadius)
+	gSpawn:SetAttribute("GroundY", GROUND_Y)
 
 	-- Porte-crâne à l'entrée (côté hub)
 	local entranceZ = center.Z + half
