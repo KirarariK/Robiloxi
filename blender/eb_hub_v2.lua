@@ -162,12 +162,12 @@ function B.base()
 	t:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(104, 146, 70))
 	t:SetMaterialColor(Enum.Material.Basalt, Color3.fromRGB(70, 64, 60))
 	-- galette rocheuse sous la dalle (sommet à y = -2), terrasse nord (sommet sous le plateau à 7,7)
-	t:FillCylinder(CFrame.new(0, -5.5, -10), 7, 116, Enum.Material.Rock)
-	t:FillBlock(CFrame.new(0, 1, -112), Vector3.new(96, 10, 60), Enum.Material.Rock)
+	t:FillCylinder(CFrame.new(0, -8, 0), 7, 64, Enum.Material.Rock) -- (hauteur, rayon) : sommet à -4,5
+	t:FillBlock(CFrame.new(0, -0.5, -112), Vector3.new(96, 12, 60), Enum.Material.Rock) -- sommet à 5,5 sous le plateau
 	-- herbe uniquement en couronne autour de la place (anneau de boules)
 	for i = 0, 47 do
 		local a = i / 48 * math.pi * 2
-		t:FillBall(Vector3.new(math.cos(a) * 64, -2.2, math.sin(a) * 64 - 4), 6, Enum.Material.LeafyGrass)
+		t:FillBall(Vector3.new(math.cos(a) * 70, -6, math.sin(a) * 70), 7, Enum.Material.LeafyGrass)
 	end
 	for x = -44, 44, 8 do
 		t:FillBall(Vector3.new(x, 5.4, -138), 5, Enum.Material.LeafyGrass)
@@ -175,8 +175,8 @@ function B.base()
 	-- rochers moussus autour
 	for i = 1, 26 do
 		local a = rng:NextNumber(0, math.pi * 2)
-		local r = rng:NextNumber(PLAZA_R + 10, 104)
-		local p = Vector3.new(math.cos(a) * r, rng:NextNumber(-2, 2), math.sin(a) * r - 10)
+		local r = rng:NextNumber(PLAZA_R + 12, 86)
+		local p = Vector3.new(math.cos(a) * r, rng:NextNumber(-3, 0), math.sin(a) * r)
 		t:FillBall(p, rng:NextNumber(3, 7), if rng:NextNumber() < 0.5 then Enum.Material.Rock else Enum.Material.Slate)
 		t:FillBall(p + Vector3.new(0, 2.5, 0), rng:NextNumber(2, 4), Enum.Material.Grass)
 	end
@@ -188,7 +188,7 @@ end
 function B.plaza()
 	local f = folder(root, "Plaza")
 	-- dalle de base
-	cyl(f, "Floor", PLAZA_R * 2, 2, Vector3.new(0, -1, 0), C.MarbleWarm, Enum.Material.Limestone)
+	cyl(f, "Floor", PLAZA_R * 2, 7, Vector3.new(0, -3.5, 0), C.MarbleWarm, Enum.Material.Limestone)
 	-- anneaux concentriques en relief léger (alternance de teintes)
 	local rings = { { 60, C.Marble }, { 52, C.MarbleWarm }, { 46, C.Marble }, { 36, C.MarbleDark }, { 34, C.Marble }, { 22, C.MarbleWarm }, { 14, C.Marble } }
 	for i, r in rings do
@@ -219,7 +219,7 @@ function B.plaza()
 	for k = 0, 7 do
 		local a = math.rad(k * 45)
 		local pos = Vector3.new(math.cos(a) * 6, 0.16, math.sin(a) * 6)
-		P(f, "StarArm", Vector3.new(1.2, 0.06, 11), CFrame.lookAt(pos, Vector3.new(0, 0.16, 0)), C.Gold, Enum.Material.Metal, { CanCollide = false, CastShadow = false, Reflectance = 0.1 })
+		P(f, "StarArm", Vector3.new(1.2, 0.06, 11), CFrame.lookAt(pos, Vector3.new(0, 0.16, 0)), C.Gold, Enum.Material.SmoothPlastic, { CanCollide = false, CastShadow = false, Reflectance = 0.2 })
 	end
 	local core = cyl(f, "EtherCore", 4, 0.2, Vector3.new(0, 0.18, 0), C.Ether, Enum.Material.Neon, { CanCollide = false })
 	light(core, C.Ether, 18, 1.2)
@@ -488,7 +488,7 @@ local function duelRing(parent: Instance, name: string, center: Vector3, color: 
 	m.Name = name .. "_Ring"
 	local R = 20
 	-- sol de l'arène légèrement surélevé + motif
-	cyl(m, "RingFloor", R * 2, 1, center + Vector3.new(0, 0.3, 0), C.Marble, Enum.Material.Limestone)
+	cyl(m, "RingFloor", R * 2, 6, center + Vector3.new(0, -2.2, 0), C.Marble, Enum.Material.Limestone)
 	cyl(m, "RingInlay", R * 2 - 4, 0.06, center + Vector3.new(0, 0.82, 0), C.MarbleWarm, Enum.Material.Limestone, { CastShadow = false })
 	around(64, R - 2.2, 0.86, function(a, cf)
 		P(m, "Glow", Vector3.new(2 * math.pi * (R - 2.2) / 64 + 0.05, 0.05, 0.3), cf + center, color, Enum.Material.Neon, { CanCollide = false, CastShadow = false, Transparency = 0.1 })
@@ -566,8 +566,8 @@ function B.rings()
 	duelRing(f, "Pod_Challenge", Vector3.new(0, 0, PLAZA_R + 16), C.Challenge, "DÉFI DIRECT")
 	local t = Workspace.Terrain
 	for _, c in { Vector3.new(-PLAZA_R - 14, 0, 6), Vector3.new(PLAZA_R + 14, 0, 6), Vector3.new(0, 0, PLAZA_R + 16) } do
-		t:FillCylinder(CFrame.new(c + Vector3.new(0, -3.2, 0)), 6, 50, Enum.Material.Rock)
-		t:FillCylinder(CFrame.new(c + Vector3.new(0, -0.4, 0)), 1.2, 52, Enum.Material.LeafyGrass)
+		t:FillCylinder(CFrame.new(c + Vector3.new(0, -7.5, 0)), 6, 25, Enum.Material.Rock)
+		
 		t:FillBall(c + Vector3.new(0, -24, 0), 18, Enum.Material.Rock)
 	end
 end
@@ -658,8 +658,8 @@ function B.sky()
 	for i, s in spots do
 		local c, r = s[1], s[2]
 		-- dessus plat herbeux, dessous effilé
-		t:FillCylinder(CFrame.new(c), 4, r * 2, Enum.Material.Rock)
-		t:FillCylinder(CFrame.new(c + Vector3.new(0, 2.2, 0)), 1.2, r * 2 - 2, Enum.Material.LeafyGrass)
+		t:FillCylinder(CFrame.new(c), 4, r, Enum.Material.Rock)
+		t:FillCylinder(CFrame.new(c + Vector3.new(0, 2.2, 0)), 1.2, r - 1, Enum.Material.LeafyGrass)
 		for k = 1, 4 do
 			local rad = r * (0.8 - k * 0.16)
 			t:FillBall(c + Vector3.new(rng:NextNumber(-r * 0.2, r * 0.2), -2 - rad - (k - 1) * r * 0.22, rng:NextNumber(-r * 0.2, r * 0.2)), rad, if k > 2 then Enum.Material.Slate else Enum.Material.Rock)
