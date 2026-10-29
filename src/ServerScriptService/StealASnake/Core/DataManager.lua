@@ -23,6 +23,19 @@ export type PlayerData = {
 	PlotIndex: number?,
 	TutorialStep: number, -- 1..4 = étape du tutoriel, 5 = terminé
 	MaxBiome: number, -- plus haut biome débloqué (portes par joueur)
+	-- Monétisation / rétention
+	Boosts: { [string]: number }, -- clé → fin (unix)
+	DailyLast: number, -- n° du dernier jour réclamé (os.time() // 86400)
+	DailyStreak: number,
+	StarterBought: boolean,
+	StarterOfferEnds: number, -- fin de l'offre limitée (unix), 0 = pas encore fixée
+	Receipts: { string }, -- PurchaseIds déjà accordés (idempotence ProcessReceipt)
+	Codes: { [string]: boolean },
+	-- non sauvegardés (recalculés à chaque session)
+	Passes: { [string]: boolean },
+	Premium: boolean,
+	GiftsClaimed: { [number]: boolean },
+	SessionStart: number,
 }
 
 local DataManager = {}
@@ -58,6 +71,17 @@ local function defaultData(): PlayerData
 		PlotIndex = nil,
 		TutorialStep = 1,
 		MaxBiome = 1,
+		Boosts = {},
+		DailyLast = 0,
+		DailyStreak = 0,
+		StarterBought = false,
+		StarterOfferEnds = 0,
+		Receipts = {},
+		Codes = {},
+		Passes = {},
+		Premium = false,
+		GiftsClaimed = {},
+		SessionStart = os.time(),
 	}
 end
 
@@ -118,15 +142,23 @@ local function load(player: Player)
 		local veteran = d.Cash > 0 or d.Speed > 0 or d.Rebirths > 0 or next(d.Vivariums) ~= nil
 		d.TutorialStep = tonumber(data.TutorialStep) or (if veteran then 5 else 1)
 		d.MaxBiome = tonumber(data.MaxBiome) or 1
+		d.Boosts = if typeof(data.Boosts) == "table" then data.Boosts else {}
+		d.DailyLast = tonumber(data.DailyLast) or 0
+		d.DailyStreak = tonumber(data.DailyStreak) or 0
+		d.StarterBought = data.StarterBought == true
+		d.StarterOfferEnds = tonumber(data.StarterOfferEnds) or 0
+		d.Receipts = if typeof(data.Receipts) == "table" then data.Receipts else {}
+		d.Codes = if typeof(data.Codes) == "table" then data.Codes else {}
 	end
+	d.Premium = player.MembershipType == Enum.MembershipType.Premium
 	cache[player.UserId] = d
 	DataManager.push(player)
 end
 
-local function save(player: Player)
+local function save(player: Player): boolean
 	local d = cache[player.UserId]
 	if not d or loadFailed[player.UserId] then
-		return
+		return false
 	end
 	local payload = {
 		Cash = d.Cash,
@@ -137,8 +169,16 @@ local function save(player: Player)
 		Vivariums = d.Vivariums,
 		TutorialStep = d.TutorialStep,
 		MaxBiome = d.MaxBiome,
+		Boosts = d.Boosts,
+		DailyLast = d.DailyLast,
+		DailyStreak = d.DailyStreak,
+		StarterBought = d.StarterBought,
+		StarterOfferEnds = d.StarterOfferEnds,
+		Receipts = d.Receipts,
+		Codes = d.Codes,
 	}
 	local ds = getStore()
+	local saved = not ds -- sans DataStore (Studio non publié) : rien à écrire
 	if ds then
 		for attempt = 1, 3 do
 			local ok = pcall(function()
@@ -147,12 +187,23 @@ local function save(player: Player)
 				end)
 			end)
 			if ok then
+				saved = true
 				break
 			end
 			task.wait(attempt)
 		end
 	end
 	dirty[player.UserId] = false
+	return saved
+end
+
+-- Sauvegarde immédiate (achats Robux) : vrai si la donnée est en sécurité.
+function DataManager.saveNow(player: Player): boolean
+	return save(player)
+end
+
+function DataManager.isLoaded(player: Player): boolean
+	return cache[player.UserId] ~= nil
 end
 
 function DataManager.start()

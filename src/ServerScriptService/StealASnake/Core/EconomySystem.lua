@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 
 local DataManager = require(script.Parent.DataManager)
 local PlotManager = require(script.Parent.PlotManager)
+local MonetizationService = require(script.Parent.MonetizationService)
 
 local EconomySystem = {}
 
@@ -19,7 +20,12 @@ function EconomySystem.start()
 					end
 				end
 				if income > 0 then
-					d.PendingCash += income
+					d.PendingCash += income * MonetizationService.incomeMult(player)
+					if MonetizationService.hasPass(player, "AutoCollect") then
+						d.Cash += d.PendingCash
+						d.PendingCash = 0
+						DataManager.push(player)
+					end
 					DataManager.markDirty(player)
 					PlotManager.refreshCollectBillboard(player)
 				end

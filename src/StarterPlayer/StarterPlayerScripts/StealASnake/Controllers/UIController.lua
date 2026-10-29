@@ -19,6 +19,7 @@ local MutationsConfig = require(game.ReplicatedStorage.StealASnake.Config.Mutati
 local TreadmillsConfig = require(game.ReplicatedStorage.StealASnake.Config.TreadmillsConfig)
 local RebirthsConfig = require(game.ReplicatedStorage.StealASnake.Config.RebirthsConfig)
 local RarityConfig = require(game.ReplicatedStorage.StealASnake.Config.RarityConfig)
+local MonetizationConfig = require(game.ReplicatedStorage.StealASnake.Config.MonetizationConfig)
 local EnvironmentController = require(script.Parent.EnvironmentController)
 
 local UIController = {}
@@ -160,6 +161,7 @@ local function incomePerSec(d: any): number
 				total += s.Income
 			end
 		end
+		total *= MonetizationConfig.incomeMult(d.Passes, d.Boosts, workspace:GetServerTimeNow(), d.Premium)
 	end
 	return total
 end
@@ -647,6 +649,9 @@ function UIController.start()
 	end)
 
 	Network.event("OpenUI").OnClientEvent:Connect(function(kind, payload)
+		if kind == "Shop" or kind == "Daily" then
+			return -- gérés par ShopController
+		end
 		openModal(tostring(kind), payload)
 	end)
 

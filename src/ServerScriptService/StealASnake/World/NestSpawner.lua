@@ -9,6 +9,7 @@ local CarrySystem = require(script.Parent.Parent.Core.CarrySystem)
 local VFXFactory = require(game.ReplicatedStorage.StealASnake.Modules.VFXFactory)
 local FormatNumber = require(game.ReplicatedStorage.StealASnake.Modules.FormatNumber)
 local SpeedCalculator = require(game.ReplicatedStorage.StealASnake.Modules.SpeedCalculator)
+local MonetizationService = require(script.Parent.Parent.Core.MonetizationService)
 local RarityConfig = require(game.ReplicatedStorage.StealASnake.Config.RarityConfig)
 local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
 
@@ -50,11 +51,13 @@ local function pickSpecies(biomeOrder: number): string
 	end)
 	local total = 0
 	for _, def in list do
-		total += RarityConfig.get(def.Rarity).SpawnWeight
+		local r = RarityConfig.get(def.Rarity)
+		total += MonetizationService.luckWeight(r.Rank, r.SpawnWeight)
 	end
 	local roll = math.random() * total
 	for _, def in list do
-		roll -= RarityConfig.get(def.Rarity).SpawnWeight
+		local r = RarityConfig.get(def.Rarity)
+		roll -= MonetizationService.luckWeight(r.Rank, r.SpawnWeight)
 		if roll <= 0 then
 			return def.Id
 		end

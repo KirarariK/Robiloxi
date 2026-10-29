@@ -61,11 +61,16 @@ function Network.setupServer()
 		"VFX",
 		"OpenUI",
 		"GuardianAggro",
+		"ShopBuy",
+		"ClaimDaily",
+		"ClaimGift",
+		"ShopFeed",
 	}
 	for _, n in names do
 		Network.event(n)
 	end
 	Network.func("GetData")
+	Network.func("RedeemCode")
 end
 
 return Network

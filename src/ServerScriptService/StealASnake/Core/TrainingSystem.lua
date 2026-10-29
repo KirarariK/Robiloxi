@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local DataManager = require(script.Parent.DataManager)
+local MonetizationService = require(script.Parent.MonetizationService)
 local PlotManager = require(script.Parent.PlotManager)
 local CarrySystem = require(script.Parent.CarrySystem)
 local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
@@ -63,7 +64,7 @@ function TrainingSystem.start()
 			if onTreadmill(player) then
 				local d = DataManager.get(player)
 				local cfg = TreadmillsConfig[d.TreadmillLevel] or TreadmillsConfig[1]
-				d.Speed += cfg.SpeedPerSec * step
+				d.Speed += cfg.SpeedPerSec * step * MonetizationService.trainMult(player)
 				if d.Speed >= 1 then
 					TutorialService.advance(player, 4)
 				end

@@ -18,6 +18,7 @@ local Workspace = game:GetService("Workspace")
 local BiomesConfig = require(game.ReplicatedStorage.StealASnake.Config.BiomesConfig)
 local CarrySystem = require(script.Parent.Parent.Core.CarrySystem)
 local Network = require(game.ReplicatedStorage.StealASnake.Modules.Network)
+local MonetizationService = require(script.Parent.Parent.Core.MonetizationService)
 
 type Guardian = {
 	Model: Model,
@@ -132,6 +133,9 @@ local function nearestThreat(cfg: any, home: Vector3): Player?
 		local immune = immuneUntil[plr.UserId]
 		if immune and now < immune then
 			continue
+		end
+		if MonetizationService.hasShield(plr) then
+			continue -- 🛡️ Bouclier (boutique / récompenses)
 		end
 		local char = plr.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
