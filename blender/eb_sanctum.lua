@@ -528,8 +528,7 @@ function S.hub()
 		table.insert(ex, motesPart)
 	end
 	local function groundY(pos: Vector3)
-		local hit = rayDown(pos + Vector3.new(0, 30, 0), 60, ex)
-		return hit and hit.Position.Y
+		return visibleY(pos + Vector3.new(0, 30, 0), 60, ex)
 	end
 	local function okSpot(p: Vector3)
 		return not nearRing(p, 4) and not (math.abs(p.X) < 46 and p.Z < -54)
@@ -842,12 +841,13 @@ ARENAS.Reacteur = {
 				local lum = (c.R + c.G + c.B) / 3
 				if p.Material == NEON then
 					if sat < 0.3 and lum > 0.7 then
-						p.Color = C.EtherSoft
+						p.Color = C.Ether
 					end
 				elseif sat < 0.2 and p.Material ~= SLATE and p.Material ~= CMETAL then -- rejouable sans tout assombrir
 					if p.Material == M.Metal or p.Material == M.DiamondPlate or p.Material == M.Foil then
+						-- bronze plutôt que patine : sous les lumières sarcelle, la patine virait au néon
 						p.Material = CMETAL
-						p.Color = if lum > 0.3 then C.Patina else C.Bronze
+						p.Color = C.Bronze
 					else
 						p.Material = SLATE
 						p.Color = if lum > 0.35 then C.Slate else C.Basalt
@@ -937,8 +937,7 @@ function S.arena(id: string)
 		local ctx = { m = m, f = f, ex = ex, c = c, floorY = floorY, R = R, r = Random.new(#id * 7919) }
 		-- couronne de glyphes au centre de l'aire : repère visuel plat, entoure les deux points d'apparition
 		glyphRing(f, Vector3.new(c.X, floorY, c.Z), 18, 20, 2, cfg.glow, ctx.r, function(pos)
-			local g = rayDown(pos + Vector3.new(0, 3, 0), 6, ex)
-			return g and g.Position.Y
+			return visibleY(pos + Vector3.new(0, 3, 0), 6, ex)
 		end)
 		cfg.build(ctx)
 		local folder = m:FindFirstChild("Lighting") or Instance.new("Folder")
