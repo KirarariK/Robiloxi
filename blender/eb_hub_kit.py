@@ -18,7 +18,7 @@ random.seed(42)
 
 MARBLE = "Limestone_EDE6D8"
 MARBLE2 = "Limestone_D8CCB6"
-GOLD = "SmoothPlastic_E3B04A"
+GOLD = "SmoothPlastic_D69E2C"
 BARK = "Wood_5E4532"
 LEAF = "LeafyGrass_5E9A4A"
 LEAF2 = "LeafyGrass_7DB25E"

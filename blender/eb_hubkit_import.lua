@@ -24,7 +24,7 @@ for _, p in ipairs(src:GetDescendants()) do
       p.Color = Color3.fromRGB(tonumber(hex:sub(1,2),16), tonumber(hex:sub(3,4),16), tonumber(hex:sub(5,6),16))
       if mat == "Glass" then p.Transparency = 0.35; p.Reflectance = 0.1 end
       if mat == "Metal" then p.Reflectance = 0.15 end
-      if hex:upper() == "E3B04A" then p.Reflectance = 0.22 end
+      if hex:upper() == "D69E2C" or hex:upper() == "E3B04A" then p.Color = Color3.fromRGB(214, 158, 44); p.Reflectance = 0.12 end
       if accent then p:SetAttribute("Accent", true) end
       p.Anchored = true
       p.CanTouch = false

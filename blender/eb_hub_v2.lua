@@ -189,7 +189,10 @@ function B.base()
 	-- herbe uniquement en couronne autour de la place (anneau de boules)
 	for i = 0, 47 do
 		local a = i / 48 * math.pi * 2
-		t:FillBall(Vector3.new(math.cos(a) * 70, -6, math.sin(a) * 70), 7, Enum.Material.LeafyGrass)
+		local gp = Vector3.new(math.cos(a) * 70, -6, math.sin(a) * 70)
+		if not B.nearRing(gp, 4) then
+			t:FillBall(gp, 7, Enum.Material.LeafyGrass)
+		end
 	end
 	for x = -44, 44, 8 do
 		t:FillBall(Vector3.new(x, 5.4, -138), 5, Enum.Material.LeafyGrass)
