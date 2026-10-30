@@ -785,7 +785,7 @@ function B.sky()
 		light(hang, C.Ether, 24, 1.4)
 	end
 	-- arbres sur l'île principale (hors place)
-	for _, p in { Vector3.new(-82, 0, -40), Vector3.new(84, 0, -46), Vector3.new(-70, 0, 64), Vector3.new(74, 0, 70), Vector3.new(-40, 8.2, -128), Vector3.new(44, 8.2, -126) } do
+	for _, p in { Vector3.new(-56, 0, -50), Vector3.new(58, 0, -50), Vector3.new(-48, 0, 54), Vector3.new(50, 0, 52), Vector3.new(-40, 8.2, -128), Vector3.new(44, 8.2, -126) } do
 		tree(f, p, 1.1)
 	end
 end
