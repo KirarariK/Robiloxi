@@ -128,6 +128,25 @@ local function fits(cf: CFrame, size: Vector3, exclude: { Instance }): boolean
 	return #Workspace:GetPartBoundsInBox(cf, size, op) == 0
 end
 
+-- Surface visible la plus haute sous `origin` (incrustations non collidables comprises, parts invisibles ignorées).
+local function visibleY(origin: Vector3, len: number, exclude: { Instance }): number?
+	local ex = table.clone(exclude)
+	for _ = 1, 8 do
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		rp.FilterDescendantsInstances = ex
+		local hit = Workspace:Raycast(origin, Vector3.new(0, -len, 0), rp)
+		if not hit then
+			return nil
+		end
+		if hit.Instance == Workspace.Terrain or hit.Instance.Transparency < 0.5 then
+			return hit.Position.Y
+		end
+		table.insert(ex, hit.Instance)
+	end
+	return nil
+end
+
 --------------------------------------------------------------------------------
 -- Glyphes inventés : tracés sur une grille 3x3, dans le plan XY de `base` (épaisseur selon Z)
 
