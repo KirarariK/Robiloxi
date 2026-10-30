@@ -14,6 +14,10 @@ local roundEnded = Instance.new("BindableEvent") -- (matchId, winner, loser) du 
 
 type FallbackDuel = { A: Player, B: Player, Arena: Model, Conns: { RBXScriptConnection }, Ended: boolean }
 local fallback: { [string]: FallbackDuel } = {}
+-- Matchs où un appel à CombatService a échoué : la suite du duel bascule sur le repli.
+type Pair = { A: Player, B: Player, Arena: Model }
+local pairs_: { [string]: Pair } = {}
+local degraded: { [string]: boolean } = {}
 
 local function combat(): any?
 	local c = Deps.get("CombatService")
@@ -23,9 +27,11 @@ local function combat(): any?
 	return nil
 end
 
-local function call(name: string, ...: any): boolean
+-- Retourne true si CombatService a traité l'appel. false = le repli doit prendre le relais
+-- (CombatService absent, match déjà dégradé, ou erreur pendant l'appel).
+local function call(name: string, matchId: string, ...: any): boolean
 	local c = combat()
-	if not c then
+	if not c or degraded[matchId] then
 		return false
 	end
 	local fn = c[name]
@@ -33,9 +39,11 @@ local function call(name: string, ...: any): boolean
 		warn("[EtherBlades] CombatService." .. name .. " absent")
 		return true
 	end
-	local ok, err = pcall(fn, ...)
+	local ok, err = pcall(fn, matchId, ...)
 	if not ok then
-		warn(string.format("[EtherBlades] CombatService.%s : %s", name, tostring(err)))
+		warn(string.format("[EtherBlades] CombatService.%s : %s (bascule sur le repli)", name, tostring(err)))
+		degraded[matchId] = true
+		return false
 	end
 	return true
 end
@@ -69,7 +77,28 @@ function CombatBridge.hasCombat(): boolean
 	return combat() ~= nil
 end
 
+local function ensureFallback(matchId: string): FallbackDuel?
+	local d = fallback[matchId]
+	if d then
+		return d
+	end
+	local pr = pairs_[matchId]
+	if not pr then
+		return nil
+	end
+	d = { A = pr.A, B = pr.B, Arena = pr.Arena, Conns = {}, Ended = false }
+	fallback[matchId] = d
+	for _, p in { pr.A, pr.B } do
+		local char = p.Character
+		if char then
+			char:SetAttribute("InDuel", true)
+		end
+	end
+	return d
+end
+
 function CombatBridge.beginDuel(matchId: string, a: Player, b: Player, arena: Model)
+	pairs_[matchId] = { A = a, B = b, Arena = arena }
 	if call("beginDuel", matchId, a, b, arena) then
 		return
 	end
@@ -95,7 +124,7 @@ function CombatBridge.startRound(matchId: string)
 	if call("startRound", matchId) then
 		return
 	end
-	local d = fallback[matchId]
+	local d = ensureFallback(matchId)
 	if not d then
 		return
 	end
@@ -140,9 +169,16 @@ function CombatBridge.playFinisher(matchId: string, winner: Player, loser: Playe
 end
 
 function CombatBridge.endDuel(matchId: string)
-	if call("endDuel", matchId) then
-		return
+	-- CombatService nettoie même un match dégradé ; le repli nettoie ensuite ce qui lui appartient.
+	local c = combat()
+	if c and type(c.endDuel) == "function" then
+		local ok, err = pcall(c.endDuel, matchId)
+		if not ok then
+			warn(string.format("[EtherBlades] CombatService.endDuel : %s", tostring(err)))
+		end
 	end
+	pairs_[matchId] = nil
+	degraded[matchId] = nil
 	local d = fallback[matchId]
 	if not d then
 		return
@@ -163,18 +199,28 @@ end
 
 -- Abonnement à la fin de round (CombatService.RoundEnded ou repli).
 -- Retourne un objet possédant :Disconnect() (RBXScriptConnection ou connexion d'un signal maison).
+-- Écoute aussi le repli : un match dégradé en cours de route y signale ses fins de round.
 function CombatBridge.onRoundEnded(fn: (string, Player, Player) -> ()): { Disconnect: (any) -> () }
+	local conns: { any } = { roundEnded.Event:Connect(fn) }
 	local c = combat()
 	if c then
 		local sig = c.RoundEnded
 		if typeof(sig) == "RBXScriptSignal" then
-			return (sig :: RBXScriptSignal):Connect(fn) :: any
+			table.insert(conns, (sig :: RBXScriptSignal):Connect(fn))
 		elseif type(sig) == "table" and type(sig.Connect) == "function" then
-			return sig:Connect(fn)
+			table.insert(conns, sig:Connect(fn))
+		else
+			warn("[EtherBlades] CombatService.RoundEnded absent : fins de round détectées par le repli uniquement")
 		end
-		warn("[EtherBlades] CombatService.RoundEnded absent : fins de round détectées par le repli uniquement")
 	end
-	return roundEnded.Event:Connect(fn) :: any
+	return {
+		Disconnect = function(_self: any)
+			for _, k in conns do
+				k:Disconnect()
+			end
+			table.clear(conns)
+		end,
+	}
 end
 
 Players.PlayerRemoving:Connect(function(p: Player)
