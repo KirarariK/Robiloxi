@@ -723,7 +723,7 @@ ARENAS.Sanctuaire = {
 		ClockTime = 17.9, Brightness = 2.2, Ambient = rgb(110, 80, 70), OutdoorAmbient = rgb(190, 130, 100),
 		FogColor = rgb(230, 160, 120), FogEnd = 600, ExposureCompensation = 0.1, GeographicLatitude = 35,
 	},
-	atm = { Density = 0.35, Offset = 0.1, Color = rgb(240, 180, 140), Decay = rgb(140, 70, 90), Glare = 0.6, Haze = 2 },
+	atm = { Density = 0.42, Offset = 0.1, Color = rgb(240, 170, 130), Decay = rgb(190, 100, 80), Glare = 0.6, Haze = 2.4 }, -- ciel ambré (évite la teinte verte au couchant)
 	cc = { Contrast = 0.12, Saturation = 0.1, Brightness = 0, TintColor = rgb(255, 235, 215) },
 	bloom = { Intensity = 0.9, Size = 24, Threshold = 1.2 },
 	rays = { Intensity = 0.12, Spread = 0.7 },
@@ -895,8 +895,8 @@ ARENAS.Reacteur = {
 ARENAS.Cristaux = {
 	glow = C.Rose,
 	props = {
-		ClockTime = 22, Brightness = 0.6, Ambient = rgb(30, 50, 80), OutdoorAmbient = rgb(50, 70, 120),
-		FogColor = rgb(16, 22, 50), FogEnd = 450, ExposureCompensation = 0.25, GeographicLatitude = 30,
+		ClockTime = 22, Brightness = 0.6, Ambient = rgb(44, 64, 100), OutdoorAmbient = rgb(64, 84, 136),
+		FogColor = rgb(16, 22, 50), FogEnd = 450, ExposureCompensation = 0.45, GeographicLatitude = 30,
 	},
 	atm = { Density = 0.4, Offset = 0.05, Color = rgb(60, 90, 160), Decay = rgb(80, 30, 120), Glare = 0, Haze = 1.5 },
 	cc = { Contrast = 0.12, Saturation = 0.25, Brightness = 0, TintColor = rgb(220, 235, 255) },
