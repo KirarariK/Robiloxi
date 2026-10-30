@@ -19,6 +19,9 @@ local A = Config.Attr
 
 local Actions = {}
 
+-- Fin de la fenêtre d'estocade après une esquive (clés faibles : un combattant détruit libère son entrée)
+local dashUntil: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
+
 local function reject(f: Fighter, action: string, reason: string, seq: number?)
 	Broadcast.reject(f.Player, action, reason, seq)
 end
@@ -38,6 +41,7 @@ local function startLight(f: Fighter, dir: Vector3?, clientTime: number?, seq: n
 		return
 	end
 	local counter = now <= f.CounterUntil
+	local dash = not counter and (dashUntil[f] or 0) >= now
 	if not Fighter.spendStamina(f, Config.Light.StaminaCost * Fighter.staminaMult(f)) then
 		reject(f, "Light", "stamina", seq)
 		return
@@ -51,6 +55,7 @@ local function startLight(f: Fighter, dir: Vector3?, clientTime: number?, seq: n
 	local mods = Config.Variants[variant]
 	local aerial = if airborne then stats.AerialBonus else 1
 
+	dashUntil[f] = nil
 	f.ComboIndex = idx
 	f.Model:SetAttribute(A.Combo, idx)
 	if counter then
@@ -68,13 +73,14 @@ local function startLight(f: Fighter, dir: Vector3?, clientTime: number?, seq: n
 			* mods.DamageMult
 			* aerial
 			* (if finisher then Config.Light.FinisherDamageMult else 1)
-			* (if counter then Config.Counter.DamageMult else 1),
+			* (if counter then Config.Counter.DamageMult else 1)
+			* (if dash then Config.Dodge.DashDamageMult else 1),
 		Posture = Config.Light.PostureDamage
 			* stats.PostureDamage
 			* aerial
 			* (if finisher then Config.Light.FinisherPostureMult else 1),
 		Push = stats.KineticPush * (if finisher then 1 else Config.Light.ComboPushFraction),
-		Reach = f.Weapon.Reach,
+		Reach = f.Weapon.Reach + (if dash then Config.Dodge.DashReachBonus else 0),
 		Arc = if f.Weapon.Arc >= 360 then 360 else math.clamp(f.Weapon.Arc + mods.ArcBonus, 30, 360),
 		Unblockable = counter and Config.Counter.Unblockable,
 		ClientTime = if clientTime then clientTime + timing.Windup else nil,
@@ -84,6 +90,21 @@ local function startLight(f: Fighter, dir: Vector3?, clientTime: number?, seq: n
 	f.PendingAt = now + timing.Windup
 	f.Pending = task.delay(timing.Windup, Resolver.strike, f, info)
 	State.hooks.attackStarted(f, timing.Windup, info.Kind)
+	if dash then
+		-- estocade : bond vers l'avant pendant l'armé du coup
+		local look = f.Root.CFrame.LookVector
+		local v = Vector3.new(look.X, 0, look.Z)
+		if v.Magnitude > 1e-3 then
+			local dur = math.max(timing.Windup, 0.12)
+			if f.Player then
+				Validation.allowMovement(f.Player, dur + 0.4)
+				Broadcast.impulse(f.Player, v.Unit * (Config.Dodge.DashLunge / dur), dur)
+			elseif f.IsDummy then
+				State.hooks.pushNpc(f, v.Unit * Config.Dodge.DashLunge)
+			end
+		end
+		Broadcast.fx("Evade", { Target = f.Model, Position = f.Root.Position })
+	end
 end
 
 local function light(f: Fighter, dir: Vector3?, clientTime: number?, seq: number?)
@@ -319,6 +340,7 @@ local function dodge(f: Fighter, dir: Vector3?, seq: number?)
 	f.IFramesUntil = now + math.min(dur, Config.Dodge.IFrames)
 	f.DodgeReadyAt = now + dur + Config.Dodge.Cooldown
 	f.NextActionAt = now + dur
+	dashUntil[f] = now + dur + Config.Dodge.DashWindow
 	Validation.allowMovement(f.Player, dur + 0.3)
 	local letter = CombatMath.dodgeLetter(f.Root.CFrame, v)
 	Broadcast.anim(f, "Dodge_" .. letter, Config.Dodge.Duration / dur, true)

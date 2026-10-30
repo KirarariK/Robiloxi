@@ -176,6 +176,11 @@ Config.Dodge = table.freeze({
 	Distance = 11.5,
 	StaminaCost = 22,
 	Cooldown = 0.42, -- après la fin de l'esquive
+	-- Attaque en sortie d'esquive (estocade) : un léger lancé pendant l'esquive ou juste après
+	DashWindow = 0.35, -- après la fin de l'esquive
+	DashDamageMult = 1.25,
+	DashReachBonus = 3,
+	DashLunge = 9, -- studs parcourus vers l'avant
 })
 
 -- Saber Lock / Clash : deux lourds relâchés presque en même temps à portée

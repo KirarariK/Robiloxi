@@ -860,6 +860,18 @@ local function onFx(kind: any, data: any)
 		end
 	elseif kind == "Respawn" then
 		Vfx.flash(pos, color, 4, 0.4)
+	elseif kind == "Ultimate" then
+		-- Éveil de l'Éther : onde, éclat, gerbe d'étincelles ; caméra marquée pour le lanceur
+		local col = Config.Ultimate.Color
+		Vfx.shockwave(pos, col, 18, 0.6)
+		Vfx.flash(pos, col, 8, 0.5)
+		Vfx.sparks(pos + Vector3.new(0, 2, 0), col, 30, 26)
+		Vfx.sound(Config.Sounds.Lunge, pos, 0.7, 0.7)
+		if target == player.Character then
+			CameraFx.shake(0.6)
+			CameraFx.fovPunch(78, 0.08, 0.15, 0.4)
+			CameraFx.colorPulse(col, 0.2, 0.15, 0.05, 0.8)
+		end
 	end
 end
 
