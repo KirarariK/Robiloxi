@@ -269,6 +269,12 @@ end
 
 -- Colonne cannelée : base moulurée, fût à 16 cannelures, chapiteau, mousse éventuelle
 local function column(parent: Instance, pos: Vector3, height: number, radius: number, broken: number?)
+	-- modèle Blender (colonne ionique / brisée) si le kit est importé
+	local km = kit(if broken then "HColBroken" else "HColumn", parent, CFrame.new(pos) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0),
+		if broken then (height * broken) / 7.7 else height / 19)
+	if km then
+		return km
+	end
 	local m = Instance.new("Model")
 	m.Name = if broken then "BrokenColumn" else "Column"
 	local h = if broken then height * broken else height
@@ -324,6 +330,10 @@ end
 
 -- Pierres de muret en ruine, empilées et décalées, avec mousse
 local function ruinWall(parent: Instance, a0: CFrame, length: number, height: number)
+	local km = kit("HWall", parent, a0, math.max(0.6, length / 13.5))
+	if km then
+		return km
+	end
 	local m = Instance.new("Model")
 	m.Name = "RuinWall"
 	local x = -length / 2
@@ -349,6 +359,9 @@ end
 
 -- Vase / amphore
 local function urn(parent: Instance, pos: Vector3, s: number)
+	if kit("HUrn", parent, CFrame.new(pos) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0), s) then
+		return
+	end
 	local m = Instance.new("Model")
 	m.Name = "Urn"
 	cyl(m, "Foot", 1.4 * s, 0.4 * s, pos + Vector3.new(0, 0.2 * s, 0), C.Clay, Enum.Material.Slate)
@@ -362,6 +375,10 @@ end
 
 -- Arbre stylisé (tronc incliné, branches, houppier en grappes)
 local function tree(parent: Instance, pos: Vector3, s: number)
+	local km = kit(if rng:NextNumber() < 0.5 then "HTree" else "HTree2", parent, CFrame.new(pos) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0), s)
+	if km then
+		return km
+	end
 	local m = Instance.new("Model")
 	m.Name = "Tree"
 	local lean = CFrame.Angles(rng:NextNumber(-0.12, 0.12), rng:NextNumber(0, 6.28), rng:NextNumber(-0.12, 0.12))
@@ -387,6 +404,10 @@ end
 
 -- Bannière : mât, traverse dorée, étoffe bleu nuit et emblème « lames croisées d'éther »
 local function banner(parent: Instance, pos: Vector3, facing: Vector3, h: number)
+	local km = kit("HBanner", parent, CFrame.lookAt(pos, pos + facing), h / 18)
+	if km then
+		return km
+	end
 	local m = Instance.new("Model")
 	m.Name = "Banner"
 	local cf = CFrame.lookAt(pos, pos + facing)
@@ -520,7 +541,18 @@ local function duelRing(parent: Instance, name: string, center: Vector3, color: 
 	end)
 	-- rambarde dorée à arceaux (entrée laissée ouverte face au centre de la place)
 	local toCenter = math.atan2(-center.Z, -center.X)
-	around(28, R + 0.4, 0.8, function(a, cf)
+	if KIT and KIT:FindFirstChild("HRail") then
+		-- segments Blender (rayon 20,4, 1/14 de tour) : +Z local vers le centre de l'arène
+		for i = 0, 13 do
+			local a = (i + 0.5) / 14 * math.pi * 2
+			local d = math.abs(((a - toCenter + math.pi) % (2 * math.pi)) - math.pi)
+			if d > 0.3 then
+				local pos = center + Vector3.new(math.cos(a) * (R + 0.15), 0.8, math.sin(a) * (R + 0.15))
+				kit("HRail", m, CFrame.lookAt(pos, Vector3.new(center.X, pos.Y, center.Z)) * CFrame.Angles(0, math.pi, 0))
+			end
+		end
+	end
+	around(if KIT and KIT:FindFirstChild("HRail") then 0 else 28, R + 0.4, 0.8, function(a, cf)
 		local d = math.abs(((a - toCenter + math.pi) % (2 * math.pi)) - math.pi)
 		if d < 0.42 then
 			return
@@ -660,6 +692,21 @@ function B.ruins()
 	for i = 0, 7 do
 		local a = (i + 0.5) / 8 * math.pi * 2
 		local pos = Vector3.new(math.cos(a) * (PLAZA_R - 3), 0, math.sin(a) * (PLAZA_R - 3))
+		local kb = kit("HBrazier", f, CFrame.new(pos))
+		if kb then
+			local flame = kb:FindFirstChild("Flame")
+			if flame and flame:IsA("BasePart") then
+				flame.CanCollide = false
+				local fire = Instance.new("Fire")
+				fire.Color = C.Ether
+				fire.SecondaryColor = C.EtherDeep
+				fire.Size = 4
+				fire.Heat = 7
+				fire.Parent = flame
+				light(flame, C.Ether, 16, 1.4)
+			end
+			continue
+		end
 		local m = Instance.new("Model")
 		m.Name = "Brazier"
 		cyl(m, "Base", 3.2, 0.6, pos + Vector3.new(0, 0.3, 0), C.MarbleDark, Enum.Material.Limestone)
@@ -702,6 +749,21 @@ function B.sky()
 	}
 	for i, s in spots do
 		local c, r = s[1], s[2]
+		if KIT and KIT:FindFirstChild("HIsland") then
+			-- île Blender : pivot au fond, dessus herbeux à topH × échelle au-dessus du pivot
+			local name = if i % 2 == 0 then "HIsland2" else "HIsland"
+			local base = if name == "HIsland2" then 7 else 10
+			local topH = if name == "HIsland2" then 15.9 else 21.1
+			local sc = r / base
+			kit(name, f, CFrame.new(c - Vector3.new(0, topH * sc, 0)) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0), sc)
+			local top = c
+			tree(f, top + Vector3.new(rng:NextNumber(-r * 0.3, r * 0.3), 0, rng:NextNumber(-r * 0.3, r * 0.3)), r / 18)
+			if i % 2 == 0 then
+				column(f, top + Vector3.new(r * 0.4, 0, -r * 0.2), 16, 1.2, 0.5)
+			end
+			crystalCluster(f, top + Vector3.new(-r * 0.4, 0, r * 0.25), r / 18)
+			continue
+		end
 		-- dessus plat herbeux, dessous effilé
 		t:FillCylinder(CFrame.new(c), 4, r, Enum.Material.Rock)
 		t:FillCylinder(CFrame.new(c + Vector3.new(0, 2.2, 0)), 1.2, r - 1, Enum.Material.LeafyGrass)
