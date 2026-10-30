@@ -402,11 +402,11 @@ local HUB_LIGHT = {
 	props = {
 		ClockTime = 20.1,
 		Brightness = 1.8,
-		Ambient = rgb(58, 56, 84),
-		OutdoorAmbient = rgb(92, 88, 132),
+		Ambient = rgb(66, 62, 96),
+		OutdoorAmbient = rgb(100, 94, 140),
 		FogColor = rgb(40, 36, 72),
 		FogEnd = 1400,
-		ExposureCompensation = 0.3,
+		ExposureCompensation = 0.4,
 		GeographicLatitude = 30,
 	},
 	atm = { Density = 0.36, Offset = 0.2, Color = rgb(120, 105, 180), Decay = rgb(70, 40, 110), Glare = 0.25, Haze = 2 },
@@ -536,7 +536,7 @@ function S.hub()
 	end
 
 	-- 1. Cœur d'Éther : orrerie suspendue au-dessus de la place, reliée au sol par un rayon
-	local O = CFrame.new(0, 46, 0)
+	local O = CFrame.new(0, 60, 0)
 	local core = ballP(f, "CoeurEther", 6, O, C.Ether, NEON)
 	light(core, C.Ether, 60, 3)
 	local shell = ballP(f, "Coque", 8.5, O, C.EtherSoft, GLASS)
@@ -555,7 +555,7 @@ function S.hub()
 			ballP(orrery, "Astre", 1.8, b * CFrame.new(rad + 1.4, 0, 0), col, NEON)
 		end
 	end
-	local beam = cylP(f, "Rayon", 0.9, 46, CFrame.new(0, 23, 0), C.EtherSoft, NEON)
+	local beam = cylP(f, "Rayon", 0.9, 60, CFrame.new(0, 30, 0), C.EtherSoft, NEON)
 	beam.Transparency = 0.45
 
 	-- 2. Couronnes de glyphes gravées dans le dallage de la place
@@ -611,31 +611,33 @@ function S.hub()
 	-- 5. Grande Arche derrière la terrasse, un cristal suspendu en son cœur
 	if tf then
 		local top = tf.Position.Y + tf.Size.Y / 2
-		local back = tf.Position.Z - tf.Size.Z / 2 - 8
+		-- en retrait derrière la colonnade, assez large et haute pour l'encadrer
+		local back = tf.Position.Z - tf.Size.Z / 2 - 26
 		local A = CFrame.new(tf.Position.X, top, back)
 		local arch = model(f, "GrandeArche")
+		local W, H = 31, 40
 		for sx = -1, 1, 2 do
-			P(arch, "Pilier", Vector3.new(5, 70, 5), A * CFrame.new(sx * 17, -1, 0), C.Basalt, BASALT, true)
-			P(arch, "Chapiteau", Vector3.new(6.4, 1.4, 6.4), A * CFrame.new(sx * 17, 33, 0), C.Patina, CMETAL)
-			P(arch, "Bague", Vector3.new(6, 1, 6), A * CFrame.new(sx * 17, 2, 0), C.Patina, CMETAL)
-			for k = 0, 6 do
-				glyph(arch, A * CFrame.new(sx * 17, 6 + k * 3.6, 2.56), 2.2, C.Violet, 0.12, r)
+			P(arch, "Pilier", Vector3.new(7, H + 50, 7), A * CFrame.new(sx * W, H / 2 - 25, 0), C.Basalt, BASALT, true)
+			P(arch, "Chapiteau", Vector3.new(9, 2, 9), A * CFrame.new(sx * W, H, 0), C.Patina, CMETAL)
+			P(arch, "Bague", Vector3.new(8.4, 1.4, 8.4), A * CFrame.new(sx * W, 4, 0), C.Patina, CMETAL)
+			for k = 0, 8 do
+				glyph(arch, A * CFrame.new(sx * W, 8 + k * 3.6, 3.56), 2.6, C.Violet, 0.14, r)
 			end
 		end
-		local n = 13
-		local chord = 2 * 17 * math.sin(math.pi / (2 * n)) * 1.06
+		local n = 19
+		local chord = 2 * W * math.sin(math.pi / (2 * n)) * 1.06
 		for i = 0, n - 1 do
 			local a = (i + 0.5) / n * math.pi
-			local b = A * CFrame.new(0, 34, 0) * CFrame.Angles(0, 0, a)
-			P(arch, "Voussoir", Vector3.new(5, chord, 5), b * CFrame.new(17, 0, 0), C.Slate, SLATE)
-			P(arch, "VoussoirLueur", Vector3.new(0.3, chord, 1.4), b * CFrame.new(14.4, 0, 0), C.Violet, NEON)
+			local b = A * CFrame.new(0, H, 0) * CFrame.Angles(0, 0, a)
+			P(arch, "Voussoir", Vector3.new(7, chord, 7), b * CFrame.new(W, 0, 0), C.Slate, SLATE)
+			P(arch, "VoussoirLueur", Vector3.new(0.4, chord, 1.8), b * CFrame.new(W - 3.7, 0, 0), C.Violet, NEON)
 		end
-		local heart = A * CFrame.new(0, 34, 0)
+		local heart = A * CFrame.new(0, H + 8, 0)
 		local big = P(arch, "CristalSuspendu", Vector3.new(3, 9, 3), heart * CFrame.Angles(0, math.rad(45), 0), C.Violet, NEON)
 		light(big, C.Violet, 55, 2.4)
 		P(arch, "Éclat", Vector3.new(1.6, 5, 1.6), heart * CFrame.new(-2.6, -1.5, 0) * CFrame.Angles(0, 0, math.rad(25)), C.Violet, NEON)
 		P(arch, "Éclat", Vector3.new(1.4, 4.4, 1.4), heart * CFrame.new(2.4, -1.2, 0.4) * CFrame.Angles(0, 0, math.rad(-22)), C.Violet, NEON)
-		seg3(arch, "Chaîne", (heart * CFrame.new(0, 4.5, 0)).Position, (A * CFrame.new(0, 49, 0)).Position, 0.3, C.Patina, CMETAL)
+		seg3(arch, "Chaîne", (heart * CFrame.new(0, 4.5, 0)).Position, (A * CFrame.new(0, H + W - 3.5, 0)).Position, 0.3, C.Patina, CMETAL)
 		motes(arch, "Étincelles", heart, Vector3.new(6, 8, 6), C.Violet, C.EtherSoft, 12, Vector3.new(0, 1.2, 0), NumberRange.new(1, 3), NumberRange.new(3, 5), 0.45)
 	end
 
