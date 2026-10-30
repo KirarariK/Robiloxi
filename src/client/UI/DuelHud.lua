@@ -42,9 +42,10 @@ type Fighter = {
 	Health: Kit.Bar,
 	Posture: Kit.Bar,
 	Stamina: Kit.Bar,
+	Ult: Kit.Bar,
 	State: TextLabel,
 	Pips: { Frame },
-	Shown: { Health: number, Posture: number, Stamina: number },
+	Shown: { Health: number, Posture: number, Stamina: number, Ult: number },
 }
 
 local DuelHud = {}
@@ -144,22 +145,24 @@ function DuelHud.new(): DuelHud
 		if side == 0 then
 			bars.AnchorPoint = Vector2.new(0, 1)
 			bars.Position = UDim2.new(0, 24, 1, -24)
-			bars.Size = UDim2.fromOffset(340, 74)
+			bars.Size = UDim2.fromOffset(340, 88)
 		else
 			bars.AnchorPoint = Vector2.new(1, 0)
 			bars.Position = UDim2.new(1, -24, 0, 120)
-			bars.Size = UDim2.fromOffset(300, 64)
+			bars.Size = UDim2.fromOffset(300, 78)
 		end
 		Root.scale(bars)
 		Kit.list(bars, false, 6)
 		local hp = Kit.bar(bars, C.Health, { Size = UDim2.new(1, 0, 0, if side == 0 then 22 else 18), LayoutOrder = 1 })
 		local po = Kit.bar(bars, C.Posture, { Size = UDim2.new(1, 0, 0, 16), LayoutOrder = 2 })
 		local st = Kit.bar(bars, C.Stamina, { Size = UDim2.new(if side == 0 then 0.8 else 1, 0, 0, 12), LayoutOrder = 3 })
+		local ul = Kit.bar(bars, Color3.fromRGB(150, 95, 255), { Size = UDim2.new(if side == 0 then 0.6 else 1, 0, 0, 10), LayoutOrder = 4 })
 		return {
 			Name = name,
 			Health = hp,
 			Posture = po,
 			Stamina = st,
+			Ult = ul,
 			State = state,
 			Pips = (function(): { Frame }
 				local list: { Frame } = {}
@@ -176,7 +179,7 @@ function DuelHud.new(): DuelHud
 				end
 				return list
 			end)(),
-			Shown = { Health = 1, Posture = 1, Stamina = 1 },
+			Shown = { Health = 1, Posture = 1, Stamina = 1, Ult = 0 },
 		}
 	end
 
@@ -262,6 +265,10 @@ function DuelHud.new(): DuelHud
 		f.Health.set(f.Shown.Health, string.format("PV %d %%", math.floor(math.clamp(hp, 0, 1) * 100 + 0.5)))
 		f.Posture.set(f.Shown.Posture, "Posture")
 		f.Stamina.set(f.Shown.Stamina, "Endurance")
+		local ult = math.clamp(attrNum(char, "Ultimate", 0) / 100, 0, 1)
+		local awake = attrNum(char, "UltActiveUntil", 0) > workspace:GetServerTimeNow()
+		f.Shown.Ult += ((if awake then 1 else ult) - f.Shown.Ult) * k
+		f.Ult.set(f.Shown.Ult, if awake then "ÉVEIL !" elseif ult >= 1 then "ULTIME PRÊT (G)" else "Ultime")
 		local cs = char and char:GetAttribute("CombatState")
 		f.State.Text = if type(cs) == "string" then (STATE_LABEL[cs] or "") else ""
 		f.State.TextColor3 = if cs == "GuardBroken" or cs == "Stunned" or cs == "Dead" then C.Danger else C.Gold

@@ -4,7 +4,7 @@
 -- Les stats d'arme (Config/WeaponData) puis de Voie (Config/FormData .Stats) s'appliquent PAR-DESSUS ces bases.
 
 export type CombatState = "Idle" | "Attacking" | "Blocking" | "Parrying" | "Dodging" | "Stunned" | "GuardBroken" | "Dead"
-export type Action = "Light" | "Heavy" | "BlockStart" | "BlockEnd" | "Parry" | "Dodge"
+export type Action = "Light" | "Heavy" | "BlockStart" | "BlockEnd" | "Parry" | "Dodge" | "Ultimate"
 export type Variant = "Neutral" | "Forward" | "Side" | "Back"
 
 export type VariantMods = {
@@ -47,7 +47,23 @@ Config.ActionSet = table.freeze({
 	BlockEnd = true,
 	Parry = true,
 	Dodge = true,
+	Ultimate = true,
 } :: { [string]: boolean })
+
+-- Ultime « Éveil de l'Éther » : jauge (attribut Character « Ultimate », 0..Max) remplie en duel en touchant,
+-- parant ou brisant la garde ; touche G. Pendant Duration : dégâts et dégâts de posture accrus,
+-- posture et endurance restaurées à l'activation. Fin = attribut « UltActiveUntil » (heure serveur).
+Config.Ultimate = table.freeze({
+	Max = 100,
+	GainHit = 8, -- coup net porté
+	GainHurt = 4, -- coup net subi (rattrapage pour le joueur en difficulté)
+	GainParry = 15, -- parade parfaite
+	GainBreak = 12, -- garde adverse brisée
+	Duration = 6,
+	DamageMult = 1.3,
+	PostureMult = 1.5,
+	Color = Color3.fromRGB(70, 235, 215),
+})
 
 -- Réseau / validation des intentions client
 Config.Net = table.freeze({

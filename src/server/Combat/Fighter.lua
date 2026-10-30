@@ -241,6 +241,7 @@ function Fighter.resetVitals(f: Fighter)
 	f.NextActionAt = 0
 	f.IFramesUntil = 0
 	f.CounterUntil = 0
+	f.Model:SetAttribute("UltActiveUntil", 0)
 	f.ParryReadyAt = 0
 	f.DodgeReadyAt = 0
 	f.BlockHeld = false

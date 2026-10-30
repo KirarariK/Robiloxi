@@ -252,6 +252,40 @@ function Actions.block(f: Fighter, on: boolean)
 	end
 end
 
+-- Ultime « Éveil de l'Éther » (jauge pleine, en duel uniquement)
+local function ultimate(f: Fighter, seq: number?)
+	local m = f.Model
+	if f.MatchId == nil then
+		reject(f, "Ultimate", "hub", seq)
+		return
+	end
+	if ((m:GetAttribute("Ultimate") :: number?) or 0) < Config.Ultimate.Max then
+		reject(f, "Ultimate", "gauge", seq)
+		return
+	end
+	if f.State ~= "Idle" and f.State ~= "Blocking" then
+		reject(f, "Ultimate", "busy", seq)
+		return
+	end
+	local dur = Config.Ultimate.Duration
+	m:SetAttribute("Ultimate", 0)
+	m:SetAttribute("UltActiveUntil", workspace:GetServerTimeNow() + dur)
+	f.Posture = f.MaxPosture
+	f.Stamina = f.MaxStamina
+	Fighter.writeAttributes(f)
+	local hl = Instance.new("Highlight")
+	hl.Name = "EveilEther"
+	hl.FillColor = Config.Ultimate.Color
+	hl.FillTransparency = 0.75
+	hl.OutlineColor = Config.Ultimate.Color
+	hl.Parent = m
+	task.delay(dur, function()
+		hl:Destroy()
+	end)
+	Broadcast.fx("Ultimate", { Target = m, Position = f.Root.Position, Duration = dur })
+	Broadcast.anim(f, "Ignite", 1, true)
+end
+
 local function dodge(f: Fighter, dir: Vector3?, seq: number?)
 	local now = State.now()
 	if busy(f) then
@@ -331,6 +365,8 @@ function Actions.input(f: Fighter, action: string, dir: Vector3?, clientTime: nu
 		Actions.parry(f, seq)
 	elseif action == "Dodge" then
 		dodge(f, dir, seq)
+	elseif action == "Ultimate" then
+		ultimate(f, seq)
 	end
 end
 

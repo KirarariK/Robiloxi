@@ -414,6 +414,17 @@ local function needsIgnite(c: Model): boolean
 	return true
 end
 
+local function doUltimate()
+	local c = player.Character
+	if not c or not canInput() then
+		return
+	end
+	if attrNumber(c, "Ultimate", 0) < Config.Ultimate.Max then
+		return
+	end
+	send("Ultimate", nil)
+end
+
 local function doParry()
 	local c = player.Character
 	if not c or not canInput() or needsIgnite(c) then
@@ -710,6 +721,11 @@ local function bindInputs()
 			doParry()
 		end
 	end, UDim2.new(1, -95, 1, -225), Enum.KeyCode.R, Enum.KeyCode.ButtonR1)
+	bind("EB_Ultimate", "Ultime", function(s: Enum.UserInputState)
+		if s == Enum.UserInputState.Begin then
+			doUltimate()
+		end
+	end, UDim2.new(1, -245, 1, -230), Enum.KeyCode.G, Enum.KeyCode.ButtonY)
 	bind("EB_Dodge", "Esquive", function(s: Enum.UserInputState)
 		if s == Enum.UserInputState.Begin then
 			doDodge()

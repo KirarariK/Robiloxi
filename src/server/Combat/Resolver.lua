@@ -75,6 +75,18 @@ function Resolver.damage(t: Fighter, amount: number, source: Fighter?)
 	end
 end
 
+-- Jauge d'ultime : se remplit seulement en duel, et pas pendant l'Éveil lui-même.
+local function gainUlt(f: Fighter?, amount: number)
+	if not f or not f.Alive or f.MatchId == nil then
+		return
+	end
+	local m = f.Model
+	if ((m:GetAttribute("UltActiveUntil") :: number?) or 0) > workspace:GetServerTimeNow() then
+		return
+	end
+	m:SetAttribute("Ultimate", math.min(Config.Ultimate.Max, ((m:GetAttribute("Ultimate") :: number?) or 0) + amount))
+end
+
 -- Statistiques de duel (écran de fin) : compteurs en attributs du joueur, remis à zéro au début de chaque match.
 local function stat(f: Fighter?, key: string)
 	local p = f and f.Player
@@ -85,6 +97,7 @@ end
 
 function Resolver.guardBreak(t: Fighter, by: Fighter?)
 	stat(by, "EB_StatBreaks")
+	gainUlt(by, Config.Ultimate.GainBreak)
 	Fighter.cancelPending(t)
 	t.Posture = 0
 	t.Model:SetAttribute(A.Posture, 0)
@@ -110,6 +123,7 @@ end
 
 local function perfectParry(a: Fighter, t: Fighter, info: HitInfo)
 	stat(t, "EB_StatParries")
+	gainUlt(t, Config.Ultimate.GainParry)
 	local now = State.now()
 	local stun = if info.Kind == "Heavy" then Config.Parry.AttackerStunHeavy else Config.Parry.AttackerStun
 	Fighter.cancelPending(a)
@@ -175,6 +189,8 @@ local function cleanHit(a: Fighter, t: Fighter, info: HitInfo)
 	if info.Kind == "Counter" then
 		stat(a, "EB_StatCounters")
 	end
+	gainUlt(a, Config.Ultimate.GainHit)
+	gainUlt(t, Config.Ultimate.GainHurt)
 	Broadcast.fx("Hit", {
 		Attacker = a.Model,
 		Target = t.Model,
@@ -236,6 +252,12 @@ function Resolver.strike(a: Fighter, info: HitInfo)
 	if not a.Alive or a.State ~= "Attacking" or a.Frozen then
 		a.PendingKind = nil
 		return
+	end
+	if ((a.Model:GetAttribute("UltActiveUntil") :: number?) or 0) > workspace:GetServerTimeNow() then
+		-- Éveil de l'Éther actif : coups renforcés
+		info = table.clone(info)
+		info.Damage *= Config.Ultimate.DamageMult
+		info.Posture *= Config.Ultimate.PostureMult
 	end
 	local targets = table.clone(State.targetsFor(a))
 	local count = 0
