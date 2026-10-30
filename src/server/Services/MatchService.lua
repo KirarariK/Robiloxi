@@ -131,6 +131,11 @@ local function applyResults(m: Match)
 				MyScore = m.Scores[p],
 				OppScore = m.Scores[opp],
 				OpponentName = m.Names[opp],
+				Stats = {
+					Parries = p:GetAttribute("EB_StatParries") or 0,
+					Breaks = p:GetAttribute("EB_StatBreaks") or 0,
+					Counters = p:GetAttribute("EB_StatCounters") or 0,
+				},
 				EloBefore = s.EloBefore,
 				EloAfter = s.EloAfter,
 				EloDelta = s.EloDelta,

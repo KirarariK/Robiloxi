@@ -95,6 +95,11 @@ function MatchRunner.run(m: Match, h: Hooks)
 		Deps.allowMovement(p, 6)
 	end
 	if not m.Leaver then
+		for _, p in { m.A, m.B } do
+			for _, k in { "EB_StatParries", "EB_StatBreaks", "EB_StatCounters" } do
+				p:SetAttribute(k, 0)
+			end
+		end
 		CombatBridge.beginDuel(m.Id, m.A, m.B, arena)
 	end
 	-- endDuel doit passer avant la destruction de l'arène : le Maid nettoie dans l'ordre inverse.

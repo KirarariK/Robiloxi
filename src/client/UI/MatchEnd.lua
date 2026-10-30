@@ -90,6 +90,16 @@ function MatchEnd.show(r: { [string]: any })
 		TextSize = 14,
 	})
 
+	-- statistiques du duel (comme Dueling Grounds : parades parfaites, gardes brisées, contres)
+	local st = if type(r.Stats) == "table" then r.Stats else {}
+	Kit.label(card, string.format("Parades parfaites %d  ·  Gardes brisées %d  ·  Contres %d", tonumber(st.Parries) or 0, tonumber(st.Breaks) or 0, tonumber(st.Counters) or 0), {
+		Position = UDim2.fromOffset(0, 80),
+		Size = UDim2.new(1, 0, 0, 16),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextColor3 = C.Gold,
+		TextSize = 13,
+	})
+
 	-- Elo
 	local eloBox = Kit.new("Frame", { Position = UDim2.fromOffset(0, 96), Size = UDim2.new(1, 0, 0, 96), BackgroundColor3 = C.Night, BackgroundTransparency = 0.3, Parent = card })
 	Kit.corner(eloBox, 12)

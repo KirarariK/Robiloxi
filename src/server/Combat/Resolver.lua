@@ -75,7 +75,16 @@ function Resolver.damage(t: Fighter, amount: number, source: Fighter?)
 	end
 end
 
+-- Statistiques de duel (écran de fin) : compteurs en attributs du joueur, remis à zéro au début de chaque match.
+local function stat(f: Fighter?, key: string)
+	local p = f and f.Player
+	if p then
+		p:SetAttribute(key, ((p:GetAttribute(key) :: number?) or 0) + 1)
+	end
+end
+
 function Resolver.guardBreak(t: Fighter, by: Fighter?)
+	stat(by, "EB_StatBreaks")
 	Fighter.cancelPending(t)
 	t.Posture = 0
 	t.Model:SetAttribute(A.Posture, 0)
@@ -100,6 +109,7 @@ function Resolver.postureHit(t: Fighter, amount: number, by: Fighter?): boolean
 end
 
 local function perfectParry(a: Fighter, t: Fighter, info: HitInfo)
+	stat(t, "EB_StatParries")
 	local now = State.now()
 	local stun = if info.Kind == "Heavy" then Config.Parry.AttackerStunHeavy else Config.Parry.AttackerStun
 	Fighter.cancelPending(a)
@@ -162,6 +172,9 @@ local function cleanHit(a: Fighter, t: Fighter, info: HitInfo)
 	end
 	local wasBroken = t.State == "GuardBroken"
 	local dmg = info.Damage * mult
+	if info.Kind == "Counter" then
+		stat(a, "EB_StatCounters")
+	end
 	Broadcast.fx("Hit", {
 		Attacker = a.Model,
 		Target = t.Model,
