@@ -11,6 +11,7 @@ local Net = require(Shared.Net)
 local FormData = require(Shared.Config.FormData)
 local Rarity = require(Shared.Config.Rarity)
 local TitleData = require(Shared.Config.TitleData)
+local RerollMath = require(Shared.Config.RerollMath)
 
 local DataService = require(script.Parent.DataService)
 local Guard = require(script.Parent.Guard)
@@ -18,6 +19,7 @@ local HubPrompts = require(script.Parent.Parent.Match.HubPrompts)
 
 local RerollService = {}
 RerollService.Priority = 35
+local shrinePart: BasePart? = nil
 
 RerollService.Cost = 100
 RerollService.PityLimit = 50 -- le 50e tirage sans Épique+ est garanti Épique ou mieux
@@ -83,6 +85,9 @@ local function doReroll(player: Player): Guard.Result
 	if player:GetAttribute("EB_InMatch") then
 		return { Ok = false, Err = "Impossible de relancer pendant un duel." }
 	end
+	if not shrinePart or not HubPrompts.isNear(player, shrinePart, 14) then
+		return { Ok = false, Err = "Approche-toi de l'Autel des Cristaux pour relancer." }
+	end
 	local profile = DataService.get(player)
 	if not profile then
 		return { Ok = false, Err = "Profil en cours de chargement…" }
@@ -94,7 +99,7 @@ local function doReroll(player: Player): Guard.Result
 	local luckyUnlocked = false
 	DataService.update(player, function(p)
 		local pity = pityOf(p)
-		local forced = pity >= RerollService.PityLimit - 1
+		local forced = RerollMath.shouldForce(pity, RerollService.PityLimit)
 		local form = draw(forced)
 		p.Crystals -= RerollService.Cost
 		p.Rerolls += 1
@@ -106,7 +111,7 @@ local function doReroll(player: Player): Guard.Result
 		else
 			p.OwnedForms[form.Id] = true
 		end
-		local newPity = if isHigh(form.Rarity) then 0 else pity + 1
+		local newPity = RerollMath.nextPity(pity, isHigh(form.Rarity))
 		;(p :: any).RerollPity = newPity
 		if isJackpot(form.Rarity) and not p.OwnedTitles[RerollService.LuckyTitle] and TitleData.get(RerollService.LuckyTitle) then
 			p.OwnedTitles[RerollService.LuckyTitle] = true
@@ -142,10 +147,10 @@ function RerollService.init()
 end
 
 function RerollService.start()
-	local shrine = HubPrompts.getPart("RerollShrine")
-	if shrine then
+	shrinePart = HubPrompts.getPart("RerollShrine")
+	if shrinePart then
 		-- le client ouvre la page de relance ; le serveur ne fait rien de plus ici
-		HubPrompts.attach(shrine, {
+		HubPrompts.attach(shrinePart, {
 			Action = "OpenReroll",
 			ActionText = "Relancer ta Voie",
 			ObjectText = "Autel des Cristaux",

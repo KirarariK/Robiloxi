@@ -87,6 +87,7 @@ function Validation.canHit(attacker: Fighter, target: Fighter, reach: number, ar
 			return res == true
 		end
 		warnOnce("canHit", "HitValidation.canHit a échoué : " .. tostring(res))
+		return false
 	end
 	return localCheck(attacker, target, reach, arcDeg)
 end
