@@ -844,7 +844,7 @@ ARENAS.Reacteur = {
 					if sat < 0.3 and lum > 0.7 then
 						p.Color = C.EtherSoft
 					end
-				elseif sat < 0.2 then
+				elseif sat < 0.2 and p.Material ~= SLATE and p.Material ~= CMETAL then -- rejouable sans tout assombrir
 					if p.Material == M.Metal or p.Material == M.DiamondPlate or p.Material == M.Foil then
 						p.Material = CMETAL
 						p.Color = if lum > 0.3 then C.Patina else C.Bronze
