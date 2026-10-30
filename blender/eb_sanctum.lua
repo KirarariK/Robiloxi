@@ -738,15 +738,25 @@ ARENAS.Sanctuaire = {
 ARENAS.Forge = {
 	glow = C.Ember,
 	props = {
-		ClockTime = 0.3, Brightness = 1.2, Ambient = rgb(90, 34, 18), OutdoorAmbient = rgb(160, 60, 24),
-		FogColor = rgb(70, 20, 10), FogEnd = 380, ExposureCompensation = 0.15, GeographicLatitude = 30,
+		-- crépuscule sans soleil : le ciel nocturne teinterait tout en bleu, l'atmosphère rouge réchauffe l'ensemble
+		ClockTime = 17.8, Brightness = 0.9, Ambient = rgb(70, 36, 28), OutdoorAmbient = rgb(120, 56, 36),
+		FogColor = rgb(70, 20, 10), FogEnd = 380, ExposureCompensation = 0, GeographicLatitude = 30,
 	},
-	atm = { Density = 0.45, Offset = 0.1, Color = rgb(190, 70, 30), Decay = rgb(60, 10, 5), Glare = 0.2, Haze = 3 },
-	cc = { Contrast = 0.18, Saturation = 0.15, Brightness = 0, TintColor = rgb(255, 222, 200) },
+	atm = { Density = 0.5, Offset = 0.1, Color = rgb(140, 60, 40), Decay = rgb(90, 20, 5), Glare = 0, Haze = 2.5 },
+	cc = { Contrast = 0.2, Saturation = -0.05, Brightness = 0, TintColor = rgb(255, 236, 222) },
 	bloom = { Intensity = 1.2, Size = 30, Threshold = 0.9 },
 	rays = { Intensity = 0.03, Spread = 0.4 },
-	sky = { StarCount = 300 },
+	sky = { StarCount = 0, CelestialBodiesShown = false },
 	build = function(ctx)
+		-- le projecteur du pont et les lumières de lave écrasaient le sol en orange uniforme : adouci pour garder du relief
+		for _, d in ctx.m:GetDescendants() do
+			if d:IsA("SpotLight") and d.Parent and d.Parent.Name == "DeckLight" then
+				d.Brightness = 1.6
+				d.Color = rgb(255, 190, 140)
+			elseif d:IsA("PointLight") and d.Parent and d.Parent.Name == "LavaLight" then
+				d.Brightness = 2.2
+			end
+		end
 		-- cendres qui tombent, braises qui montent de la lave, deux colosses engloutis
 		emitter(ctx.f, "Cendres", CFrame.new(ctx.c + Vector3.new(0, 50, 0)), Vector3.new(200, 1, 200), {
 			Texture = TEX.spark, Color = ColorSequence.new(rgb(120, 110, 105), rgb(70, 64, 60)), Rate = 60,
@@ -768,7 +778,7 @@ ARENAS.Forge = {
 }
 
 ARENAS.Ruines = {
-	glow = C.Frost,
+	glow = rgb(150, 165, 255),
 	props = {
 		ClockTime = 0, Brightness = 0.8, Ambient = rgb(44, 52, 70), OutdoorAmbient = rgb(70, 84, 110),
 		FogColor = rgb(34, 40, 54), FogEnd = 320, ExposureCompensation = 0.2, GeographicLatitude = 30,
@@ -824,10 +834,31 @@ ARENAS.Reacteur = {
 		-- le Puits d'Éther : particules montant du vide, anneaux runiques flottant autour du puits
 		motes(ctx.f, "RemontéeÉther", CFrame.new(ctx.c + Vector3.new(0, -50, 0)), Vector3.new(160, 1, 160), C.Ether, C.Violet, 40,
 			Vector3.new(0, 2, 0), NumberRange.new(8, 14), NumberRange.new(8, 11), 0.5)
+		-- l'ancienne chambre technologique devient un puits sacré : pierre, bronze patiné, lueur d'éther
+		for _, p in ctx.m:GetDescendants() do
+			if p:IsA("BasePart") and not p:IsDescendantOf(ctx.f) and p.Transparency < 0.99 then
+				local c = p.Color
+				local sat = math.max(c.R, c.G, c.B) - math.min(c.R, c.G, c.B)
+				local lum = (c.R + c.G + c.B) / 3
+				if p.Material == NEON then
+					if sat < 0.3 and lum > 0.7 then
+						p.Color = C.EtherSoft
+					end
+				elseif sat < 0.2 then
+					if p.Material == M.Metal or p.Material == M.DiamondPlate or p.Material == M.Foil then
+						p.Material = CMETAL
+						p.Color = if lum > 0.3 then C.Patina else C.Bronze
+					else
+						p.Material = SLATE
+						p.Color = if lum > 0.35 then C.Slate else C.Basalt
+					end
+				end
+			end
+		end
 		local function skip(cf, size)
 			return not fits(cf, size + Vector3.new(2, 2, 2), ctx.ex)
 		end
-		for k, spec in { { 62, -10, C.Ether }, { 80, 24, C.Violet }, { 96, -32, C.Ether } } do
+		for k, spec in { { 62, -10, C.Ether }, { 80, 24, C.Violet } } do
 			local base = CFrame.new(ctx.c + Vector3.new(0, spec[2], 0)) * CFrame.Angles(math.rad(k * 3 - 6), 0, 0)
 			bronzeRing(ctx.f, base, spec[1], spec[3], 2, skip)
 			local count = math.floor(spec[1] / 3)
