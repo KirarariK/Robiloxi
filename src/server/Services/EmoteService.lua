@@ -63,7 +63,7 @@ function EmoteService.play(player: Player, id: string, force: boolean?): (boolea
 		task.delay(def.Duration, function()
 			local cur = playing[player]
 			if cur and cur.Token == my then
-				playing[player] = nil
+				EmoteService.stop(player)
 			end
 		end)
 	end

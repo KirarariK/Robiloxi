@@ -84,7 +84,7 @@ local function playFor(p: Player, id: string)
 		task.delay(def.Duration + 0.1, function()
 			local cur = playing[p]
 			if cur and cur.Token == my then
-				playing[p] = nil
+				stopFor(p)
 			end
 		end)
 	end
@@ -242,7 +242,7 @@ function EmoteController.init()
 	end)
 	local function hook(p: Player)
 		p.CharacterRemoving:Connect(function()
-			playing[p] = nil
+			stopFor(p)
 		end)
 	end
 	Players.PlayerAdded:Connect(hook)

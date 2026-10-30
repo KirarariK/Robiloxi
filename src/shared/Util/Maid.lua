@@ -16,19 +16,20 @@ type MaidImpl = Maid & {
 	_named: { [string]: Task },
 }
 
-local function cleanup(task: Task)
-	if typeof(task) == "RBXScriptConnection" then
-		task:Disconnect()
-	elseif typeof(task) == "Instance" then
-		task:Destroy()
-	elseif type(task) == "thread" then
-		if coroutine.status(task) ~= "dead" then
-			pcall(task.cancel, task)
+-- Paramètre nommé `job` (pas `task`) pour ne pas masquer la librairie globale `task`.
+local function cleanup(job: Task)
+	if typeof(job) == "RBXScriptConnection" then
+		job:Disconnect()
+	elseif typeof(job) == "Instance" then
+		job:Destroy()
+	elseif type(job) == "thread" then
+		if coroutine.status(job) ~= "dead" then
+			pcall(task.cancel, job)
 		end
-	elseif type(task) == "function" then
-		task()
-	elseif type(task) == "table" and type(task.Destroy) == "function" then
-		task:Destroy()
+	elseif type(job) == "function" then
+		job()
+	elseif type(job) == "table" and type((job :: any).Destroy) == "function" then
+		(job :: any):Destroy()
 	end
 end
 
@@ -40,18 +41,18 @@ function Maid.new(): Maid
 	return (self :: any) :: Maid
 end
 
-function Maid.Give(self: MaidImpl, task: Task): Task
-	table.insert(self._tasks, task)
-	return task
+function Maid.Give(self: MaidImpl, job: Task): Task
+	table.insert(self._tasks, job)
+	return job
 end
 
 -- Remplace (et nettoie) la tâche nommée précédente.
-function Maid.Set(self: MaidImpl, key: string, task: Task?)
+function Maid.Set(self: MaidImpl, key: string, job: Task?)
 	local old = self._named[key]
-	if old ~= nil and old ~= task then
+	if old ~= nil and old ~= job then
 		cleanup(old)
 	end
-	self._named[key] = task :: any
+	self._named[key] = job :: any
 end
 
 function Maid.Clean(self: MaidImpl)

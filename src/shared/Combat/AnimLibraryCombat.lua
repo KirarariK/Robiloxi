@@ -354,44 +354,66 @@ local function jump(s: Style, weapon: string): Clip?
 	return Core.clip("Jump", 0.6, keys, { Layer = Layers.Action, FadeIn = 0.05, FadeOut = 0.15 })
 end
 
+local function variantModsFor(suffix: string): Config.VariantMods
+	if suffix == "_F" then
+		return Config.Variants.Forward
+	elseif suffix == "_S" then
+		return Config.Variants.Side
+	elseif suffix == "_B" then
+		return Config.Variants.Back
+	end
+	return Config.Variants.Neutral
+end
+
 local function light(id: string, s: Style, weapon: string, index: number, suffix: string, air: boolean): Clip?
 	local w = WeaponData.get(weapon)
 	if not w or index < 1 or index > w.ComboLength then
 		return nil
 	end
-	local duration = Config.Light.Windup + Config.Light.Recovery + (if index >= w.ComboLength then Config.Light.FinisherExtraRecovery else 0)
-	local wf = Config.Light.Windup / duration
+	-- Durée / Impact alignés sur CombatMath.lightTiming (WindupMult des variantes inclus).
+	local mods = variantModsFor(suffix)
+	local windup = Config.Light.Windup * (if air then 1 else mods.WindupMult)
+	local recovery = Config.Light.Recovery + (if index >= w.ComboLength then Config.Light.FinisherExtraRecovery else 0)
+	local duration = windup + recovery
+	local wf = windup / duration
 	local st = if air then SINGLE[4] else strikeFor(s, weapon, index)
 	if air and weapon == "Staff" then
 		st = STAFF[4]
 	end
 	local sign = twistSign(weapon, index)
 	local g = guard(s, weapon)
-	local crouchHit = if s.HeavyBody then 0.25 else 0.1
-	local wind = compose(bodyAt(s, -st.Twist * sign, st.LeanWind, 0, 0), strikeArms(s, weapon, st.Wind, index, false))
-	local hit = compose(bodyAt(s, st.Twist * sign, st.LeanHit, crouchHit, 10), strikeArms(s, weapon, st.Hit, index, true))
-	local follow = add(hit, { Waist = J(-4, st.Twist * sign * 10, 0) }, 1)
+	local crouchHit = if s.HeavyBody then 0.28 else 0.12
+	-- Anticipation : enroulement un peu plus profond que la pose de wind « nu ».
+	local wind = compose(bodyAt(s, -st.Twist * sign * 1.12, st.LeanWind * 1.25, 0.04, 4), strikeArms(s, weapon, st.Wind, index, false))
+	local hit = compose(bodyAt(s, st.Twist * sign * 1.08, st.LeanHit * 1.15, crouchHit, 14), strikeArms(s, weapon, st.Hit, index, true))
+	-- Follow-through lisible (sur-rotation courte) puis retour ferme à la garde.
+	local follow = add(hit, {
+		Waist = J(st.LeanHit * 0.4, st.Twist * sign * 16, 0),
+		Neck = J(-st.LeanHit * 0.25, -st.Twist * sign * 6, 0),
+		Root = J(0, 0, 0, 0, -0.04, -0.12),
+	}, 1)
 
 	local midHop: Pose? = nil
 	if s.Hop > 0 and not air then
-		midHop = add(wind, { Root = J(0, 0, 0, 0, s.Hop * 0.5, 0) }, 1)
+		midHop = add(wind, { Root = J(0, 0, 0, 0, s.Hop * 0.55, 0) }, 1)
 	end
 
+	-- Courbe : sortie de garde rapide → coil tôt → commit accéléré → impact → follow court → recovery snappy.
 	local keys: { KeySpec } = {
-		{ t = 0, p = g, e = "quadOut" },
-		{ t = wf * 0.6, p = midHop or wind, e = s.SwingEase },
+		{ t = 0, p = g, e = "cubicOut" },
+		{ t = wf * 0.42, p = midHop or wind, e = s.SwingEase },
 		{ t = wf, p = hit, e = "quadOut" },
-		{ t = wf + (1 - wf) * 0.35, p = follow, e = if s.Fluid then "sine" else "quad" },
+		{ t = wf + (1 - wf) * 0.2, p = follow, e = if s.Fluid then "sineIn" else "cubicIn" },
 		{ t = 1, p = g },
 	}
 
 	-- Jumelles, coup 5 : tourbillon complet
 	if weapon == "Dual" and index == 5 and not air then
-		keys = { { t = 0, p = g, e = "quadOut" }, { t = wf * 0.4, p = wind, e = "linear" } }
+		keys = { { t = 0, p = g, e = "cubicOut" }, { t = wf * 0.35, p = wind, e = "linear" } }
 		for i = 1, 4 do
 			local p = merge(hit, {})
-			p.Root = J(0, -90 * i, 0, 0, -0.1, 0)
-			table.insert(keys, { t = wf * 0.4 + (wf * 1.25 - wf * 0.4) * i / 4, p = p, e = "linear" })
+			p.Root = J(0, -90 * i, 0, 0, -0.12, 0)
+			table.insert(keys, { t = wf * 0.35 + (wf * 1.2 - wf * 0.35) * i / 4, p = p, e = "linear" })
 		end
 		table.insert(keys, { t = 1, p = g })
 	end
@@ -403,18 +425,20 @@ local function light(id: string, s: Style, weapon: string, index: number, suffix
 		end
 		if s.Acrobatic then
 			-- Faucon : salto avant puis frappe plongeante
-			local flips = flipKeys("X", -1, 0.02, wf * 0.95, 0.4, wind, "linear")
+			local flips = flipKeys("X", -1, 0.02, wf * 0.92, 0.45, wind, "linear")
 			keys = { { t = 0, p = g, e = "linear" } }
 			for _, k in flips do
 				table.insert(keys, k)
 			end
-			table.insert(keys, { t = wf, p = merge(hit, tuck), e = "quadOut" })
+			table.insert(keys, { t = wf, p = merge(hit, tuck), e = "cubicOut" })
+			table.insert(keys, { t = wf + (1 - wf) * 0.25, p = merge(follow, tuck), e = "cubicIn" })
 			table.insert(keys, { t = 1, p = g })
 		end
 	else
 		local ov = variantOverlay(s, suffix, index)
 		if ov then
-			local weights = { 0, 0.5, 1, 0.8, 0 }
+			-- Poids calés sur les 5 clés (garde → wind → hit → follow → garde).
+			local weights = { 0, 0.65, 1, 0.75, 0 }
 			for i, k in keys do
 				local wgt = weights[math.min(i, #weights)] or 0
 				if i > 1 and i < #keys and wgt > 0 then
@@ -426,9 +450,9 @@ local function light(id: string, s: Style, weapon: string, index: number, suffix
 
 	keys = stormify(id, s, keys)
 	return Core.clip(id, duration, keys, {
-		FadeIn = 0.04,
-		FadeOut = 0.12,
-		Markers = { { Time = wf * 0.7, Name = "Swing" }, { Time = wf, Name = "Impact" } },
+		FadeIn = 0.02,
+		FadeOut = 0.08,
+		Markers = { { Time = wf * 0.62, Name = "Swing" }, { Time = wf, Name = "Impact" } },
 	})
 end
 
@@ -437,14 +461,16 @@ local function counter(s: Style, weapon: string): Clip
 	local duration = windup + Config.Light.Recovery
 	local wf = windup / duration
 	local g = guard(s, weapon)
-	local thrust = compose(bodyAt(s, 0.3, -16, 0.15, 18), strikeArms(s, weapon, THRUST.Hit, 1, true))
-	thrust = add(thrust, { Root = J(0, 0, 0, 0, -0.1, -0.8) }, 1)
+	local coil = compose(bodyAt(s, -0.35, 8, 0.08, 6), strikeArms(s, weapon, THRUST.Wind, 1, false))
+	local thrust = compose(bodyAt(s, 0.35, -18, 0.18, 20), strikeArms(s, weapon, THRUST.Hit, 1, true))
+	thrust = add(thrust, { Root = J(0, 0, 0, 0, -0.12, -0.95) }, 1)
 	return Core.clip("Counter", duration, {
-		{ t = 0, p = g, e = "expoIn" },
+		{ t = 0, p = g, e = "cubicOut" },
+		{ t = wf * 0.4, p = coil, e = "expoIn" },
 		{ t = wf, p = thrust, e = "quadOut" },
-		{ t = wf + (1 - wf) * 0.4, p = thrust, e = "sine" },
+		{ t = wf + (1 - wf) * 0.28, p = thrust, e = "cubicIn" },
 		{ t = 1, p = g },
-	}, { FadeIn = 0.03, Markers = { { Time = wf, Name = "Impact" } } })
+	}, { FadeIn = 0.02, FadeOut = 0.08, Markers = { { Time = wf * 0.55, Name = "Swing" }, { Time = wf, Name = "Impact" } } })
 end
 
 local function heavyCharge(s: Style, weapon: string): Clip
@@ -479,18 +505,21 @@ local function heavyStrike(s: Style, weapon: string): Clip?
 	local duration = Config.Heavy.StrikeWindup + w.HeavyRecovery
 	local wf = Config.Heavy.StrikeWindup / duration
 	local g = guard(s, weapon)
-	local wind = compose(bodyAt(s, -1.3, 10, 0.05, 0), strikeArms(s, weapon, { S = { 170, -20, 40 }, E = 40, W = { 35, 0, 0 } }, 1, false))
-	local hitArms = strikeArms(s, weapon, { S = { 50, 35, -30 }, E = 5, W = { -65, 0, 0 } }, 1, true)
+	-- Coil plus profond que la charge, pour l'anticipation au relâchement.
+	local wind = compose(bodyAt(s, -1.45, 14, 0.1, 4), strikeArms(s, weapon, { S = { 175, -25, 48 }, E = 48, W = { 40, 0, 0 } }, 1, false))
+	local hitArms = strikeArms(s, weapon, { S = { 42, 40, -35 }, E = 4, W = { -72, 0, 0 } }, 1, true)
 	if weapon == "Dual" then
 		hitArms = compose(rightArmOf(hitArms), leftArmOf(hitArms)) -- coupe en X
 		wind = compose(wind, leftArmOf(wind))
 	end
-	local hit = compose(bodyAt(s, 1.3, -28, if s.HeavyBody then 0.5 else 0.3, 20), hitArms)
-	hit = add(hit, { Root = J(0, 0, 0, 0, 0, -0.6) }, 1)
+	local hit = compose(bodyAt(s, 1.45, -32, if s.HeavyBody then 0.55 else 0.35, 24), hitArms)
+	hit = add(hit, { Root = J(0, 0, 0, 0, -0.08, -0.75) }, 1)
+	local settle = add(hit, { Waist = J(-6, 12, 0), Neck = J(4, -4, 0), Root = J(0, 0, 0, 0, 0.04, 0.1) }, 1)
 	local keys: { KeySpec } = {
-		{ t = 0, p = wind, e = s.SwingEase },
+		{ t = 0, p = wind, e = "cubicIn" },
+		{ t = wf * 0.35, p = wind, e = s.SwingEase }, -- micro-hold d'anticipation
 		{ t = wf, p = hit, e = "quadOut" },
-		{ t = wf + (1 - wf) * 0.45, p = add(hit, { Waist = J(-4, 8, 0) }, 1), e = "sine" },
+		{ t = wf + (1 - wf) * 0.28, p = settle, e = if s.Fluid then "sineIn" else "cubicIn" },
 		{ t = 1, p = g },
 	}
 	if weapon == "Staff" then
@@ -498,17 +527,17 @@ local function heavyStrike(s: Style, weapon: string): Clip?
 		keys = { { t = 0, p = wind, e = "linear" } }
 		for i = 1, 4 do
 			local p = merge(hit, {})
-			p.Root = J(0, 90 * i, 0, 0, -0.25, 0)
-			table.insert(keys, { t = wf * 1.6 * i / 4, p = p, e = "linear" })
+			p.Root = J(0, 90 * i, 0, 0, -0.28, 0)
+			table.insert(keys, { t = wf * 1.55 * i / 4, p = p, e = "linear" })
 		end
-		table.insert(keys, { t = wf * 1.6 + (1 - wf * 1.6) * 0.4, p = hit, e = "sine" })
+		table.insert(keys, { t = wf * 1.55 + (1 - wf * 1.55) * 0.32, p = settle, e = "cubicIn" })
 		table.insert(keys, { t = 1, p = g })
 	end
 	keys = stormify("M2_Strike", s, keys)
 	return Core.clip("M2_Strike", duration, keys, {
-		FadeIn = 0.05,
-		FadeOut = 0.15,
-		Markers = { { Time = wf * 0.6, Name = "Swing" }, { Time = wf, Name = "Impact" } },
+		FadeIn = 0.03,
+		FadeOut = 0.1,
+		Markers = { { Time = wf * 0.55, Name = "Swing" }, { Time = wf, Name = "Impact" } },
 	})
 end
 
@@ -542,16 +571,26 @@ end
 local function block(s: Style, weapon: string): Clip
 	local p = blockPose(s, weapon)
 	local b = add(p, { Waist = J(0, 2, 0) }, 1)
-	return Core.clip("Block", 1.2, { { t = 0, p = p }, { t = 0.5, p = b }, { t = 1, p = p } }, { Looped = true, FadeIn = 0.06, FadeOut = 0.1 })
+	return Core.clip("Block", 1.2, { { t = 0, p = p }, { t = 0.5, p = b }, { t = 1, p = p } }, { Looped = true, FadeIn = 0.04, FadeOut = 0.08 })
 end
 
 local function blockHit(s: Style, weapon: string): Clip
 	local p = blockPose(s, weapon)
-	local recoil = add(p, { Waist = J(10, 0, 0), Neck = J(6, 0, 0), RightShoulder = J(-14, 0, 0), LeftShoulder = J(-14, 0, 0) }, 1)
-	return Core.clip("BlockHit", 0.24, { { t = 0, p = p, e = "quadOut" }, { t = 0.3, p = recoil, e = "sine" }, { t = 1, p = p } }, {
+	local recoil = add(p, {
+		Waist = J(14, 0, 0),
+		Neck = J(8, 0, 0),
+		RightShoulder = J(-18, 0, 0),
+		LeftShoulder = J(-18, 0, 0),
+		Root = J(0, 0, 0, 0, 0, 0.12),
+	}, 1)
+	return Core.clip("BlockHit", 0.2, {
+		{ t = 0, p = p, e = "expoOut" },
+		{ t = 0.28, p = recoil, e = "cubicIn" },
+		{ t = 1, p = p },
+	}, {
 		Layer = Layers.Reaction,
-		FadeIn = 0.02,
-		FadeOut = 0.08,
+		FadeIn = 0.015,
+		FadeOut = 0.06,
 	})
 end
 
@@ -565,75 +604,81 @@ local function parry(s: Style, weapon: string): Clip
 	if weapon == "Dual" then
 		arms = compose(rightArmOf(arms), leftArmOf(arms))
 	end
-	local deflect = compose(upperOnly(bodyAt(s, 0.6, if s.HeavyBody then -14 else -4, 0, 0)), arms)
-	return Core.clip("Parry", 0.4, {
+	local deflect = compose(upperOnly(bodyAt(s, 0.75, if s.HeavyBody then -16 else -6, 0, 0)), arms)
+	return Core.clip("Parry", 0.36, {
 		{ t = 0, p = g, e = "expoOut" },
-		{ t = 0.22, p = deflect, e = "sine" },
-		{ t = 0.55, p = deflect, e = "sine" },
+		{ t = 0.18, p = deflect, e = "quadOut" },
+		{ t = 0.48, p = deflect, e = "cubicIn" },
 		{ t = 1, p = g },
-	}, { FadeIn = 0.02, FadeOut = 0.1 })
+	}, { FadeIn = 0.015, FadeOut = 0.08 })
 end
 
 local function dodge(s: Style, weapon: string, dir: string): Clip
 	local g = guard(s, weapon)
 	local duration = Config.Dodge.Duration
-	local scale = if s.OffHandFencing then 0.5 elseif s.Id == "Rempart" then 0.65 else 1
+	local scale = if s.OffHandFencing then 0.55 elseif s.Id == "Rempart" then 0.72 else 1.08
 	local keys: { KeySpec }
 	if s.Acrobatic then
 		local axis = if dir == "F" or dir == "B" then "X" else "Z"
 		local sign = if dir == "F" then -1 elseif dir == "B" then 1 elseif dir == "R" then -1 else 1
-		keys = { { t = 0, p = g, e = "linear" } }
-		for _, k in flipKeys(axis, sign, 0.05, 0.85, 1.1, g, "linear") do
+		keys = { { t = 0, p = g, e = "expoOut" } }
+		for _, k in flipKeys(axis, sign, 0.04, 0.78, 1.15, g, "linear") do
 			table.insert(keys, k)
 		end
 		table.insert(keys, { t = 1, p = g })
 	elseif s.Fluid and (dir == "L" or dir == "R") then
 		-- Équilibre : pirouette latérale
 		local sign = if dir == "L" then 1 else -1
-		keys = { { t = 0, p = g, e = "linear" } }
+		keys = { { t = 0, p = g, e = "cubicOut" } }
 		for i = 1, 3 do
 			local p = merge(g, {})
-			p.Root = J(0, 120 * i * sign, 0, 0, -0.2, 0)
-			table.insert(keys, { t = 0.85 * i / 3, p = p, e = "linear" })
+			p.Root = J(0, 120 * i * sign, 0, 0, -0.22, 0)
+			table.insert(keys, { t = 0.78 * i / 3, p = p, e = "linear" })
 		end
 		table.insert(keys, { t = 1, p = g })
 	else
 		local pose: Pose
 		if dir == "F" then
 			pose = compose(g, {
-				Root = J(-25 * scale, 0, 0, 0, -0.6 * scale, -0.4),
-				Waist = J(-15 * scale, 0, 0),
-				RightShoulder = J(-40, 0, 20),
-				RightHip = J(60 * scale, 0, 5),
-				RightKnee = J(-70 * scale, 0, 0),
-				LeftHip = J(-20, 0, -5),
-				LeftKnee = J(-40, 0, 0),
+				Root = J(-28 * scale, 0, 0, 0, -0.7 * scale, -0.5),
+				Waist = J(-18 * scale, 0, 0),
+				RightShoulder = J(-45, 0, 22),
+				RightHip = J(68 * scale, 0, 5),
+				RightKnee = J(-78 * scale, 0, 0),
+				LeftHip = J(-24, 0, -5),
+				LeftKnee = J(-45, 0, 0),
 			})
 			if s.TwoHanded then
 				pose = compose(pose, twoHand(pose))
 			end
 		elseif dir == "B" then
 			pose = add(g, {
-				Root = J(12 * scale, 0, 0, 0, 0.25 * scale, 0.3),
-				Waist = J(10 * scale, 0, 0),
-				RightHip = J(-20 * scale, 0, 0),
-				LeftHip = J(30 * scale, 0, 0),
-				LeftKnee = J(-50 * scale, 0, 0),
+				Root = J(14 * scale, 0, 0, 0, 0.3 * scale, 0.38),
+				Waist = J(12 * scale, 0, 0),
+				RightHip = J(-24 * scale, 0, 0),
+				LeftHip = J(34 * scale, 0, 0),
+				LeftKnee = J(-55 * scale, 0, 0),
 			}, 1)
 		else
 			local r = add(g, {
-				Root = J(0, 0, -14 * scale, 0.4 * scale, -0.35 * scale, 0),
-				Waist = J(0, 0, -8 * scale),
-				RightHip = J(0, 0, 25 * scale),
-				LeftHip = J(0, 0, 10 * scale),
-				LeftKnee = J(-30, 0, 0),
+				Root = J(0, 0, -16 * scale, 0.48 * scale, -0.4 * scale, 0),
+				Waist = J(0, 0, -10 * scale),
+				RightHip = J(0, 0, 28 * scale),
+				LeftHip = J(0, 0, 12 * scale),
+				LeftKnee = J(-34, 0, 0),
 			}, 1)
 			pose = if dir == "R" then r else mirror(r)
 		end
-		keys = { { t = 0, p = g, e = "quadOut" }, { t = 0.3, p = pose, e = "sine" }, { t = 0.7, p = pose, e = "sine" }, { t = 1, p = g } }
+		-- Sortie explosive, plateau court, recovery avant la fin des i-frames utiles.
+		keys = {
+			{ t = 0, p = g, e = "expoOut" },
+			{ t = 0.16, p = pose, e = "sine" },
+			{ t = 0.52, p = pose, e = "cubicIn" },
+			{ t = 1, p = g },
+		}
 	end
 	keys = stormify("Dodge_" .. dir, s, keys)
-	return Core.clip("Dodge_" .. dir, duration, keys, { FadeIn = 0.03, FadeOut = 0.08 })
+	return Core.clip("Dodge_" .. dir, duration, keys, { FadeIn = 0.02, FadeOut = 0.06 })
 end
 
 local function stunned(s: Style, weapon: string): Clip

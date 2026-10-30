@@ -427,6 +427,11 @@ local function stepRig(rig: Rig, dt: number, now: number)
 	local any = false
 	for _, j in rig.Joints do
 		local motor = j.Motor
+		-- Motor6D / contrainte détruite ou remplacée (respawn) : ignorer jusqu'au prochain play/rebuild
+		if motor.Parent == nil then
+			j.Written = false
+			continue
+		end
 		local cur = motor.Transform
 		-- si l'Animator n'a pas réécrit l'articulation, la valeur courante est la nôtre : base = repos
 		local base = if j.Written and cur == j.Last then CFrame.identity else cur

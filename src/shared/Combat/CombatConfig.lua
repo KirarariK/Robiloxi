@@ -79,16 +79,16 @@ Config.Posture = table.freeze({
 
 -- Coups légers (M1)
 Config.Light = table.freeze({
-	Windup = 0.2, -- avant l'impact (÷ vitesse d'attaque)
-	Recovery = 0.26, -- après l'impact (÷ vitesse d'attaque)
+	Windup = 0.17, -- avant l'impact (÷ vitesse d'attaque) — snappy sans casser la lecture
+	Recovery = 0.24, -- après l'impact (÷ vitesse d'attaque)
 	ComboResetTime = 0.8, -- au-delà, le combo repart au coup 1
-	FinisherExtraRecovery = 0.22, -- dernier coup du combo : récupération plus longue
+	FinisherExtraRecovery = 0.2, -- dernier coup du combo : récupération plus longue
 	FinisherDamageMult = 1.25,
 	FinisherPostureMult = 1.6,
 	PostureDamage = 7, -- × FormStats.PostureDamage
 	StaminaCost = 6, -- × WeaponData.StaminaCost × FormStats.StaminaCost
 	ComboPushFraction = 0.35, -- Équilibre : fraction de KineticPush appliquée à chaque coup (100 % au dernier)
-	HitStun = 0.26, -- vacillement de la cible touchée (sans armure)
+	HitStun = 0.24, -- vacillement de la cible touchée (sans armure)
 	MaxTargets = 3, -- cibles par coup (Bâton-Lame à 360°)
 })
 
@@ -108,7 +108,7 @@ Config.Heavy = table.freeze({
 	AutoReleaseSlack = 0.15, -- marge serveur avant la frappe automatique (latence du relâchement)
 	StaleReleaseGrace = 0.35, -- un « Heavy » reçu juste après une frappe auto est un relâchement tardif, ignoré
 	MinChargeFactor = 0.7, -- puissance à charge minimale (1 à charge maximale)
-	StrikeWindup = 0.2, -- entre relâchement et impact (÷ vitesse) ; récupération = WeaponData.HeavyRecovery
+	StrikeWindup = 0.18, -- entre relâchement et impact (÷ vitesse) ; récupération = WeaponData.HeavyRecovery
 	StaminaCost = 16,
 	HitPostureFraction = 0.5, -- posture infligée sur un coup lourd non bloqué
 	BasePush = 1.5, -- studs de recul sur un lourd (+ KineticPush)
@@ -155,11 +155,11 @@ Config.GuardBroken = table.freeze({
 
 -- Esquive
 Config.Dodge = table.freeze({
-	Duration = 0.36, -- ÷ FormStats.DodgeSpeed
-	IFrames = 0.26, -- invulnérabilité depuis le début de l'esquive
-	Distance = 11,
+	Duration = 0.34, -- ÷ FormStats.DodgeSpeed
+	IFrames = 0.24, -- invulnérabilité depuis le début de l'esquive
+	Distance = 11.5,
 	StaminaCost = 22,
-	Cooldown = 0.45, -- après la fin de l'esquive
+	Cooldown = 0.42, -- après la fin de l'esquive
 })
 
 -- Saber Lock / Clash : deux lourds relâchés presque en même temps à portée
@@ -268,9 +268,9 @@ Config.Camera = table.freeze({
 	ShakeHeavy = 0.55,
 	ShakeParry = 0.45,
 	ShakeGuardBreak = 0.7,
-	HitStopLight = 0.035,
-	HitStopHeavy = 0.08,
-	HitStopParry = 0.1,
+	HitStopLight = 0.048,
+	HitStopHeavy = 0.1,
+	HitStopParry = 0.12,
 	LockFov = 48,
 	LockTimeScale = 0.3,
 	LockRange = 70, -- un Saber Lock plus loin ne déclenche pas le zoom
