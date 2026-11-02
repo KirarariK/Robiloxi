@@ -7,6 +7,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("EtherBlades")
 local Net = require(Shared.Net)
@@ -232,6 +233,40 @@ local function refreshPanels()
 	end
 end
 
+local function refreshTopThree()
+	local hub = Workspace:FindFirstChild("Hub")
+	local pillars = hub and hub:FindFirstChild("TopThreePillars", true)
+	if not pillars then
+		return
+	end
+	for rank = 1, 3 do
+		local stand = pillars:FindFirstChild("Top_" .. rank)
+		local badge = stand and stand:FindFirstChild("RankBadge", true)
+		local gui = badge and badge:FindFirstChild("Nameplate")
+		local label = gui and gui:FindFirstChildWhichIsA("TextLabel")
+		if not (gui and gui:IsA("BillboardGui") and label) then
+			continue
+		end
+		local entry = cache.Wins[rank]
+		label.Text = if entry then string.format("TOP %d · %s", rank, entry.Name) else "TOP " .. rank
+		label.Position = UDim2.fromOffset(48, 0)
+		label.Size = UDim2.new(1, -48, 1, 0)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		local image = gui:FindFirstChild("Avatar")
+		if not image then
+			image = Instance.new("ImageLabel")
+			image.Name = "Avatar"
+			image.BackgroundTransparency = 1
+			image.Size = UDim2.fromOffset(44, 44)
+			image.Position = UDim2.fromOffset(0, 2)
+			image.Parent = gui
+		end
+		if image:IsA("ImageLabel") then
+			image.Image = if entry then string.format("rbxthumb://type=AvatarBust&id=%d&w=150&h=150", entry.UserId) else ""
+		end
+	end
+end
+
 local function snapshot(): Snapshot
 	return { Boards = cache, UpdatedAt = updatedAt }
 end
@@ -250,6 +285,7 @@ local function refresh()
 	end
 	updatedAt = os.time()
 	refreshPanels()
+	refreshTopThree()
 	Net.event("LeaderboardData"):FireAllClients(snapshot())
 	ranksEvent:Fire()
 end

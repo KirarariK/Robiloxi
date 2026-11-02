@@ -1,0 +1,9 @@
+# Aucune dépendance externe : Trove, Signal, Spring et MathUtil sont implémentés
+# nativement dans src/shared/Util (choix « implémentation native » du cahier des charges).
+[package]
+name = "kirararik/syndicate-black-market"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]

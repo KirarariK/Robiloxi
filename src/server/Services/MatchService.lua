@@ -17,6 +17,7 @@ local DataService = require(script.Parent.DataService)
 local TitleService = require(script.Parent.TitleService)
 local LeaderboardService = require(script.Parent.LeaderboardService)
 local RerollService = require(script.Parent.RerollService)
+local CharacterService = require(script.Parent.CharacterService)
 
 local MatchFolder = script.Parent.Parent.Match
 local MatchTypes = require(MatchFolder.MatchTypes)
@@ -167,7 +168,10 @@ local function returnToHub(p: Player)
 	local char = p.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if not char or not hum or hum.Health <= 0 then
-		p:LoadCharacter()
+		local ok, reason = CharacterService.loadCharacter(p, nil, true)
+		if not ok and reason then
+			warn("[EtherBlades] Réapparition du joueur impossible : " .. reason)
+		end
 		return
 	end
 	if spawnPart then
@@ -180,7 +184,10 @@ local function returnToHub(p: Player)
 			root.AssemblyLinearVelocity = Vector3.zero
 		end
 	else
-		p:LoadCharacter()
+		local ok, reason = CharacterService.loadCharacter(p, nil, true)
+		if not ok and reason then
+			warn("[EtherBlades] Retour au Hub impossible : " .. reason)
+		end
 	end
 end
 
@@ -213,7 +220,7 @@ local hooks: MatchRunner.Hooks = {
 --------------------------------------------------------------------------------
 -- API publique
 
-export type StartOpts = { MatchId: string?, Reserved: boolean? }
+export type StartOpts = { MatchId: string?, Reserved: boolean?, ArenaSlot: number? }
 
 function MatchService.isInMatch(p: Player): boolean
 	return byPlayer[p] ~= nil
@@ -243,6 +250,10 @@ function MatchService.start(a: Player, b: Player, mode: Mode, opts: StartOpts?):
 	if not format then
 		return false, "Mode inconnu."
 	end
+	local arenaSlot = opts and opts.ArenaSlot
+	if arenaSlot ~= nil and (arenaSlot % 1 ~= 0 or arenaSlot < 1 or arenaSlot > 6) then
+		return false, "Arène du Hub invalide."
+	end
 	local id = (opts and opts.MatchId) or HttpService:GenerateGUID(false)
 	local arenaId = ArenaAllocator.pickArenaId(rng)
 	local arenaDef = ArenaData.get(arenaId)
@@ -261,6 +272,7 @@ function MatchService.start(a: Player, b: Player, mode: Mode, opts: StartOpts?):
 		Phase = "Preparing",
 		ArenaId = arenaId,
 		ArenaName = if arenaDef then arenaDef.Name else arenaId,
+		ArenaSlot = arenaSlot,
 		Arena = nil,
 		RoundEndsAt = 0,
 		LastRoundWinner = nil,

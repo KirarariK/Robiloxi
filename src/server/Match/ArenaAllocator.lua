@@ -12,6 +12,7 @@ local ArenaAllocator = {}
 
 local ORIGIN = Vector3.new(6000, 400, 6000) -- loin du Hub (autour de l'origine)
 local SPACING = 1200
+local HUB_ARENA_COUNT = 6
 local MAX_SLOTS = 32
 
 local used: { [number]: boolean } = {}
@@ -25,7 +26,15 @@ local function folder(): Folder
 		nf.Parent = Workspace
 		return nf
 	end
+
 	return f :: Folder
+end
+
+local function hubArena(slot: number): Model?
+	local hub = Workspace:FindFirstChild("Hub")
+	local rings = hub and hub:FindFirstChild("DuelRings")
+	local arena = rings and rings:FindFirstChild(string.format("LiveArena_%d", slot))
+	return if arena and arena:IsA("Model") then arena else nil
 end
 
 local function marker(model: Model, name: string, cf: CFrame)
@@ -98,44 +107,81 @@ function ArenaAllocator.pickArenaId(rng: Random): string
 	return available[rng:NextInteger(1, #available)]
 end
 
--- Retourne le modèle placé et une fonction de libération (à confier au Maid du match).
-function ArenaAllocator.acquire(arenaId: string, matchId: string): (Model?, () -> ())
+-- Utilise les arènes visibles du Hub avant les instances de secours éloignées.
+function ArenaAllocator.acquire(arenaId: string, matchId: string, preferredSlot: number?): (Model?, () -> ())
 	local slot: number? = nil
-	for i = 1, MAX_SLOTS do
-		if not used[i] then
-			slot = i
-			break
+	local model: Model? = nil
+	local staticArena = false
+
+	if preferredSlot and preferredSlot >= 1 and preferredSlot <= HUB_ARENA_COUNT then
+		local candidate = hubArena(preferredSlot)
+		if candidate and not used[preferredSlot] then
+			slot = preferredSlot
+			model = candidate
+			staticArena = true
 		end
 	end
+
+	if not slot then
+		for i = 1, HUB_ARENA_COUNT do
+			local candidate = hubArena(i)
+			if candidate and not used[i] then
+				slot = i
+				model = candidate
+				staticArena = true
+				break
+			end
+		end
+	end
+
+	if not slot then
+		local firstDynamicSlot = if Workspace:FindFirstChild("Hub") then HUB_ARENA_COUNT + 1 else 1
+		for i = firstDynamicSlot, MAX_SLOTS do
+			if not used[i] then
+				slot = i
+				break
+			end
+		end
+	end
+
 	if not slot then
 		warn("[EtherBlades] plus aucun emplacement d'arène libre")
 		return nil, function() end
 	end
 	local s = slot :: number
 	used[s] = true
-	local t = template(arenaId)
-	local model: Model
-	if t then
-		model = t:Clone()
-	else
-		if not warned[arenaId] then
-			warned[arenaId] = true
-			warn(string.format("[EtherBlades] ServerStorage.EtherBladesAssets.Arenas.%s absent : arène de repli utilisée.", arenaId))
+
+	if not model then
+		local t = template(arenaId)
+		if t then
+			model = t:Clone()
+		else
+			if not warned[arenaId] then
+				warned[arenaId] = true
+				warn(string.format("[EtherBlades] ServerStorage.EtherBladesAssets.Arenas.%s absent : arène de repli utilisée.", arenaId))
+			end
+			model = buildFallback(arenaId)
 		end
-		model = buildFallback(arenaId)
+		model.Name = string.format("%s_%s", arenaId, string.sub(matchId, 1, 8))
+		local col = (s - 1) % 8
+		local row = math.floor((s - 1) / 8)
+		model:PivotTo(CFrame.new(ORIGIN + Vector3.new(col * SPACING, 0, row * SPACING)))
+		model.Parent = folder()
 	end
-	model.Name = string.format("%s_%s", arenaId, string.sub(matchId, 1, 8))
-	local col = (s - 1) % 8
-	local row = math.floor((s - 1) / 8)
-	model:PivotTo(CFrame.new(ORIGIN + Vector3.new(col * SPACING, 0, row * SPACING)))
-	model.Parent = folder()
+
+	model:SetAttribute("MatchActive", true)
+	model:SetAttribute("MatchId", matchId)
 	local released = false
 	return model, function()
 		if released then
 			return
 		end
 		released = true
-		model:Destroy()
+		model:SetAttribute("MatchActive", false)
+		model:SetAttribute("MatchId", nil)
+		if not staticArena then
+			model:Destroy()
+		end
 		used[s] = nil
 	end
 end

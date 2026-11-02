@@ -26,6 +26,7 @@ export type Clip = {
 	Layer: number,
 	FadeIn: number,
 	FadeOut: number,
+	MotorSpace: boolean,
 	Keyframes: { Keyframe },
 	Joints: { string },
 	Markers: { Marker },
@@ -245,9 +246,133 @@ function Core.clip(id: string, duration: number, keys: { KeySpec }, opts: ClipOp
 		Layer = o.Layer or Core.Layers.Action,
 		FadeIn = o.FadeIn or 0.06,
 		FadeOut = o.FadeOut or 0.14,
+		MotorSpace = false,
 		Keyframes = kfs,
 		Joints = joints,
 		Markers = markers,
+	}
+	return table.freeze(clip)
+end
+
+local R6_SEQUENCE_JOINTS: { [string]: string } = {
+	Torso = "Root",
+	Head = "Neck",
+	["Right Arm"] = "RightShoulder",
+	["Left Arm"] = "LeftShoulder",
+	["Right Leg"] = "RightHip",
+	["Left Leg"] = "LeftHip",
+}
+
+local POSE_EASING_STYLES: { [string]: Enum.EasingStyle } = {
+	Linear = Enum.EasingStyle.Linear,
+	Constant = Enum.EasingStyle.Linear,
+	Elastic = Enum.EasingStyle.Elastic,
+	Cubic = Enum.EasingStyle.Cubic,
+	CubicV2 = Enum.EasingStyle.Cubic,
+	Bounce = Enum.EasingStyle.Bounce,
+}
+
+local POSE_EASING_DIRECTIONS: { [string]: Enum.EasingDirection } = {
+	In = Enum.EasingDirection.In,
+	Out = Enum.EasingDirection.Out,
+	InOut = Enum.EasingDirection.InOut,
+}
+
+local function collectSequencePose(source: Instance, out: Pose, seen: { [string]: boolean }, ease: Keyframe)
+	if not source:IsA("Pose") then
+		return
+	end
+	local joint = R6_SEQUENCE_JOINTS[source.Name]
+	if joint then
+		out[joint] = source.CFrame
+		seen[joint] = true
+		if joint == "Root" then
+			ease.Style = POSE_EASING_STYLES[source.EasingStyle.Name] or Enum.EasingStyle.Linear
+			ease.Dir = POSE_EASING_DIRECTIONS[source.EasingDirection.Name] or Enum.EasingDirection.InOut
+		end
+	end
+	for _, child in source:GetChildren() do
+		if child:IsA("Pose") then
+			collectSequencePose(child, out, seen, ease)
+		end
+	end
+end
+
+-- Convertit les KeyframeSequence R6 importées en clips compatibles avec le lecteur procédural.
+function Core.fromKeyframeSequence(id: string, sequence: KeyframeSequence, opts: ClipOpts?, durationOverride: number?): Clip?
+	local sourceFrames = sequence:GetKeyframes()
+	if #sourceFrames < 2 then
+		return nil
+	end
+	for _, frame in sourceFrames do
+		if frame.Time ~= frame.Time or frame.Time < 0 or frame.Time == math.huge then
+			return nil
+		end
+	end
+	table.sort(sourceFrames, function(a, b)
+		return a.Time < b.Time
+	end)
+	local sourceDuration = sourceFrames[#sourceFrames].Time
+	local duration = durationOverride or sourceDuration
+	if sourceDuration <= 0 or duration <= 0 or duration ~= duration or duration == math.huge then
+		return nil
+	end
+
+	local seen: { [string]: boolean } = {}
+	local frames = {}
+	for _, sourceFrame in sourceFrames do
+		local pose: Pose = {}
+		local ease: Keyframe = {
+			Time = sourceFrame.Time,
+			Pose = pose,
+			Style = Enum.EasingStyle.Linear,
+			Dir = Enum.EasingDirection.InOut,
+		}
+		for _, child in sourceFrame:GetChildren() do
+			if child:IsA("Pose") then
+				collectSequencePose(child, pose, seen, ease)
+			end
+		end
+		table.insert(frames, ease)
+	end
+
+	local joints: { string } = {}
+	for _, joint in Core.Joints do
+		if seen[joint] then
+			table.insert(joints, joint)
+		end
+	end
+	if #joints == 0 then
+		return nil
+	end
+
+	local scale = duration / sourceDuration
+	local keyframes: { Keyframe } = {}
+	for _, frame in frames do
+		local full: Pose = {}
+		for _, joint in joints do
+			full[joint] = frame.Pose[joint] or CFrame.identity
+		end
+		table.insert(keyframes, {
+			Time = frame.Time * scale,
+			Pose = table.freeze(full),
+			Style = frame.Style,
+			Dir = frame.Dir,
+		})
+	end
+
+	local o: ClipOpts = opts or {}
+	local clip: Clip = {
+		Id = id,
+		Duration = duration,
+		Looped = if o.Looped ~= nil then o.Looped else sequence.Loop,
+		Layer = o.Layer or Core.Layers.Action,
+		FadeIn = o.FadeIn or 0.06,
+		FadeOut = o.FadeOut or 0.14,
+		MotorSpace = true,
+		Keyframes = keyframes,
+		Joints = joints,
+		Markers = o.Markers or {},
 	}
 	return table.freeze(clip)
 end

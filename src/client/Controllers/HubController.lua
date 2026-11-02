@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -29,6 +30,94 @@ local PICK_DURATION = 25
 
 local pickMaid = Maid.new()
 local picking = false
+local spectatorConnection: RBXScriptConnection? = nil
+local spectatorGui: ScreenGui? = nil
+local spectatorArena: Model? = nil
+
+local function stopObserving()
+	if spectatorConnection then
+		spectatorConnection:Disconnect()
+		spectatorConnection = nil
+	end
+	if spectatorGui then
+		spectatorGui:Destroy()
+		spectatorGui = nil
+	end
+	spectatorArena = nil
+	local camera = Workspace.CurrentCamera
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if camera then
+		camera.CameraType = Enum.CameraType.Custom
+		if humanoid then
+			camera.CameraSubject = humanoid
+		end
+	end
+end
+
+local function observeArena(arena: Model)
+	if spectatorArena == arena then
+		stopObserving()
+		return
+	end
+	if State.inDuel() then
+		Toast.show("Tu ne peux pas observer pendant un duel.", "Info")
+		return
+	end
+	if arena:GetAttribute("MatchActive") ~= true then
+		Toast.show("Aucun duel en cours dans cette arène.", "Info")
+		return
+	end
+	local center = arena:FindFirstChild("Center", true)
+	if not center or not center:IsA("BasePart") then
+		warn("[EtherBlades] repère Center absent de l'arène observée.")
+		return
+	end
+	stopObserving()
+	spectatorArena = arena
+
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	camera.CameraType = Enum.CameraType.Scriptable
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "EB_Spectator"
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 20
+	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	spectatorGui = gui
+
+	local button = Instance.new("TextButton")
+	button.Name = "StopObserving"
+	button.AnchorPoint = Vector2.new(0.5, 0)
+	button.Position = UDim2.new(0.5, 0, 0, 48)
+	button.Size = UDim2.fromOffset(210, 42)
+	button.BackgroundColor3 = C.Panel
+	button.BorderSizePixel = 0
+	button.FontFace = Theme.Fonts.Bold
+	button.Text = "ARRÊTER D'OBSERVER"
+	button.TextColor3 = C.Gold
+	button.TextSize = 14
+	button.AutoButtonColor = true
+	button.Parent = gui
+	Kit.corner(button, 10)
+	Kit.stroke(button, C.Gold, 1.2, 0.25)
+	button.Activated:Connect(stopObserving)
+
+	local elapsed = 0
+	spectatorConnection = RunService.RenderStepped:Connect(function(dt: number)
+		if not arena.Parent or arena:GetAttribute("MatchActive") ~= true or State.inDuel() then
+			stopObserving()
+			return
+		end
+		elapsed += dt * 0.18
+		local target = center.Position + Vector3.new(0, 2, 0)
+		local position = center.Position + Vector3.new(math.cos(elapsed) * 29, 15, math.sin(elapsed) * 29)
+		camera.CFrame = CFrame.lookAt(position, target)
+	end)
+end
 
 local function menu(): any?
 	local m = script.Parent:FindFirstChild("MenuController")
@@ -216,6 +305,11 @@ function HubController.init()
 			else
 				HubController.startPicking()
 			end
+		elseif action == "ObserveArena" then
+			local arena = prompt:FindFirstAncestorOfClass("Model")
+			if arena and arena:GetAttribute("HubArenaSlot") ~= nil then
+				observeArena(arena)
+			end
 		end
 	end)
 	Net.event("ChallengeReceived").OnClientEvent:Connect(function(data: any)
@@ -234,8 +328,10 @@ function HubController.init()
 	State.MatchChanged:Connect(function(view: State.MatchView)
 		if view.Active then
 			HubController.stopPicking()
+			stopObserving()
 		end
 	end)
+	Players.LocalPlayer.CharacterAdded:Connect(stopObserving)
 end
 
 return HubController

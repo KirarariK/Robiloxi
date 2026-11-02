@@ -10,8 +10,9 @@ UI et commentaires **en français**. Lexique officiel : `README.md`.
 - Connexions / instances temporaires nettoyées avec `ReplicatedStorage.EtherBlades.Util.Maid` (entre rounds, à la mort, au départ d'un joueur).
 - Le serveur fait autorité : il recalcule dégâts, posture, endurance, Elo, relances, équipements. Le client ne fait qu'envoyer des intentions.
 - Toute remote client → serveur passe par `ServerScriptService.EtherBlades.Services.Guard` (`Guard.func` / `Guard.event` : débit + types + pcall).
-- Pas d'assets à uploader : **animations procédurales** (Motor6D.Transform pilotés par code), sons intégrés `rbxasset://sounds/...`
-  (ex. `swordslash.wav`, `swordlunge.wav`, `unsheath.wav`, `electronicpingshort.wav`, `button.wav`, `hit.wav`, `metal.ogg`).
+- Le serveur charge les avatars joueurs en **R6** (`CharacterService`) pour correspondre au pack d'animations R6 conservé dans `Workspace`.
+  Les clips importés sont lus par le lecteur de combat, avec les animations procédurales en repli.
+  Sons intégrés `rbxasset://sounds/...` (ex. `swordslash.wav`, `swordlunge.wav`, `unsheath.wav`, `electronicpingshort.wav`, `button.wav`, `hit.wav`, `metal.ogg`).
   Les textures de particules intégrées : `rbxasset://textures/particles/sparkles_main.dds`, `fire_main.dds`, `smoke_main.dds`.
 - Ne modifie **que les fichiers que ton équipe possède** (tableau plus bas). Si tu as besoin d'un changement ailleurs, écris-le dans ton rapport final.
 - Ne fais **pas** de commit git. L'orchestrateur intègre, déploie et teste.
@@ -29,9 +30,9 @@ Assets 3D (créés par l'équipe Modélisation, hors Rojo) :
   Chaque poignée : `PrimaryPart` = `Grip` (pièce saisie, axe +Y = direction de la lame), une Attachment `BladeStart` (+ `BladeStart2` pour le Bâton-Lame, orientée vers -Y) à l'émetteur.
 - `ServerStorage.EtherBladesAssets.Arenas.<ArenaId>` (Id = `ArenaData`) : Model contenant des Parts invisibles et non collidables
   `SpawnA`, `SpawnB` (face à face, LookVector vers l'adversaire), `IntroCam` (CFrame caméra de l'intro), `Center`, et `KillY` (Part dont le Y = altitude de chute mortelle pour lave / vide).
-- `Workspace.Hub` : lobby. Parts d'ancrage (invisibles sauf mention) : `HubSpawn` (SpawnLocation), `Pod_Ranked`, `Pod_Casual`, `Pod_Challenge`
-  (pods de file, avec ProximityPrompt créé par l'équipe UI), `RerollShrine`, `SaberBench`, `Leaderboard_Elo`, `Leaderboard_Wins`, `Leaderboard_Streak`
-  (panneaux : la face avant `Front` porte la SurfaceGui), `Dummy_1`, `Dummy_2`, `Dummy_3` (emplacements des mannequins), `MeditationSpot_1..4`.
+- `Workspace.Hub` : lobby en pierre claire de 400 × 400 studs, avec pavage octogonal, spawn central, panthéon/récompenses sur estrades, îles décoratives et murs invisibles de sécurité. `HubSpawn`, `Pod_Ranked`, `Pod_Casual`, `Pod_Challenge`, `RerollShrine`, `SaberBench`, `Leaderboard_Elo`, `Leaderboard_Wins`, `Leaderboard_Streak`, `Dummy_1..3` et `MeditationSpot_1..4` restent les points d'intégration des services existants.
+  `DuelRings.LiveArena_1..6` contient les six arènes intégrées (70 studs de diamètre), leurs repères `Center`, `SpawnA`, `SpawnB`, `IntroCam`, `KillY`, leurs pads `EntryPadA/B` et le prompt d'observation. Les pads sont validés côté serveur par `HubArenaService`; deux joueurs présents sur les deux pads lancent un match local en mode Casual. `ArenaAllocator` réserve une de ces arènes pour le match et utilise les arènes distantes de secours si les six sont occupées. Les trois piliers affichent les avatars du Top 3 Victoires et se rafraîchissent avec les panneaux de classement.
+  L'observation est une caméra client locale, autorisée uniquement lorsqu'une partie occupe l'arène; elle n'accorde aucun contrôle au spectateur.
 
 ## Démarrage automatique
 - Serveur : chaque ModuleScript de `Services` est requis ; `init()` puis `start()` sont appelés dans l'ordre de `Priority` (défaut 100, DataService = 0).

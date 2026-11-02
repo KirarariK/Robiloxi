@@ -83,7 +83,7 @@ end
 
 function MatchRunner.run(m: Match, h: Hooks)
 	h.setPhase(m, "Preparing")
-	local arena, release = ArenaAllocator.acquire(m.ArenaId, m.Id)
+	local arena, release = ArenaAllocator.acquire(m.ArenaId, m.Id, m.ArenaSlot)
 	m.Maid:Give(release)
 	if not arena then
 		h.cleanup(m)

@@ -247,7 +247,14 @@ function ProceduralAnimator.play(character: Model, clipId: string, opts: PlayOpt
 	end
 	local animSet = o.AnimSet or character:GetAttribute(Config.Attr.Form)
 	local weapon = o.Weapon or character:GetAttribute(Config.Attr.Weapon)
-	local clip = AnimLibrary.resolve(clipId, if type(animSet) == "string" then animSet else nil, if type(weapon) == "string" then weapon else nil)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local useImported = humanoid ~= nil
+	local clip = AnimLibrary.resolve(
+		clipId,
+		if type(animSet) == "string" then animSet else nil,
+		if type(weapon) == "string" then weapon else nil,
+		useImported
+	)
 	if not clip then
 		return function() end
 	end
@@ -352,7 +359,14 @@ end
 function ProceduralAnimator.has(character: Model, clipId: string): boolean
 	local animSet = character:GetAttribute(Config.Attr.Form)
 	local weapon = character:GetAttribute(Config.Attr.Weapon)
-	return AnimLibrary.has(clipId, if type(animSet) == "string" then animSet else nil, if type(weapon) == "string" then weapon else nil)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local useImported = humanoid ~= nil
+	return AnimLibrary.has(
+		clipId,
+		if type(animSet) == "string" then animSet else nil,
+		if type(weapon) == "string" then weapon else nil,
+		useImported
+	)
 end
 
 -- Arrêt sur image (hit stop) d'un personnage pendant `seconds`.
@@ -443,7 +457,7 @@ local function stepRig(rig: Rig, dt: number, now: number)
 			if p and t.Weight > 0 then
 				local target = p
 				local rot = j.Rot
-				if rot then
+				if rot and not t.Clip.MotorSpace then
 					target = (j.InvRot :: CFrame) * p * rot
 				end
 				result = if t.Weight >= 1 then target else result:Lerp(target, t.Weight)

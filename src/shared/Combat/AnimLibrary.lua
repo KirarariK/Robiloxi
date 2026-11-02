@@ -7,6 +7,7 @@ local Styles = require(script.Parent.AnimLibraryStyles)
 local CombatClips = require(script.Parent.AnimLibraryCombat)
 local EmoteClips = require(script.Parent.AnimLibraryEmotes)
 local WeaponData = require(script.Parent.Parent.Config.WeaponData)
+local Workspace = game:GetService("Workspace")
 
 export type Pose = Core.Pose
 export type Clip = Core.Clip
@@ -20,13 +21,141 @@ AnimLibrary.Layers = Core.Layers
 AnimLibrary.sample = Core.sample
 
 local cache: { [string]: Clip | false } = {}
+local importedCache: { [string]: Clip } = {}
+local warned: { [string]: boolean } = {}
+
+local PACK_NAME = "R6 30+ Weapon Models & Animations"
+
+type ImportedSet = {
+	Folder: string,
+	Sequences: { [string]: string },
+}
+
+local IMPORTED_SETS: { [string]: ImportedSet } = {
+	Single = {
+		Folder = "Sabre Animations",
+		Sequences = {
+			IdleOneHand = "One-hand Idle",
+			IdleTwoHand = "Two-hand Idle",
+			Run = "Sprint",
+			Block = "Block",
+			Parry = "Parry1",
+		},
+	},
+	Dual = {
+		Folder = "Dagger #2 Animations",
+		Sequences = {
+			Idle = "Idle",
+			Block = "Block",
+		},
+	},
+	Staff = {
+		Folder = "[NEW] Spear Animations",
+		Sequences = {
+			Idle = "Idle",
+			Run = "Run",
+			Block = "Block",
+			Parry = "Parry Attempt",
+			Heavy = "Heavy",
+		},
+	},
+}
+
+local function warnOnce(key: string, message: string)
+	if warned[key] then
+		return
+	end
+	warned[key] = true
+	warn("[EtherBlades] " .. message)
+end
+
+local function sequenceName(clipId: string, style: Styles.Style, weapon: string): (ImportedSet?, string?)
+	local set = IMPORTED_SETS[weapon]
+	if not set then
+		return nil, nil
+	end
+	if clipId == "Idle" then
+		local idleName = if weapon == "Single" then (if style.TwoHanded then "IdleTwoHand" else "IdleOneHand") else "Idle"
+		return set, set.Sequences[idleName]
+	elseif clipId == "Run" then
+		return set, set.Sequences.Run
+	elseif clipId == "Block" then
+		return set, set.Sequences.Block
+	elseif clipId == "Parry" then
+		return set, set.Sequences.Parry
+	elseif clipId == "M2_Strike" then
+		return set, set.Sequences.Heavy
+	end
+
+	local index, suffix = string.match(clipId, "^M1_(%d)(.*)$")
+	local number = if index then tonumber(index) else nil
+	if number and number >= 1 and number <= 4 and (suffix == "" or suffix == "_F" or suffix == "_S" or suffix == "_B") then
+		return set, "M" .. tostring(number)
+	end
+	return nil, nil
+end
+
+local function findSequence(set: ImportedSet, name: string): KeyframeSequence?
+	local pack = Workspace:FindFirstChild(PACK_NAME)
+	if not pack then
+		warnOnce("pack", `Pack d'animations R6 introuvable dans Workspace ; animations procédurales utilisées.`)
+		return nil
+	end
+	local sourceWorkspace = pack:FindFirstChild("Workspace")
+	local animations = sourceWorkspace and sourceWorkspace:FindFirstChild("Animations")
+	local group = animations and animations:FindFirstChild(set.Folder)
+	local saves = group and group:FindFirstChild("AnimSaves")
+	local sequence = saves and saves:FindFirstChild(name)
+	if sequence and sequence:IsA("KeyframeSequence") then
+		return sequence
+	end
+	warnOnce(set.Folder .. "/" .. name, `Séquence R6 manquante ({set.Folder}/AnimSaves/{name}) ; animation procédurale utilisée.`)
+	return nil
+end
+
+local function importedClip(clipId: string, style: Styles.Style, weapon: string, key: string): Clip?
+	local set, name = sequenceName(clipId, style, weapon)
+	if not set or not name then
+		return nil
+	end
+	local cached = importedCache[key]
+	if cached then
+		return cached
+	end
+	local sequence = findSequence(set, name)
+	if not sequence then
+		return nil
+	end
+
+	local fallback = CombatClips.build(clipId, style, weapon)
+	local loopingBase = clipId == "Idle" or clipId == "Run"
+	local durationOverride = if loopingBase or clipId == "Block" then nil else if fallback then fallback.Duration else nil
+	local clip = Core.fromKeyframeSequence(clipId, sequence, {
+		Looped = loopingBase,
+		Layer = if loopingBase then Core.Layers.Base else Core.Layers.Action,
+		FadeIn = if loopingBase then 0.18 else 0.04,
+		FadeOut = if loopingBase then 0.18 else 0.1,
+	}, durationOverride)
+	if not clip then
+		warnOnce(set.Folder .. "/" .. name, `Séquence R6 invalide ({set.Folder}/AnimSaves/{name}) ; animation procédurale utilisée.`)
+		return nil
+	end
+	importedCache[key] = clip
+	return clip
+end
 
 -- Renvoie le clip `clipId` pour la Voie `animSet` et l'arme `weapon` (nil si ce clip n'existe pas
 -- pour cette combinaison, ex. « Jump » hors Faucon ou « M1_5 » hors Lames Jumelles).
-function AnimLibrary.resolve(clipId: string, animSet: string?, weapon: string?): Clip?
+function AnimLibrary.resolve(clipId: string, animSet: string?, weapon: string?, useImported: boolean?): Clip?
 	local style = Styles.get(animSet)
 	local w = if weapon and WeaponData.isValid(weapon) then weapon else WeaponData.Default
 	local key = style.Id .. "|" .. w .. "|" .. clipId
+	if useImported then
+		local imported = importedClip(clipId, style, w, key)
+		if imported then
+			return imported
+		end
+	end
 	local hit = cache[key]
 	if hit ~= nil then
 		return if hit == false then nil else hit
@@ -40,8 +169,8 @@ function AnimLibrary.resolve(clipId: string, animSet: string?, weapon: string?):
 	return clip
 end
 
-function AnimLibrary.has(clipId: string, animSet: string?, weapon: string?): boolean
-	return AnimLibrary.resolve(clipId, animSet, weapon) ~= nil
+function AnimLibrary.has(clipId: string, animSet: string?, weapon: string?, useImported: boolean?): boolean
+	return AnimLibrary.resolve(clipId, animSet, weapon, useImported) ~= nil
 end
 
 -- Liste indicative des clips disponibles (outils de test, aperçus).

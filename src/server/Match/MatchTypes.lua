@@ -22,6 +22,7 @@ export type Match = {
 	Phase: Phase,
 	ArenaId: string,
 	ArenaName: string,
+	ArenaSlot: number?,
 	Arena: Model?,
 	RoundEndsAt: number,
 	LastRoundWinner: Player?,
